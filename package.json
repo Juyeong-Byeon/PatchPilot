@@ -1,0 +1,37 @@
+{
+  "name": "ticket-to-pr",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -b --pretty false",
+    "dev:api": "npm --workspace @ticket-to-pr/api run dev",
+    "dev:worker": "npm --workspace @ticket-to-pr/worker run dev",
+    "dev:admin": "npm --workspace @ticket-to-pr/admin run dev",
+    "db:migrate": "npm --workspace @ticket-to-pr/db run migrate"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3",
+    "vitest": "^2.1.8"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.2",
+    "@fastify/static": "^8.0.3",
+    "@octokit/rest": "^21.0.2",
+    "bullmq": "^5.34.3",
+    "fastify": "^5.1.0",
+    "ioredis": "^5.4.2",
+    "pg": "^8.13.1",
+    "zod": "^3.24.1"
+  }
+}

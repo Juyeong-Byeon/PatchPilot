@@ -1,0 +1,25 @@
+{
+  "name": "@ticket-to-pr/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "node --watch dist/index.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@octokit/rest": "^21.0.2",
+    "@ticket-to-pr/core": "0.1.0",
+    "@ticket-to-pr/db": "0.1.0",
+    "@ticket-to-pr/queue": "0.1.0",
+    "@ticket-to-pr/runner-contract": "0.1.0",
+    "bullmq": "^5.34.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

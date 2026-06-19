@@ -1,0 +1,25 @@
+{
+  "name": "@ticket-to-pr/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/server.js",
+  "types": "dist/server.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "node --watch dist/server.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ticket-to-pr/core": "0.1.0",
+    "@ticket-to-pr/db": "0.1.0",
+    "@ticket-to-pr/queue": "0.1.0",
+    "fastify": "^5.1.0",
+    "@fastify/cors": "^10.0.2",
+    "@fastify/static": "^8.0.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
