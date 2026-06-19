@@ -6,7 +6,7 @@ import { RunTimeline } from "../src/components/RunTimeline.js";
 import { adminCopy } from "../src/i18n.js";
 
 describe("RunTimeline", () => {
-  it("renders a trace flow with phase spans and failure context", () => {
+  it("renders a trace flow table with phase rows and failure context", () => {
     render(
       <RunTimeline
         copy={adminCopy.ko}
@@ -44,11 +44,15 @@ describe("RunTimeline", () => {
     );
 
     const flow = screen.getByRole("region", { name: "실행 흐름" });
+    const table = within(flow).getByRole("table", { name: "실행 흐름" });
 
-    expect(within(flow).getAllByText("대기").length).toBeGreaterThan(0);
-    expect(within(flow).getByText("구현")).toBeInTheDocument();
-    expect(within(flow).getByText("실패 지점")).toBeInTheDocument();
-    expect(within(flow).getByText("2 이벤트")).toBeInTheDocument();
-    expect(within(flow).getByText("git authentication failed")).toBeInTheDocument();
+    expect(within(table).getByText("#")).toBeInTheDocument();
+    expect(within(table).getByText("단계")).toBeInTheDocument();
+    expect(within(table).getAllByText("대기").length).toBeGreaterThan(0);
+    expect(within(table).getByText("구현")).toBeInTheDocument();
+    expect(within(table).getByText("실패 지점")).toBeInTheDocument();
+    expect(within(table).getByText("2 이벤트")).toBeInTheDocument();
+    expect(within(flow).queryByText("git authentication failed")).not.toBeInTheDocument();
+    expect(screen.getByText("git authentication failed")).toBeInTheDocument();
   });
 });

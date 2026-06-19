@@ -1,4 +1,4 @@
-import { useMemo, type CSSProperties } from "react";
+import { useMemo, type KeyboardEvent } from "react";
 import type { RunEvent } from "../api.js";
 import { translateEventType, translateState, type AdminCopy, type Locale } from "../i18n.js";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
@@ -22,11 +22,8 @@ interface PhaseSpan {
   phase: string;
   eventCount: number;
   status: "pending" | "complete" | "active" | "failed";
-  latestMessage: string;
   sources: string[];
   durationMs: number;
-  offsetPct: number;
-  widthPct: number;
 }
 
 export function RunTimeline({ events, copy, locale, selectedSpan, onSelectSpan }: RunTimelineProps) {
@@ -40,6 +37,7 @@ export function RunTimeline({ events, copy, locale, selectedSpan, onSelectSpan }
     [events]
   );
   const spans = useMemo(() => buildPhaseSpans(orderedEvents), [orderedEvents]);
+  const longestSpanDuration = Math.max(1, ...spans.map((span) => span.durationMs));
 
   return (
     <Card>
@@ -59,44 +57,65 @@ export function RunTimeline({ events, copy, locale, selectedSpan, onSelectSpan }
             <span className="text-[12px] leading-4 text-charcoal">{formatDuration(totalDuration(spans))}</span>
           </div>
 
-          <div className="grid gap-2">
-            {spans.map((span) => {
-              const selected = selectedSpan?.phase === span.phase && (!selectedSpan.source || span.sources.includes(selectedSpan.source));
-              return (
-                <button
-                  className={`grid gap-3 rounded-lg px-3 py-2 text-left text-[12px] md:grid-cols-[116px_112px_minmax(0,1fr)_96px] md:items-center ${selected ? "bg-linen-white ring-1 ring-forest-ink" : "hover:bg-linen-white"}`}
-                  key={span.phase}
-                  type="button"
-                  onClick={() => onSelectSpan?.({ phase: span.phase, source: span.sources[0] })}
-                >
-                  <div className="min-w-0">
-                    <p className="m-0 text-[13px] font-medium leading-5 text-true-black">{translateState(span.phase, locale)}</p>
-                    <span className="text-charcoal">{statusLabel(span.status, copy)}</span>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="m-0 text-[12px] leading-4 text-charcoal">{copy.service}</p>
-                    <span className="block truncate text-forest-ink" title={span.sources.join(", ") || copy.sourceSystem}>
-                      {span.sources.join(", ") || copy.sourceSystem}
-                    </span>
-                  </div>
-                  <div className="grid min-w-0 gap-1">
-                    <div className="relative h-2 overflow-hidden rounded-full bg-linen">
-                      <div
-                        className={`absolute top-0 bottom-0 min-w-[20px] rounded-full ${spanClassName(span.status)}`}
-                        style={spanStyle(span)}
-                      />
-                    </div>
-                    <p className="m-0 text-[12px] leading-4 text-charcoal text-clamp-1" title={span.latestMessage || copy.spanNoEvents}>
-                      {span.latestMessage || copy.spanNoEvents}
-                    </p>
-                  </div>
-                  <div className="flex items-center justify-between gap-2 text-charcoal md:justify-end">
-                    <span>{span.eventCount > 0 ? copy.spanEvents(span.eventCount) : copy.spanNoEvents}</span>
-                    <span className="font-mono">{formatDuration(span.durationMs)}</span>
-                  </div>
-                </button>
-            );
-            })}
+          <div className="overflow-x-auto rounded-lg border border-hairline-gray">
+            <table className="w-full min-w-[760px] border-collapse text-left text-[13px]" aria-label={copy.traceFlow}>
+              <thead className="bg-linen-white text-[12px] font-medium leading-4 text-charcoal">
+                <tr className="border-b border-hairline-gray">
+                  <th className="w-[52px] px-3 py-2">{copy.traceColumnIndex}</th>
+                  <th className="px-3 py-2">{copy.traceColumnStage}</th>
+                  <th className="w-[128px] px-3 py-2">{copy.traceColumnStatus}</th>
+                  <th className="w-[136px] px-3 py-2">{copy.traceColumnService}</th>
+                  <th className="w-[112px] px-3 py-2 text-right">{copy.traceColumnEvents}</th>
+                  <th className="w-[240px] px-3 py-2 text-right">{copy.traceColumnDuration}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {spans.map((span, index) => {
+                  const selected = selectedSpan?.phase === span.phase && (!selectedSpan.source || span.sources.includes(selectedSpan.source));
+                  const source = span.sources.join(", ") || copy.sourceSystem;
+
+                  return (
+                    <tr
+                      aria-selected={selected}
+                      className={`cursor-pointer border-b border-hairline-gray outline-none last:border-b-0 hover:bg-linen ${selected ? "bg-linen-white ring-1 ring-inset ring-forest-ink" : ""}`}
+                      key={span.phase}
+                      onClick={() => onSelectSpan?.({ phase: span.phase, source: span.sources[0] })}
+                      onKeyDown={(event) => selectWithKeyboard(event, span, onSelectSpan)}
+                      tabIndex={0}
+                    >
+                      <td className="px-3 py-2 font-mono text-[12px] text-charcoal">{index}</td>
+                      <td className="min-w-0 px-3 py-2">
+                        <span className="block truncate font-medium text-true-black">{translateState(span.phase, locale)}</span>
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[12px] leading-4 ${statusClassName(span.status)}`}>
+                          {statusLabel(span.status, copy)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className="block truncate text-forest-ink" title={source}>{source}</span>
+                      </td>
+                      <td className="px-3 py-2 text-right text-charcoal">
+                        {span.eventCount > 0 ? copy.spanEvents(span.eventCount) : copy.spanNoEvents}
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center justify-end gap-3">
+                          <div className="h-2 w-32 overflow-hidden rounded-full bg-linen">
+                            <div
+                              className={`h-full rounded-full ${durationBarClassName(span.status)}`}
+                              style={{ width: `${durationWidth(span.durationMs, longestSpanDuration)}%` }}
+                            />
+                          </div>
+                          <span className="w-12 text-right font-mono text-[12px] text-charcoal">
+                            {formatDuration(span.durationMs)}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </section>
 
@@ -133,8 +152,6 @@ function buildPhaseSpans(events: RunEvent[]): PhaseSpan[] {
 
   const eventTimes = events.map((event) => parseDate(event.created_at)).filter((time): time is number => time !== null);
   const firstOverall = eventTimes[0] ?? 0;
-  const lastOverall = eventTimes[eventTimes.length - 1] ?? firstOverall;
-  const overallDuration = Math.max(1, lastOverall - firstOverall);
   const lastObservedIndex = Math.max(
     -1,
     ...phaseFlow.map((phase, index) => (events.some((event) => event.phase === phase) ? index : -1))
@@ -148,22 +165,25 @@ function buildPhaseSpans(events: RunEvent[]): PhaseSpan[] {
     const hasFailure = phaseEvents.some(isFailureEvent);
     const eventCount = phaseEvents.length;
     const status = hasFailure ? "failed" : eventCount === 0 ? "pending" : index < lastObservedIndex || phase === "Completed" ? "complete" : "active";
-    const latestMessage = [...phaseEvents].reverse().find((event) => event.message)?.message ?? "";
     const sources = Array.from(new Set(phaseEvents.map((event) => event.source).filter(Boolean) as string[]));
-    const offsetPct = eventCount > 0 ? clamp(((firstTime - firstOverall) / overallDuration) * 100, 0, 92) : 0;
-    const widthPct = eventCount > 0 ? clamp((Math.max(1, lastTime - firstTime) / overallDuration) * 100, 8, 100 - offsetPct) : 100;
-
     return {
       phase,
       eventCount,
       status,
-      latestMessage,
       sources,
-      durationMs: eventCount > 0 ? Math.max(0, lastTime - firstTime) : 0,
-      offsetPct,
-      widthPct
+      durationMs: eventCount > 0 ? Math.max(0, lastTime - firstTime) : 0
     };
   });
+}
+
+function selectWithKeyboard(
+  event: KeyboardEvent<HTMLTableRowElement>,
+  span: PhaseSpan,
+  onSelectSpan: RunTimelineProps["onSelectSpan"]
+) {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  onSelectSpan?.({ phase: span.phase, source: span.sources[0] });
 }
 
 function statusLabel(status: PhaseSpan["status"], copy: AdminCopy): string {
@@ -173,18 +193,22 @@ function statusLabel(status: PhaseSpan["status"], copy: AdminCopy): string {
   return copy.spanPending;
 }
 
-function spanClassName(status: PhaseSpan["status"]): string {
+function statusClassName(status: PhaseSpan["status"]): string {
   if (status === "failed") return "bg-forest-ink text-linen-white";
   if (status === "active") return "bg-sage-wash text-forest-ink";
   if (status === "complete") return "bg-mint-veil text-forest-ink";
   return "border border-hairline-gray bg-linen-white text-graphite";
 }
 
-function spanStyle(span: PhaseSpan): CSSProperties {
-  return {
-    left: `${span.offsetPct}%`,
-    width: `${span.widthPct}%`
-  };
+function durationBarClassName(status: PhaseSpan["status"]): string {
+  if (status === "failed") return "bg-forest-ink";
+  if (status === "pending") return "bg-hairline-gray";
+  return "bg-sage-wash";
+}
+
+function durationWidth(durationMs: number, longestDurationMs: number): number {
+  if (durationMs <= 0) return 1;
+  return clamp((durationMs / longestDurationMs) * 100, 4, 100);
 }
 
 function totalDuration(spans: PhaseSpan[]): number {
