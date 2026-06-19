@@ -27,6 +27,7 @@ const completedResult = {
   targetBranch: "main",
   baseSha: "base",
   headSha: "head",
+  pushSha: "head",
   changedFiles: ["src/login.ts"],
   commits: [{ sha: "abc", message: "Fix login" }],
   tests: [{ command: "npm test", status: "passed" as const, summary: "ok" }],
@@ -65,6 +66,7 @@ describe("processAgentJob", () => {
       workBranch: "ticket-to-pr/job_1",
       baseSha: "base",
       headSha: "head",
+      pushSha: "head",
       commitShas: ["abc"],
       prUrl: "https://github.local/acme/web/pull/mock-job_1",
       prNumber: 1,
@@ -131,6 +133,47 @@ describe("processAgentJob", () => {
     );
   });
 
+  it("blocks unallowlisted repositories before executor starts", async () => {
+    const repos = createRepos();
+    repos.getJobForWorker.mockResolvedValue({ ...job, repository: "evil/web" });
+    const executor = vi.fn();
+    const publisher = vi.fn();
+
+    const outcome = await processAgentJob(
+      { jobId: "job_1", ticketSnapshotId: "ts_1", larkRecordId: "rec_1", triggerVersion: "v1" },
+      {
+        repos,
+        executor,
+        publisher,
+        policyConfig: { repositoryAllowlist: ["acme/web"], protectedPathDenylist: ["infra/**"] },
+        ids: {
+          runId: () => "run_1",
+          artifactId: (kind) => `artifact_${kind}`,
+          pullRequestId: () => "pr_1"
+        }
+      }
+    );
+
+    expect(outcome.status).toBe("policy_blocked");
+    expect(executor).not.toHaveBeenCalled();
+    expect(publisher).not.toHaveBeenCalled();
+    expect(repos.saveArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "policy-gate",
+        content: expect.objectContaining({
+          status: "failed",
+          repositoryAllowed: false
+        })
+      })
+    );
+    expect(repos.transitionJob).toHaveBeenLastCalledWith(
+      "job_1",
+      "Failed",
+      "FailedActionable",
+      expect.stringContaining("evil/web")
+    );
+  });
+
   it("accepts retry payloads with preassigned run id and attempt", async () => {
     const repos = createRepos();
     const executor = vi.fn().mockResolvedValue({ ...completedResult, runId: "run_2" });
@@ -140,6 +183,7 @@ describe("processAgentJob", () => {
       workBranch: "ticket-to-pr/job_1",
       baseSha: "base",
       headSha: "head",
+      pushSha: "head",
       commitShas: ["abc"],
       prUrl: "https://github.local/acme/web/pull/mock-job_1",
       prNumber: 1,

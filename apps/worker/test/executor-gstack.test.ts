@@ -2,7 +2,12 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { buildGstackDockerCommand, maskExecutorOutput, writeRunnerInputArtifacts } from "../src/executor-gstack.js";
+import {
+  applyTrustedGitEvidence,
+  buildGstackDockerCommand,
+  maskExecutorOutput,
+  writeRunnerInputArtifacts
+} from "../src/executor-gstack.js";
 
 const tempDirs: string[] = [];
 
@@ -11,7 +16,7 @@ afterEach(async () => {
 });
 
 describe("buildGstackDockerCommand", () => {
-  it("constructs a network-isolated Docker command without mounting the Docker socket", () => {
+  it("constructs a Docker command that can clone without mounting the Docker socket", () => {
     const command = buildGstackDockerCommand({
       runnerImage: "ghcr.io/acme/ticket-runner@sha256:abc",
       workspacePath: "/var/tmp/ticket-to-pr/job_1",
@@ -32,7 +37,7 @@ describe("buildGstackDockerCommand", () => {
         "run",
         "--rm",
         "--network",
-        "none",
+        "bridge",
         "--cpus",
         "2",
         "--memory",
@@ -57,6 +62,45 @@ describe("buildGstackDockerCommand", () => {
       ])
     );
     expect(command.args.join(" ")).not.toContain("/var/run/docker.sock");
+  });
+
+  it("replaces agent-reported git evidence with worker-collected evidence", () => {
+    const result = applyTrustedGitEvidence(
+      {
+        schemaVersion: "1.0",
+        runId: "run_1",
+        jobId: "job_1",
+        ticketId: "ts_1",
+        triggerVersion: "v1",
+        status: "completed",
+        targetBranch: "main",
+        baseSha: "agent-base",
+        headSha: "agent-head",
+        changedFiles: ["src/login.ts"],
+        commits: [{ sha: "agent-commit", message: "Agent commit" }],
+        tests: [{ command: "npm test", status: "passed", summary: "ok" }],
+        review: { summary: "ok", risks: [], knownLimitations: [] },
+        pullRequestDraft: { title: "Fix login", bodyPath: "output/pr-body.md" },
+        failure: null,
+        retryable: false
+      },
+      {
+        targetBranch: "main",
+        baseSha: "trusted-base",
+        headSha: "trusted-head",
+        pushSha: "trusted-push",
+        changedFiles: ["infra/prod.tf"],
+        commits: [{ sha: "trusted-commit", message: "Trusted commit" }]
+      }
+    );
+
+    expect(result).toMatchObject({
+      baseSha: "trusted-base",
+      headSha: "trusted-head",
+      pushSha: "trusted-push",
+      changedFiles: ["infra/prod.tf"],
+      commits: [{ sha: "trusted-commit", message: "Trusted commit" }]
+    });
   });
 
   it("masks secrets before logs are persisted", () => {

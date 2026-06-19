@@ -13,7 +13,7 @@ function makeRepos() {
     getJobEvents: vi.fn().mockResolvedValue([{ event_type: "job.enqueued" }]),
     getJobLogs: vi.fn().mockResolvedValue([{ text: "queued" }]),
     getJobArtifacts: vi.fn().mockResolvedValue([{ kind: "result_json" }]),
-    requestCancel: vi.fn().mockResolvedValue(undefined),
+    requestCancel: vi.fn().mockResolvedValue({ status: "requested" }),
     getRetryPreflight: vi.fn().mockResolvedValue({ jobId: "job_1", retryable: true, lastAttempt: 1 }),
     createRetryAttempt: vi.fn().mockResolvedValue({ runId: "run_2", attempt: 2 })
   };
@@ -110,6 +110,54 @@ describe("admin routes", () => {
 
     expect(retry.statusCode).toBe(409);
     expect(repos.createRetryAttempt).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it("reports missing and non-cancelable jobs on cancel", async () => {
+    const repos = makeRepos();
+    const app = await buildServer({
+      adminToken: "secret",
+      repos: repos as never,
+      queue: { add: vi.fn() }
+    });
+
+    repos.requestCancel.mockResolvedValueOnce({ status: "not_found" });
+    const missing = await app.inject({
+      method: "POST",
+      url: "/api/jobs/job_missing/cancel",
+      headers: { authorization: "Bearer secret" }
+    });
+
+    repos.requestCancel.mockResolvedValueOnce({ status: "not_cancelable", phase: "Completed" });
+    const terminal = await app.inject({
+      method: "POST",
+      url: "/api/jobs/job_done/cancel",
+      headers: { authorization: "Bearer secret" }
+    });
+
+    expect(missing.statusCode).toBe(404);
+    expect(terminal.statusCode).toBe(409);
+    expect(terminal.json()).toEqual({ error: "Job is not cancelable", phase: "Completed" });
+    await app.close();
+  });
+
+  it("rejects cancel while a job is publishing", async () => {
+    const repos = makeRepos();
+    repos.requestCancel.mockResolvedValue({ status: "not_cancelable", phase: "Publishing" });
+    const app = await buildServer({
+      adminToken: "secret",
+      repos: repos as never,
+      queue: { add: vi.fn() }
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/jobs/job_publishing/cancel",
+      headers: { authorization: "Bearer secret" }
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({ error: "Job is not cancelable", phase: "Publishing" });
     await app.close();
   });
 

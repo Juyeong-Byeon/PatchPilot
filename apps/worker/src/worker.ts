@@ -4,7 +4,7 @@ import { createArtifactId, createPrefixedId, createRunId, deriveOutcome, parseAg
 import type { AgentResult, InternalPhase, Priority, UserOutcome } from "@ticket-to-pr/core";
 import type { AgentJobPayload } from "@ticket-to-pr/queue";
 import { getWorkspacePaths } from "@ticket-to-pr/runner-contract";
-import { evaluatePolicyGate, type WorkerPolicyConfig } from "./policy-gate.js";
+import { evaluatePolicyGate, evaluatePreExecutionPolicy, type WorkerPolicyConfig } from "./policy-gate.js";
 import type { PublishInput, PublishedPullRequest } from "./publisher-mock.js";
 
 export interface WorkerJobRecord {
@@ -158,6 +158,25 @@ export async function processAgentJob(payload: AgentJobPayload, options: Process
       return { status: "cancelled", runId: run.runId };
     }
 
+    const preExecutionGate = evaluatePreExecutionPolicy({
+      repository: job.repository,
+      repositoryAllowlist: options.policyConfig.repositoryAllowlist,
+      protectedPathDenylist: options.policyConfig.protectedPathDenylist,
+      expectedTargetBranch: job.targetBranch
+    });
+    if (!preExecutionGate.allowed) {
+      await options.repos.saveArtifact({
+        id: artifactId("policy-gate-pre-execution"),
+        jobId: job.jobId,
+        runId: run.runId,
+        kind: "policy-gate",
+        content: preExecutionGate.artifact
+      });
+      await options.repos.transitionJob(job.jobId, "Failed", "FailedActionable", preExecutionGate.reason);
+      await appendEvent("Failed", "policy.blocked", preExecutionGate.reason ?? "Pre-execution policy gate blocked job", preExecutionGate.artifact);
+      return { status: "policy_blocked", runId: run.runId };
+    }
+
     await options.repos.transitionJob(job.jobId, "Planning", deriveOutcome("Planning"));
     await appendEvent("Planning", "worker.started", "Worker picked up job");
 
@@ -247,7 +266,14 @@ async function isCancelRequested(repos: Pick<WorkerRepositories, "getJobForWorke
 }
 
 function createPublishInput(job: WorkerJobRecord, run: WorkerRunRecord, result: AgentResult): PublishInput {
-  if (result.status !== "completed" || !result.baseSha || !result.headSha || !result.targetBranch || !result.pullRequestDraft) {
+  if (
+    result.status !== "completed" ||
+    !result.baseSha ||
+    !result.headSha ||
+    !result.pushSha ||
+    !result.targetBranch ||
+    !result.pullRequestDraft
+  ) {
     throw new Error("Completed AgentResult is missing publish fields");
   }
 
@@ -260,6 +286,7 @@ function createPublishInput(job: WorkerJobRecord, run: WorkerRunRecord, result: 
     localRepoDir: getWorkspacePaths(run.workspacePath).repoDir,
     baseSha: result.baseSha,
     headSha: result.headSha,
+    pushSha: result.pushSha,
     commitShas: result.commits.map((commit) => commit.sha),
     title: result.pullRequestDraft.title,
     body: createPullRequestBody(result)

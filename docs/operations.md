@@ -120,10 +120,16 @@ Use real mode only against a disposable test repository in the allowlist.
    this real executor test. The default mock compose file intentionally omits
    the socket so local smoke does not grant broad Docker host control.
 6. Start the stack and submit a small Lark ticket.
-7. Confirm the runner creates local commits in an isolated workspace.
-8. Confirm the platform policy gate runs before push.
-9. Confirm the platform pushes the work branch and creates a PR.
-10. Confirm Admin and Lark show the PR URL.
+7. Confirm the runner container can reach GitHub; real executor Docker runs use
+   bridge networking for repository clone/fetch, while still avoiding Docker
+   socket mounts inside the runner container.
+8. Confirm the runner creates local commits in an isolated workspace.
+9. Confirm the platform resolves the target branch SHA before runner execution,
+   reads trusted git evidence from the mounted repo after the runner exits, and
+   runs the policy gate against the exact audited commit SHA.
+10. Confirm the platform pushes that audited SHA to the work branch and creates
+    a PR.
+11. Confirm Admin and Lark show the PR URL.
 
 Do not run real mode against production repositories until the allowlist,
 protected path denylist, and PAT scope have been reviewed.
@@ -159,9 +165,11 @@ Both routes require `Authorization: Bearer <ADMIN_TOKEN>`.
 - The runner creates local commits and PR drafts, but the platform owns policy
   gates, push, and PR creation.
 - The GitHub token belongs to the platform publisher, not to the agent process.
-- Repository access is constrained by `REPOSITORY_ALLOWLIST`.
+- Repository access is constrained by `REPOSITORY_ALLOWLIST` before the runner
+  container starts.
 - Protected path changes are blocked by `PROTECTED_PATH_DENYLIST`.
-- Logs and artifacts must be treated as sensitive; token masking is required
-  before storing or displaying runner output.
+- The publisher pushes the audited commit SHA, not a mutable local branch ref.
+- Logs and artifacts must be treated as sensitive; token masking runs before
+  persisting worker output and retained runner logs.
 - Real executor smoke should use disposable repositories and least-privilege
   GitHub credentials.

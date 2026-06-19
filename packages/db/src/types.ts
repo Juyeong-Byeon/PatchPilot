@@ -107,3 +107,8 @@ export interface RetryPreflight {
   lastAttempt: number | null;
   retryable: boolean;
 }
+
+export type CancelRequestResult =
+  | { status: "requested" }
+  | { status: "not_found" }
+  | { status: "not_cancelable"; phase: InternalPhase };

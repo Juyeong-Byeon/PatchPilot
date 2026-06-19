@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { maskSecrets, parseAgentResult, type AgentResult } from "@ticket-to-pr/core";
+import { createSecretRedactor, maskSecrets, parseAgentResult, type AgentResult } from "@ticket-to-pr/core";
 import { getWorkspacePaths } from "@ticket-to-pr/runner-contract";
 import type { ExecutorInput } from "./worker.js";
 
@@ -38,6 +38,15 @@ export interface GstackExecutorOptions {
   };
 }
 
+export interface TrustedGitEvidence {
+  targetBranch: string;
+  baseSha: string;
+  headSha: string;
+  pushSha: string;
+  changedFiles: string[];
+  commits: Array<{ sha: string; message: string }>;
+}
+
 export function buildGstackDockerCommand(input: GstackCommandInput): CommandSpec {
   return {
     file: "docker",
@@ -45,7 +54,7 @@ export function buildGstackDockerCommand(input: GstackCommandInput): CommandSpec
       "run",
       "--rm",
       "--network",
-      "none",
+      "bridge",
       "--cpus",
       "2",
       "--memory",
@@ -72,6 +81,8 @@ export function buildGstackDockerCommand(input: GstackCommandInput): CommandSpec
 }
 
 export async function executeGstack(input: ExecutorInput, options: GstackExecutorOptions): Promise<AgentResult> {
+  const repositoryUrl = toRepositoryUrl(input.job.repository);
+  const trustedBaseSha = await resolveRemoteTargetSha(repositoryUrl, input.job.targetBranch);
   const command = buildGstackDockerCommand({
     runnerImage: options.runnerImage,
     workspacePath: input.run.workspacePath,
@@ -89,8 +100,58 @@ export async function executeGstack(input: ExecutorInput, options: GstackExecuto
   await runCommand(command, input);
 
   const resultPath = options.resultPath ?? getWorkspacePaths(input.run.workspacePath).resultJson;
-  const result = JSON.parse(await readFile(resultPath, "utf8")) as unknown;
-  return parseAgentResult(result);
+  const result = parseAgentResult(JSON.parse(await readFile(resultPath, "utf8")) as unknown);
+  if (result.status !== "completed") return result;
+
+  const trustedEvidence = await collectTrustedGitEvidence(
+    getWorkspacePaths(input.run.workspacePath).repoDir,
+    input.job.targetBranch,
+    trustedBaseSha
+  );
+  return applyTrustedGitEvidence(result, trustedEvidence);
+}
+
+export function applyTrustedGitEvidence(result: AgentResult, evidence: TrustedGitEvidence): AgentResult {
+  if (result.status !== "completed") return result;
+  return parseAgentResult({
+    ...result,
+    targetBranch: evidence.targetBranch,
+    baseSha: evidence.baseSha,
+    headSha: evidence.headSha,
+    pushSha: evidence.pushSha,
+    changedFiles: evidence.changedFiles,
+    commits: evidence.commits
+  });
+}
+
+export async function resolveRemoteTargetSha(repositoryUrl: string, targetBranch: string): Promise<string> {
+  const stdout = (await runGit(["ls-remote", "--heads", repositoryUrl, targetBranch])).stdout;
+  const [sha] = stdout.trim().split(/\s+/);
+  if (!sha) throw new Error(`Unable to resolve remote target branch ${targetBranch}`);
+  return sha;
+}
+
+export async function collectTrustedGitEvidence(
+  repoDir: string,
+  targetBranch: string,
+  baseSha: string
+): Promise<TrustedGitEvidence> {
+  const pushSha = (await runGit(["rev-parse", "--verify", "HEAD^{commit}"], repoDir)).stdout.trim();
+  const headSha = pushSha;
+  const changedFiles = (await runGit(["diff", "--name-only", `${baseSha}...${pushSha}`], repoDir)).stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const commits = (await runGit(["log", "--format=%H%x00%s", `${baseSha}..${pushSha}`], repoDir)).stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [sha, ...messageParts] = line.split("\0");
+      return { sha: sha ?? "", message: messageParts.join("\0") || sha || "Commit" };
+    });
+
+  return { targetBranch, baseSha, headSha, pushSha, changedFiles, commits };
 }
 
 export async function writeRunnerInputArtifacts(input: {
@@ -140,7 +201,7 @@ export async function writeRunnerInputArtifacts(input: {
 
 export function maskExecutorOutput(text: string): { text: string; redactionApplied: boolean } {
   const masked = maskSecrets(text);
-  return { text: masked, redactionApplied: masked !== text };
+  return { text: masked, redactionApplied: masked !== text || masked.includes("[REDACTED_") };
 }
 
 function renderTicketMarkdown(job: {
@@ -178,22 +239,66 @@ async function runCommand(command: CommandSpec, input: ExecutorInput): Promise<v
     const child = spawn(command.file, command.args, { stdio: ["ignore", "pipe", "pipe"] });
     let stdoutSequence = 0;
     let stderrSequence = 0;
+    const pendingLogs: Promise<void>[] = [];
+    const stdoutRedactor = createSecretRedactor();
+    const stderrRedactor = createSecretRedactor();
+
+    const appendLog = (log: Parameters<NonNullable<ExecutorInput["appendLog"]>>[0]) => {
+      if (input.appendLog) pendingLogs.push(input.appendLog(log));
+    };
 
     child.stdout.on("data", (chunk: Buffer) => {
-      const masked = maskExecutorOutput(chunk.toString("utf8"));
-      void input.appendLog?.({ source: "gstack", stream: "stdout", sequence: stdoutSequence++, ...masked });
+      const masked = maskExecutorOutput(stdoutRedactor(chunk.toString("utf8")));
+      appendLog({ source: "gstack", stream: "stdout", sequence: stdoutSequence++, ...masked });
     });
     child.stderr.on("data", (chunk: Buffer) => {
-      const masked = maskExecutorOutput(chunk.toString("utf8"));
-      void input.appendLog?.({ source: "gstack", stream: "stderr", sequence: stderrSequence++, ...masked });
+      const masked = maskExecutorOutput(stderrRedactor(chunk.toString("utf8")));
+      appendLog({ source: "gstack", stream: "stderr", sequence: stderrSequence++, ...masked });
     });
     child.on("error", reject);
-    child.on("close", (code) => {
+    child.on("close", async (code) => {
+      const stdoutTail = stdoutRedactor("", true);
+      if (stdoutTail) {
+        const masked = maskExecutorOutput(stdoutTail);
+        appendLog({ source: "gstack", stream: "stdout", sequence: stdoutSequence++, ...masked });
+      }
+      const stderrTail = stderrRedactor("", true);
+      if (stderrTail) {
+        const masked = maskExecutorOutput(stderrTail);
+        appendLog({ source: "gstack", stream: "stderr", sequence: stderrSequence++, ...masked });
+      }
+      const logResults = await Promise.allSettled(pendingLogs);
+      const rejectedLog = logResults.find((result) => result.status === "rejected");
+      if (rejectedLog?.status === "rejected") {
+        reject(rejectedLog.reason instanceof Error ? rejectedLog.reason : new Error(String(rejectedLog.reason)));
+        return;
+      }
       if (code === 0) {
         resolve();
         return;
       }
       reject(new Error(`gstack runner exited with code ${code ?? "unknown"}`));
+    });
+  });
+}
+
+function runGit(args: string[], cwd?: string): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("git", args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
+
+    child.stdout.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
+    child.stderr.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
+    child.on("error", reject);
+    child.on("close", (code) => {
+      const stdout = Buffer.concat(stdoutChunks).toString("utf8");
+      const stderr = Buffer.concat(stderrChunks).toString("utf8");
+      if (code === 0) {
+        resolve({ stdout, stderr });
+        return;
+      }
+      reject(new Error(`git ${args.join(" ")} failed with code ${code ?? "unknown"}: ${maskSecrets(stderr || stdout)}`));
     });
   });
 }

@@ -32,7 +32,7 @@ export function JobDetail({
     );
   }
   const terminal = isTerminalPhase(job.phase);
-  const retryDisabled = Boolean(actionState) || !terminal;
+  const retryDisabled = Boolean(actionState) || job.phase !== "Failed";
   const cancelDisabled = Boolean(actionState) || terminal;
 
   return (

@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { Octokit } from "@octokit/rest";
+import { maskSecrets } from "@ticket-to-pr/core";
 import type { PublishInput, PublishedPullRequest } from "./publisher-mock.js";
 
 interface PullsCreateOctokit {
@@ -18,23 +19,24 @@ interface PullsCreateOctokit {
   };
 }
 
-export type PushBranch = (repoDir: string, workBranch: string) => Promise<void>;
+export type PushBranch = (repoDir: string, workBranch: string, pushSha: string, token?: string) => Promise<void>;
 
 export function createGitHubPublisher(token: string): (input: PublishInput) => Promise<PublishedPullRequest> {
   const octokit = new Octokit({ auth: token });
-  return (input) => publishGitHubPullRequest(input, octokit, pushBranchToOrigin);
+  return (input) => publishGitHubPullRequest(input, octokit, pushBranchToOrigin, token);
 }
 
 export async function publishGitHubPullRequest(
   input: PublishInput,
   octokit: PullsCreateOctokit,
-  pushBranch: PushBranch = pushBranchToOrigin
+  pushBranch: PushBranch = pushBranchToOrigin,
+  githubToken?: string
 ): Promise<PublishedPullRequest> {
   const [owner, repo] = input.repository.split("/");
   if (!owner || !repo) throw new Error(`Invalid GitHub repository: ${input.repository}`);
   if (!input.localRepoDir) throw new Error("localRepoDir is required for GitHub publishing");
 
-  await pushBranch(input.localRepoDir, input.workBranch);
+  await pushBranch(input.localRepoDir, input.workBranch, input.pushSha, githubToken);
 
   const response = await octokit.rest.pulls.create({
     owner,
@@ -52,6 +54,7 @@ export async function publishGitHubPullRequest(
     workBranch: input.workBranch,
     baseSha: input.baseSha,
     headSha: input.headSha,
+    pushSha: input.pushSha,
     commitShas: input.commitShas,
     prUrl: response.data.html_url,
     prNumber: response.data.number,
@@ -60,10 +63,11 @@ export async function publishGitHubPullRequest(
   };
 }
 
-export async function pushBranchToOrigin(repoDir: string, workBranch: string): Promise<void> {
+export async function pushBranchToOrigin(repoDir: string, workBranch: string, pushSha: string, token?: string): Promise<void> {
   await new Promise<void>((resolve, reject) => {
-    const child = spawn("git", ["push", "origin", `${workBranch}:${workBranch}`], {
+    const child = spawn("git", ["push", "origin", `${pushSha}:refs/heads/${workBranch}`], {
       cwd: repoDir,
+      env: token ? buildGitAuthEnv(process.env, token) : process.env,
       stdio: ["ignore", "pipe", "pipe"]
     });
     let stderr = "";
@@ -76,7 +80,16 @@ export async function pushBranchToOrigin(repoDir: string, workBranch: string): P
         resolve();
         return;
       }
-      reject(new Error(`git push failed with code ${code ?? "unknown"}: ${stderr}`));
+      reject(new Error(`git push failed with code ${code ?? "unknown"}: ${maskSecrets(stderr)}`));
     });
   });
+}
+
+function buildGitAuthEnv(source: NodeJS.ProcessEnv, token: string): NodeJS.ProcessEnv {
+  return {
+    ...source,
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
+    GIT_CONFIG_VALUE_0: `AUTHORIZATION: bearer ${token}`
+  };
 }

@@ -14,6 +14,7 @@ export async function executeMock(input: ExecutorInput): Promise<AgentResult> {
     targetBranch: input.job.targetBranch,
     baseSha: "mock-base-sha",
     headSha: "mock-head-sha",
+    pushSha: "mock-head-sha",
     changedFiles: [`mock/${input.job.jobId}.txt`],
     commits: [{ sha: "mock-commit-sha", message: title }],
     tests: [{ command: "mock test", status: "passed", summary: "Mock executor passed" }],

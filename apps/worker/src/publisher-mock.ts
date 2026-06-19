@@ -7,6 +7,7 @@ export interface PublishInput {
   localRepoDir?: string;
   baseSha: string;
   headSha: string;
+  pushSha: string;
   commitShas: string[];
   title: string;
   body: string;
@@ -18,6 +19,7 @@ export interface PublishedPullRequest {
   workBranch: string;
   baseSha: string;
   headSha: string;
+  pushSha: string;
   commitShas: string[];
   prUrl: string;
   prNumber: number;
@@ -32,6 +34,7 @@ export async function publishMockPullRequest(input: PublishInput): Promise<Publi
     workBranch: input.workBranch,
     baseSha: input.baseSha,
     headSha: input.headSha,
+    pushSha: input.pushSha,
     commitShas: input.commitShas,
     prUrl: `https://github.local/${input.repository}/pull/mock-${input.jobId}`,
     prNumber: 1,

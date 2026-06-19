@@ -26,6 +26,25 @@ export interface PolicyGateResult {
   artifact: PolicyGateArtifact;
 }
 
+export function evaluatePreExecutionPolicy(input: PolicyGateInput): PolicyGateResult {
+  const repositoryAllowed = isRepositoryAllowed(input.repository, input.repositoryAllowlist);
+  const reasons = repositoryAllowed ? [] : [`Repository is not allowlisted: ${input.repository}`];
+  const allowed = reasons.length === 0;
+
+  return {
+    allowed,
+    reason: allowed ? undefined : reasons.join("; "),
+    artifact: {
+      status: allowed ? "passed" : "failed",
+      repository: input.repository,
+      repositoryAllowed,
+      changedFiles: [],
+      deniedFiles: [],
+      reasons
+    }
+  };
+}
+
 export function evaluatePolicyGate(result: AgentResult, input: PolicyGateInput): PolicyGateResult {
   const changedFiles = result.changedFiles;
   const repositoryAllowed = isRepositoryAllowed(input.repository, input.repositoryAllowlist);

@@ -2,6 +2,7 @@ import { createWriteStream } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { createSecretRedactor } from "@ticket-to-pr/core";
 
 export function runGstack(repoDir: string, logPath: string, timeoutMs: number): Promise<void> {
   const command = process.env.GSTACK_COMMAND?.trim() || "gstack";
@@ -20,14 +21,20 @@ export function runGstack(repoDir: string, logPath: string, timeoutMs: number): 
         if (child.stdout === null || child.stderr === null) {
           throw new Error("gstack process streams were not available");
         }
+        const stdoutRedactor = createSecretRedactor();
+        const stderrRedactor = createSecretRedactor();
 
         timer = setTimeout(() => {
           timedOut = true;
           child?.kill("SIGTERM");
         }, timeoutMs);
 
-        child.stdout.pipe(logStream, { end: false });
-        child.stderr.pipe(logStream, { end: false });
+        child.stdout.on("data", (chunk: Buffer) => {
+          logStream.write(stdoutRedactor(chunk.toString("utf8")));
+        });
+        child.stderr.on("data", (chunk: Buffer) => {
+          logStream.write(stderrRedactor(chunk.toString("utf8")));
+        });
 
         child.on("error", (error) => {
           if (timer !== undefined) {
@@ -45,6 +52,8 @@ export function runGstack(repoDir: string, logPath: string, timeoutMs: number): 
             clearTimeout(timer);
           }
 
+          logStream.write(stdoutRedactor("", true));
+          logStream.write(stderrRedactor("", true));
           logStream.end(() => {
             if (settled) {
               return;

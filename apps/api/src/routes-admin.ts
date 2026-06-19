@@ -8,7 +8,7 @@ export interface AdminRepositories {
   getJobEvents(jobId: string): Promise<Array<Record<string, unknown>>>;
   getJobLogs(jobId: string): Promise<Array<Record<string, unknown>>>;
   getJobArtifacts(jobId: string): Promise<Array<Record<string, unknown>>>;
-  requestCancel(jobId: string, actor: string): Promise<void>;
+  requestCancel(jobId: string, actor: string): Promise<CancelRequestView>;
   getRetryPreflight(jobId: string): Promise<RetryPreflightView | null>;
   createRetryAttempt(jobId: string, actor: string): Promise<{ runId: string; attempt: number }>;
 }
@@ -16,6 +16,11 @@ export interface AdminRepositories {
 export interface RetryPreflightView {
   retryable: boolean;
 }
+
+export type CancelRequestView =
+  | { status: "requested" }
+  | { status: "not_found" }
+  | { status: "not_cancelable"; phase?: string };
 
 export interface AdminQueue {
   add(name: string, data: AgentJobPayload): Promise<unknown>;
@@ -46,8 +51,12 @@ export async function registerAdminRoutes(
   app.get<{ Params: { id: string } }>("/api/jobs/:id/artifacts", async (request) =>
     repos.getJobArtifacts(request.params.id)
   );
-  app.post<{ Params: { id: string } }>("/api/jobs/:id/cancel", async (request) => {
-    await repos.requestCancel(request.params.id, "admin");
+  app.post<{ Params: { id: string } }>("/api/jobs/:id/cancel", async (request, reply) => {
+    const result = await repos.requestCancel(request.params.id, "admin");
+    if (result.status === "not_found") return reply.code(404).send({ error: "Job not found" });
+    if (result.status === "not_cancelable") {
+      return reply.code(409).send({ error: "Job is not cancelable", phase: result.phase });
+    }
     return { ok: true, phase: "CancelRequested" };
   });
   app.post<{ Params: { id: string } }>("/api/jobs/:id/retry", async (request, reply) => {

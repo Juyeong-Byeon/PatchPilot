@@ -25,6 +25,7 @@ export const agentResultSchema = z
     targetBranch: z.string().min(1).optional(),
     baseSha: z.string().min(1).optional(),
     headSha: z.string().min(1).optional(),
+    pushSha: z.string().min(1).optional(),
     changedFiles: z.array(z.string()).default([]),
     commits: z.array(z.object({ sha: z.string().min(1), message: z.string().min(1) })).default([]),
     tests: z.array(testResultSchema).default([]),

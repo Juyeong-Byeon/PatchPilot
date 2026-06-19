@@ -3,6 +3,7 @@ import type { PgPool } from "./client.js";
 import type {
   AppendAuditEventInput,
   AppendEventInput,
+  CancelRequestResult,
   AppendLogInput,
   CreateJobResult,
   CreateRunInput,
@@ -331,7 +332,14 @@ export class Repositories {
     return result.rows;
   }
 
-  async requestCancel(jobId: string, actor = "system", reason?: string): Promise<void> {
+  async requestCancel(jobId: string, actor = "system", reason?: string): Promise<CancelRequestResult> {
+    const current = await this.pool.query<{ phase: InternalPhase }>(`select phase from jobs where id=$1`, [jobId]);
+    const phase = current.rows[0]?.phase;
+    if (!phase) return { status: "not_found" };
+    if (["Publishing", "Completed", "Failed", "Cancelled", "CancelFailed"].includes(phase)) {
+      return { status: "not_cancelable", phase };
+    }
+
     const result = await this.pool.query(
       `update jobs
        set phase='CancelRequested', outcome='Running', failure_reason=$2, updated_at=now()
@@ -346,7 +354,9 @@ export class Repositories {
         jobId,
         metadata: { reason: reason ?? null }
       });
+      return { status: "requested" };
     }
+    return { status: "not_cancelable", phase };
   }
 
   async createRetryAttempt(jobId: string, actor: string): Promise<{ runId: string; attempt: number }>;
@@ -404,7 +414,7 @@ export class Repositories {
          j.phase,
          j.outcome,
          max(r.attempt) as last_attempt,
-         (j.phase = 'Failed' and j.outcome in ('FailedActionable', 'FailedInternal')) as retryable
+         (j.phase = 'Failed' and j.outcome = 'FailedInternal') as retryable
        from jobs j
        left join runs r on r.job_id = j.id
        where j.id=$1
