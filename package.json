@@ -8,7 +8,7 @@
     "apps/*"
   ],
   "scripts": {
-    "build": "npm run build --workspaces",
+    "build": "node scripts/build-workspaces-if-source.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "node scripts/typecheck-workspaces.mjs",
