@@ -1,4 +1,5 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
+import { ArrowRight } from "lucide-react";
 import type { JobRecord } from "../api.js";
 import { translateState, type AdminCopy, type Locale } from "../i18n.js";
 import { cn } from "../lib/utils.js";
@@ -15,7 +16,7 @@ interface JobListProps {
   onOpenJob(jobId: string): void;
 }
 
-const rowColumns = "grid-cols-[136px_176px_minmax(180px,1fr)_108px_148px_minmax(260px,1.25fr)_92px]";
+const rowColumns = "grid-cols-[136px_300px_minmax(220px,1fr)_154px_56px]";
 
 export function JobList({ jobs, selectedJobId, isLoading, copy, locale, onOpenJob }: JobListProps) {
   const [query, setQuery] = useState("");
@@ -55,17 +56,14 @@ export function JobList({ jobs, selectedJobId, isLoading, copy, locale, onOpenJo
             <span>{copy.tableUpdated}</span>
             <span>{copy.tableJob}</span>
             <span>{copy.tableRepo}</span>
-            <span>{copy.tableBranch}</span>
             <span>{copy.tableOutcome}</span>
-            <span>{copy.tableLastEvent}</span>
             <span>{copy.tableAction}</span>
           </div>
           <ol className="m-0 max-h-[calc(100vh-292px)] list-none overflow-auto p-0">
             {filteredJobs.map((job) => {
               const selected = job.id === selectedJobId;
-              const rawLastEvent = stringValue(job.last_event ?? getValue(job, "lastEvent"), copy);
-              const lastEvent = compactText(rawLastEvent, copy, 150);
               const repo = compactText(job.repository, copy, 120);
+              const jobUuid = jobUuidValue(job.id, copy);
 
               return (
                 <li key={job.id}>
@@ -86,37 +84,27 @@ export function JobList({ jobs, selectedJobId, isLoading, copy, locale, onOpenJo
                       {formatDate(getValue(job, "updated_at", "created_at"), locale, copy)}
                     </span>
                     <span className="min-w-0 pr-4">
-                      <span className="block truncate font-mono text-[12px] leading-4 text-forest-ink" title={job.id}>
-                        {shortJobId(job.id, copy)}
-                      </span>
-                      <span className="mt-1 block text-[12px] leading-4 text-charcoal">
-                        {copy.attempt} {stringValue(job.attempt, copy)}
+                      <span className="block truncate font-mono text-[12px] leading-5 text-forest-ink" title={job.id}>
+                        {jobUuid}
                       </span>
                     </span>
                     <span className="min-w-0 pr-4">
                       <span className="block truncate font-medium text-true-black" title={job.repository ?? ""}>
                         {repo}
                       </span>
-                      <span className="mt-1 block truncate text-[12px] leading-4 text-charcoal" title={getValue(job, "work_branch", "workBranch") ?? ""}>
-                        {getValue(job, "work_branch", "workBranch") ?? copy.empty}
-                      </span>
-                    </span>
-                    <span className="min-w-0 pr-4 text-[12px] leading-4 text-charcoal">
-                      {getValue(job, "target_branch", "targetBranch") ?? copy.empty}
                     </span>
                     <span className="min-w-0 pr-4">
                       <span className="flex flex-wrap gap-1.5">
                         <StatusPill value={job.outcome ?? copy.unknown} label={translateState(job.outcome, locale)} />
                         <StatusPill value={job.phase ?? copy.unknown} label={translateState(job.phase, locale)} subtle />
                       </span>
-                      <span className="mt-1 block text-[12px] leading-4 text-charcoal">{runtime(job, copy)}</span>
-                    </span>
-                    <span className="min-w-0 pr-4 text-[12px] leading-4 text-charcoal text-clamp-2" title={rawLastEvent}>
-                      {lastEvent}
                     </span>
                     <span className="flex min-w-0 items-start">
-                      <span className="inline-flex h-8 items-center rounded-lg border border-hairline-gray bg-linen-white px-2.5 text-[12px] font-medium text-forest-ink">
-                        {copy.openJobDetail} -&gt;
+                      <span
+                        className="inline-flex size-8 items-center justify-center rounded-lg border border-hairline-gray bg-linen-white text-forest-ink"
+                        title={copy.openJobDetail}
+                      >
+                        <ArrowRight aria-hidden="true" size={16} strokeWidth={2} />
                       </span>
                     </span>
                   </button>
@@ -159,19 +147,10 @@ function getValue(job: JobRecord, ...keys: string[]): string | undefined {
   return undefined;
 }
 
-function runtime(job: JobRecord, copy: AdminCopy): string {
-  const started = parseTime(getValue(job, "started_at", "created_at"));
-  const finished = parseTime(getValue(job, "finished_at", "updated_at"));
-  if (!started || !finished) return copy.empty;
-  const seconds = Math.max(0, Math.round((finished - started) / 1000));
-  if (seconds < 60) return `${seconds}s`;
-  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
-}
-
-function shortJobId(value: string | undefined, copy: AdminCopy): string {
+function jobUuidValue(value: string | undefined, copy: AdminCopy): string {
   if (!value) return copy.empty;
-  if (value.length <= 22) return value;
-  return `${value.slice(0, 11)}...${value.slice(-6)}`;
+  const uuid = value.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)?.[0];
+  return uuid ?? value;
 }
 
 function compactText(value: unknown, copy: AdminCopy, maxLength: number): string {
@@ -196,10 +175,4 @@ function formatDate(value: string | undefined, locale: Locale, copy: AdminCopy):
     hour: "2-digit",
     minute: "2-digit"
   }).format(time);
-}
-
-function parseTime(value: string | undefined): number | null {
-  if (!value) return null;
-  const time = Date.parse(value);
-  return Number.isNaN(time) ? null : time;
 }

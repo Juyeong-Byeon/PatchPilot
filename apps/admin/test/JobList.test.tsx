@@ -6,7 +6,7 @@ import { JobList } from "../src/components/JobList.js";
 import { adminCopy } from "../src/i18n.js";
 
 describe("JobList", () => {
-  it("keeps long operational messages compact and opens the detail page", () => {
+  it("keeps the list compact and opens the detail page", () => {
     const onOpenJob = vi.fn();
     const longEvent =
       "git ls-remote --heads https://github.com/Juyeong-Byeon/test_pr_repo.git main failed with code 128: fatal: could not read Username for https://github.com because no device or address was available";
@@ -34,10 +34,11 @@ describe("JobList", () => {
       />
     );
 
-    const row = screen.getByRole("button", { name: /job_09774cc/ });
-    const eventSummary = screen.getByTitle(longEvent);
+    const row = screen.getByRole("button", { name: /09774cca-aa0f-4134-9093-6cebc794e385/ });
 
-    expect(eventSummary).toHaveTextContent(/\.\.\.$/);
+    expect(screen.queryByText(/git ls-remote/)).not.toBeInTheDocument();
+    expect(screen.queryByText("시도")).not.toBeInTheDocument();
+    expect(screen.queryByText("main")).not.toBeInTheDocument();
 
     fireEvent.click(row);
 
