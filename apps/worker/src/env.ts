@@ -1,0 +1,60 @@
+export type WorkerExecutorMode = "mock" | "gstack";
+export type WorkerPublisherMode = "mock" | "github";
+
+export interface WorkerEnv {
+  databaseUrl: string;
+  redisUrl: string;
+  executorMode: WorkerExecutorMode;
+  publisherMode: WorkerPublisherMode;
+  repositoryAllowlist: string[];
+  protectedPathDenylist: string[];
+  runnerImage: string;
+  workspaceRoot: string;
+  jobTimeoutSeconds: number;
+  githubToken?: string;
+}
+
+export function readWorkerEnv(source: NodeJS.ProcessEnv = process.env): WorkerEnv {
+  const executorMode = parseMode(source.WORKER_EXECUTOR_MODE ?? source.EXECUTOR_MODE, ["mock", "gstack"], "mock");
+  const publisherMode = parseMode(source.WORKER_PUBLISHER_MODE ?? source.PUBLISHER_MODE, ["mock", "github"], "mock");
+  const githubToken = source.GITHUB_TOKEN;
+
+  if (publisherMode === "github" && !githubToken) {
+    throw new Error("GITHUB_TOKEN is required when WORKER_PUBLISHER_MODE=github");
+  }
+
+  return {
+    databaseUrl: source.DATABASE_URL ?? "",
+    redisUrl: source.REDIS_URL ?? "redis://localhost:6379",
+    executorMode,
+    publisherMode,
+    repositoryAllowlist: parseCsv(source.POLICY_REPOSITORY_ALLOWLIST ?? source.REPOSITORY_ALLOWLIST),
+    protectedPathDenylist: parseCsv(source.POLICY_PROTECTED_PATH_DENYLIST ?? source.PROTECTED_PATH_DENYLIST),
+    runnerImage: source.GSTACK_RUNNER_IMAGE ?? source.RUNNER_IMAGE ?? "ticket-to-pr-runner:latest",
+    workspaceRoot: source.WORKER_WORKSPACE_ROOT ?? source.JOB_WORKSPACE_ROOT ?? "/tmp/ticket-to-pr-worker",
+    jobTimeoutSeconds: parsePositiveInteger(source.WORKER_JOB_TIMEOUT_SECONDS ?? source.JOB_TIMEOUT_SECONDS, 3600),
+    githubToken
+  };
+}
+
+function parseCsv(value: string | undefined): string[] {
+  return value
+    ? value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean)
+    : [];
+}
+
+function parseMode<T extends string>(value: string | undefined, allowed: T[], fallback: T): T {
+  if (!value) return fallback;
+  if (allowed.includes(value as T)) return value as T;
+  throw new Error(`Invalid worker mode: ${value}`);
+}
+
+function parsePositiveInteger(value: string | undefined, fallback: number): number {
+  if (!value) return fallback;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) throw new Error(`Invalid positive integer: ${value}`);
+  return parsed;
+}
