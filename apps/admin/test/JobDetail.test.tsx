@@ -3,6 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { JobDetail } from "../src/components/JobDetail.js";
+import { adminCopy } from "../src/i18n.js";
 
 const baseProps = {
   events: [],
@@ -10,6 +11,8 @@ const baseProps = {
   artifacts: [],
   isLoading: false,
   actionState: "",
+  copy: adminCopy.ko,
+  locale: "ko" as const,
   onRetry: vi.fn(),
   onCancel: vi.fn()
 };
@@ -23,7 +26,7 @@ describe("JobDetail", () => {
       />
     );
 
-    expect(screen.getByRole("button", { name: "Retry" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "재시도" })).toBeDisabled();
 
     rerender(
       <JobDetail
@@ -32,6 +35,6 @@ describe("JobDetail", () => {
       />
     );
 
-    expect(screen.getByRole("button", { name: "Retry" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "재시도" })).toBeEnabled();
   });
 });

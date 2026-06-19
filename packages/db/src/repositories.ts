@@ -163,7 +163,10 @@ export class Repositories {
       `insert into runs
        (id, job_id, attempt, container_id, runner_image_digest, workspace_path, base_sha, work_branch, started_at, heartbeat_at)
        values ($1,$2,$3,$4,$5,$6,$7,$8,now(),now())
-       on conflict (id) do update set heartbeat_at=now()
+       on conflict (id) do update set
+         workspace_path = coalesce(nullif(excluded.workspace_path, ''), runs.workspace_path),
+         work_branch = coalesce(nullif(excluded.work_branch, ''), runs.work_branch),
+         heartbeat_at=now()
        returning id, job_id, attempt, container_id, runner_image_digest, workspace_path, base_sha, work_branch, head_sha, exit_code`,
       [
         input.id,
@@ -248,6 +251,8 @@ export class Repositories {
          ts.repository,
          ts.target_branch,
          pr.pr_url,
+         last_run.work_branch,
+         last_run.attempt,
          last_event.message as last_event
        from jobs j
        join ticket_snapshots ts on ts.id = j.ticket_snapshot_id
@@ -258,6 +263,13 @@ export class Repositories {
          order by created_at desc
          limit 1
        ) pr on true
+       left join lateral (
+         select work_branch, attempt
+         from runs
+         where job_id = j.id
+         order by attempt desc, started_at desc
+         limit 1
+       ) last_run on true
        left join lateral (
          select message
          from run_events
@@ -283,7 +295,9 @@ export class Repositories {
          ts.raw_fields,
          pr.pr_url,
          pr.pr_number,
-         pr.pr_title
+         pr.pr_title,
+         last_run.work_branch,
+         last_run.attempt
        from jobs j
        join ticket_snapshots ts on ts.id = j.ticket_snapshot_id
        left join lateral (
@@ -293,6 +307,13 @@ export class Repositories {
          order by created_at desc
          limit 1
        ) pr on true
+       left join lateral (
+         select work_branch, attempt
+         from runs
+         where job_id = j.id
+         order by attempt desc, started_at desc
+         limit 1
+       ) last_run on true
        where j.id=$1`,
       [jobId]
     );
@@ -365,32 +386,77 @@ export class Repositories {
     inputOrJobId: string | Omit<CreateRunInput, "attempt">,
     actor = "system"
   ): Promise<RunRecord | { runId: string; attempt: number }> {
+    if (typeof inputOrJobId === "string") {
+      return this.createRetryAttemptForJob(inputOrJobId, actor);
+    }
+
     const input =
-      typeof inputOrJobId === "string"
-        ? {
-            id: createRunId(),
-            jobId: inputOrJobId,
-            workspacePath: "",
-            workBranch: `ticket-to-pr/${inputOrJobId}`
-          }
-        : inputOrJobId;
+      inputOrJobId;
     const attemptResult = await this.pool.query<{ attempt: number | null }>(
       `select max(attempt) as attempt from runs where job_id=$1`,
       [input.jobId]
     );
     const attempt = (attemptResult.rows[0]?.attempt ?? 0) + 1;
-    const run = await this.createRun({ ...input, attempt });
-    if (typeof inputOrJobId === "string") {
-      await this.appendAuditEvent({
-        actor,
-        action: "job.retry_requested",
-        jobId: inputOrJobId,
-        runId: run.runId,
-        metadata: { attempt }
-      });
-      return { runId: run.runId, attempt: run.attempt };
-    }
+    const run = await this.createRun({
+      ...input,
+      attempt,
+      workBranch: input.workBranch || createAttemptWorkBranch(input.jobId, attempt)
+    });
     return run;
+  }
+
+  private async createRetryAttemptForJob(jobId: string, actor: string): Promise<{ runId: string; attempt: number }> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const jobResult = await client.query<{ id: string; phase: InternalPhase; outcome: UserOutcome }>(
+        `select id, phase, outcome
+         from jobs
+         where id=$1
+         for update`,
+        [jobId]
+      );
+      const job = jobResult.rows[0];
+      if (!job) throw createHttpError(404, "Job not found");
+      if (job.phase !== "Failed" || job.outcome !== "FailedInternal") {
+        throw createHttpError(409, "Job is not retryable");
+      }
+
+      const attemptResult = await client.query<{ attempt: number | null }>(
+        `select max(attempt) as attempt from runs where job_id=$1`,
+        [jobId]
+      );
+      const attempt = (attemptResult.rows[0]?.attempt ?? 0) + 1;
+      const runId = createRunId();
+      const workBranch = createAttemptWorkBranch(jobId, attempt);
+      const runResult = await client.query<RunRow>(
+        `insert into runs
+         (id, job_id, attempt, workspace_path, work_branch, started_at, heartbeat_at)
+         values ($1,$2,$3,$4,$5,now(),now())
+         returning id, job_id, attempt, container_id, runner_image_digest, workspace_path, base_sha, work_branch, head_sha, exit_code`,
+        [runId, jobId, attempt, "", workBranch]
+      );
+      const run = mapRun(runResult.rows[0]);
+
+      await client.query(
+        `update jobs
+         set phase='Queued', outcome='Queued', failure_reason=null, updated_at=now()
+         where id=$1`,
+        [jobId]
+      );
+      await client.query(
+        `insert into audit_events(actor, action, job_id, run_id, metadata)
+         values ($1,$2,$3,$4,$5)`,
+        [actor, "job.retry_requested", jobId, run.runId, JSON.stringify({ attempt })]
+      );
+      await client.query("commit");
+      return { runId: run.runId, attempt: run.attempt };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async appendAuditEvent(input: AppendAuditEventInput): Promise<void> {
@@ -431,6 +497,14 @@ export class Repositories {
       retryable: row.retryable
     };
   }
+}
+
+function createAttemptWorkBranch(jobId: string, attempt: number): string {
+  return attempt > 1 ? `ticket-to-pr/${jobId}-attempt-${attempt}` : `ticket-to-pr/${jobId}`;
+}
+
+function createHttpError(statusCode: 404 | 409, message: string): Error & { statusCode: number } {
+  return Object.assign(new Error(message), { statusCode });
 }
 
 interface RunRow {

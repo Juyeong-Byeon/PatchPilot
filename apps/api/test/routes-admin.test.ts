@@ -7,7 +7,6 @@ import { buildServer } from "../src/server.js";
 function makeRepos() {
   return {
     createJobFromTicket: vi.fn(),
-    appendEvent: vi.fn(),
     listJobs: vi.fn().mockResolvedValue([{ id: "job_1", phase: "Queued" }]),
     getJob: vi.fn().mockResolvedValue({ id: "job_1", phase: "Queued" }),
     getJobEvents: vi.fn().mockResolvedValue([{ event_type: "job.enqueued" }]),
@@ -15,7 +14,9 @@ function makeRepos() {
     getJobArtifacts: vi.fn().mockResolvedValue([{ kind: "result_json" }]),
     requestCancel: vi.fn().mockResolvedValue({ status: "requested" }),
     getRetryPreflight: vi.fn().mockResolvedValue({ jobId: "job_1", retryable: true, lastAttempt: 1 }),
-    createRetryAttempt: vi.fn().mockResolvedValue({ runId: "run_2", attempt: 2 })
+    createRetryAttempt: vi.fn().mockResolvedValue({ runId: "run_2", attempt: 2 }),
+    transitionJob: vi.fn().mockResolvedValue(undefined),
+    appendEvent: vi.fn().mockResolvedValue(undefined)
   };
 }
 
@@ -23,6 +24,7 @@ describe("admin routes", () => {
   it("requires bearer token for job routes", async () => {
     const app = await buildServer({
       adminToken: "secret",
+      larkWebhookSecret: "webhook-secret",
       repos: makeRepos() as never,
       queue: { add: vi.fn() }
     });
@@ -37,6 +39,7 @@ describe("admin routes", () => {
     const repos = makeRepos();
     const app = await buildServer({
       adminToken: "secret",
+      larkWebhookSecret: "webhook-secret",
       repos: repos as never,
       queue: { add: vi.fn() }
     });
@@ -64,6 +67,7 @@ describe("admin routes", () => {
     const queue = { add: vi.fn().mockResolvedValue({ id: "job_1" }) };
     const app = await buildServer({
       adminToken: "secret",
+      larkWebhookSecret: "webhook-secret",
       repos: repos as never,
       queue
     });
@@ -98,6 +102,7 @@ describe("admin routes", () => {
     repos.getRetryPreflight.mockResolvedValue({ jobId: "job_1", retryable: false, phase: "Planning" });
     const app = await buildServer({
       adminToken: "secret",
+      larkWebhookSecret: "webhook-secret",
       repos: repos as never,
       queue: { add: vi.fn() }
     });
@@ -113,10 +118,64 @@ describe("admin routes", () => {
     await app.close();
   });
 
+  it("maps retry allocation races to conflict responses", async () => {
+    const repos = makeRepos();
+    repos.createRetryAttempt.mockRejectedValue(Object.assign(new Error("Job is not retryable"), { statusCode: 409 }));
+    const app = await buildServer({
+      adminToken: "secret",
+      larkWebhookSecret: "webhook-secret",
+      repos: repos as never,
+      queue: { add: vi.fn() }
+    });
+
+    const retry = await app.inject({
+      method: "POST",
+      url: "/api/jobs/job_1/retry",
+      headers: { authorization: "Bearer secret" }
+    });
+
+    expect(retry.statusCode).toBe(409);
+    expect(retry.json()).toEqual({ error: "Job is not retryable" });
+    await app.close();
+  });
+
+  it("returns the retry job to failed when enqueue fails after allocation", async () => {
+    const repos = makeRepos();
+    const queue = { add: vi.fn().mockRejectedValue(new Error("redis unavailable")) };
+    const app = await buildServer({
+      adminToken: "secret",
+      larkWebhookSecret: "webhook-secret",
+      repos: repos as never,
+      queue
+    });
+
+    const retry = await app.inject({
+      method: "POST",
+      url: "/api/jobs/job_1/retry",
+      headers: { authorization: "Bearer secret" }
+    });
+
+    expect(retry.statusCode).toBe(503);
+    expect(retry.json()).toEqual({ error: "Retry enqueue failed" });
+    expect(repos.transitionJob).toHaveBeenCalledWith("job_1", "Failed", "FailedInternal", "redis unavailable");
+    expect(repos.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobId: "job_1",
+        runId: "run_2",
+        attempt: 2,
+        phase: "Failed",
+        eventType: "job.retry_enqueue_failed",
+        source: "api"
+      })
+    );
+    await app.close();
+  });
+
   it("reports missing and non-cancelable jobs on cancel", async () => {
     const repos = makeRepos();
     const app = await buildServer({
       adminToken: "secret",
+      larkWebhookSecret: "webhook-secret",
       repos: repos as never,
       queue: { add: vi.fn() }
     });
@@ -146,6 +205,7 @@ describe("admin routes", () => {
     repos.requestCancel.mockResolvedValue({ status: "not_cancelable", phase: "Publishing" });
     const app = await buildServer({
       adminToken: "secret",
+      larkWebhookSecret: "webhook-secret",
       repos: repos as never,
       queue: { add: vi.fn() }
     });
@@ -167,6 +227,7 @@ describe("admin routes", () => {
     const app = await buildServer({
       adminStaticRoot: staticRoot,
       adminToken: "secret",
+      larkWebhookSecret: "webhook-secret",
       repos: makeRepos() as never,
       queue: { add: vi.fn() }
     });

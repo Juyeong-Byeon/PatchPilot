@@ -6,6 +6,8 @@ const testResultSchema = z.object({
   summary: z.string().min(1)
 });
 
+const fullShaSchema = z.string().regex(/^[0-9a-f]{40}$/i, "Expected a full 40-character git SHA");
+
 const failureSchema = z.object({
   stage: z.string().min(1),
   category: z.string().min(1),
@@ -25,7 +27,7 @@ export const agentResultSchema = z
     targetBranch: z.string().min(1).optional(),
     baseSha: z.string().min(1).optional(),
     headSha: z.string().min(1).optional(),
-    pushSha: z.string().min(1).optional(),
+    pushSha: fullShaSchema.optional(),
     changedFiles: z.array(z.string()).default([]),
     commits: z.array(z.object({ sha: z.string().min(1), message: z.string().min(1) })).default([]),
     tests: z.array(testResultSchema).default([]),
@@ -62,6 +64,7 @@ export const agentResultSchema = z
       [result.targetBranch, "targetBranch", "Completed results require targetBranch"],
       [result.baseSha, "baseSha", "Completed results require baseSha"],
       [result.headSha, "headSha", "Completed results require headSha"],
+      [result.pushSha, "pushSha", "Completed results require pushSha"],
       [result.review, "review", "Completed results require review"],
       [result.pullRequestDraft, "pullRequestDraft", "Completed results require pullRequestDraft"]
     ];

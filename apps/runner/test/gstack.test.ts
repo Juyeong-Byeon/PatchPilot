@@ -26,12 +26,29 @@ describe("runGstack", () => {
     process.env.GSTACK_COMMAND = command;
     process.env.GSTACK_ARGS = "";
 
-    await runGstack(dir, logPath, 1000);
+    await runGstack(dir, logPath, 10000);
 
     const log = await readFile(logPath, "utf8");
     expect(log).not.toContain("github_pat_secret");
     expect(log).not.toContain("ghp_abc123");
     expect(log).not.toContain("ghs_1234567890abcdef");
     expect(log).toContain("[REDACTED_GITHUB_TOKEN]");
+  });
+
+  it("kills timed out process groups that ignore graceful termination", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "ticket-to-pr-gstack-timeout-"));
+    tempDirs.push(dir);
+    const command = join(dir, "stubborn-gstack.sh");
+    const logPath = join(dir, "logs", "gstack.log");
+    await writeFile(command, "#!/usr/bin/env node\nprocess.on('SIGTERM', () => {});\nsetTimeout(() => {}, 2000);\n");
+    await chmod(command, 0o755);
+    process.env.GSTACK_COMMAND = command;
+    process.env.GSTACK_ARGS = "";
+
+    const startedAt = Date.now();
+
+    await expect(runGstack(dir, logPath, 300, 50)).rejects.toThrow("gstack timed out");
+
+    expect(Date.now() - startedAt).toBeLessThan(1200);
   });
 });

@@ -1,5 +1,14 @@
-import { describe, expect, it, vi } from "vitest";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { processAgentJob } from "../src/worker.js";
+
+const tempDirs: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+});
 
 const job = {
   jobId: "job_1",
@@ -27,7 +36,7 @@ const completedResult = {
   targetBranch: "main",
   baseSha: "base",
   headSha: "head",
-  pushSha: "head",
+  pushSha: "0123456789abcdef0123456789abcdef01234567",
   changedFiles: ["src/login.ts"],
   commits: [{ sha: "abc", message: "Fix login" }],
   tests: [{ command: "npm test", status: "passed" as const, summary: "ok" }],
@@ -59,14 +68,17 @@ function createRepos() {
 describe("processAgentJob", () => {
   it("executes, stores artifacts, publishes, and completes a mock-safe job", async () => {
     const repos = createRepos();
-    const executor = vi.fn().mockResolvedValue(completedResult);
+    const executor = vi.fn().mockImplementation(async (input) => {
+      await writeFile(join(input.run.workspacePath, "PR_BODY.md"), "Generated body");
+      return completedResult;
+    });
     const publisher = vi.fn().mockResolvedValue({
       repository: "acme/web",
       targetBranch: "main",
       workBranch: "ticket-to-pr/job_1",
       baseSha: "base",
       headSha: "head",
-      pushSha: "head",
+      pushSha: "0123456789abcdef0123456789abcdef01234567",
       commitShas: ["abc"],
       prUrl: "https://github.local/acme/web/pull/mock-job_1",
       prNumber: 1,
@@ -176,14 +188,17 @@ describe("processAgentJob", () => {
 
   it("accepts retry payloads with preassigned run id and attempt", async () => {
     const repos = createRepos();
-    const executor = vi.fn().mockResolvedValue({ ...completedResult, runId: "run_2" });
+    const executor = vi.fn().mockImplementation(async (input) => {
+      await writeFile(join(input.run.workspacePath, "PR_BODY.md"), "Generated body");
+      return { ...completedResult, runId: "run_2" };
+    });
     const publisher = vi.fn().mockResolvedValue({
       repository: "acme/web",
       targetBranch: "main",
       workBranch: "ticket-to-pr/job_1",
       baseSha: "base",
       headSha: "head",
-      pushSha: "head",
+      pushSha: "0123456789abcdef0123456789abcdef01234567",
       commitShas: ["abc"],
       prUrl: "https://github.local/acme/web/pull/mock-job_1",
       prNumber: 1,
@@ -207,8 +222,89 @@ describe("processAgentJob", () => {
     );
 
     expect(outcome).toEqual({ status: "completed", runId: "run_2" });
-    expect(repos.createRun).toHaveBeenCalledWith(expect.objectContaining({ id: "run_2", attempt: 2 }));
+    expect(repos.createRun).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "run_2", attempt: 2, workBranch: "ticket-to-pr/job_1-attempt-2" })
+    );
     expect(executor).toHaveBeenCalledWith(expect.objectContaining({ run: expect.objectContaining({ attempt: 2 }) }));
+    expect(publisher).toHaveBeenCalledWith(expect.objectContaining({ workBranch: "ticket-to-pr/job_1-attempt-2" }));
+  });
+
+  it("publishes the agent-authored PR body artifact when it exists", async () => {
+    const repos = createRepos();
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "ticket-to-pr-pr-body-"));
+    tempDirs.push(workspaceRoot);
+    const executor = vi.fn().mockImplementation(async (input) => {
+      await mkdir(join(input.run.workspacePath, "output"), { recursive: true });
+      await writeFile(join(input.run.workspacePath, "output", "pr-body.md"), "Agent-authored body\n");
+      return { ...completedResult, pullRequestDraft: { title: "Fix login", bodyPath: "output/pr-body.md" } };
+    });
+    const publisher = vi.fn().mockImplementation(async (input) => ({
+      repository: "acme/web",
+      targetBranch: "main",
+      workBranch: input.workBranch,
+      baseSha: "base",
+      headSha: "head",
+      pushSha: "0123456789abcdef0123456789abcdef01234567",
+      commitShas: ["abc"],
+      prUrl: "https://github.local/acme/web/pull/mock-job_1",
+      prNumber: 1,
+      prTitle: input.title,
+      prBody: input.body
+    }));
+
+    await processAgentJob(
+      { jobId: "job_1", ticketSnapshotId: "ts_1", larkRecordId: "rec_1", triggerVersion: "v1" },
+      {
+        repos,
+        executor,
+        publisher,
+        workspaceRoot,
+        policyConfig: { repositoryAllowlist: ["acme/web"], protectedPathDenylist: [] },
+        ids: {
+          runId: () => "run_1",
+          artifactId: (kind) => `artifact_${kind}`,
+          pullRequestId: () => "pr_1"
+        }
+      }
+    );
+
+    expect(publisher).toHaveBeenCalledWith(expect.objectContaining({ body: "Agent-authored body\n" }));
+  });
+
+  it("fails completed results that reference a missing PR body artifact", async () => {
+    const repos = createRepos();
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "ticket-to-pr-missing-pr-body-"));
+    tempDirs.push(workspaceRoot);
+    const executor = vi.fn().mockResolvedValue({
+      ...completedResult,
+      pullRequestDraft: { title: "Fix login", bodyPath: "output/missing-pr-body.md" }
+    });
+    const publisher = vi.fn();
+
+    const outcome = await processAgentJob(
+      { jobId: "job_1", ticketSnapshotId: "ts_1", larkRecordId: "rec_1", triggerVersion: "v1" },
+      {
+        repos,
+        executor,
+        publisher,
+        workspaceRoot,
+        policyConfig: { repositoryAllowlist: ["acme/web"], protectedPathDenylist: [] },
+        ids: {
+          runId: () => "run_1",
+          artifactId: (kind) => `artifact_${kind}`,
+          pullRequestId: () => "pr_1"
+        }
+      }
+    );
+
+    expect(outcome).toEqual({ status: "failed", runId: "run_1" });
+    expect(publisher).not.toHaveBeenCalled();
+    expect(repos.transitionJob).toHaveBeenLastCalledWith(
+      "job_1",
+      "Failed",
+      "FailedInternal",
+      expect.stringContaining("Missing pull request body artifact")
+    );
   });
 
   it("stops before execution when cancel was already requested", async () => {

@@ -1,4 +1,5 @@
 import type { AgentJobPayload } from "@ticket-to-pr/queue";
+import type { InternalPhase, UserOutcome } from "@ticket-to-pr/core";
 import type { FastifyInstance } from "fastify";
 import { assertAdminToken } from "./auth.js";
 
@@ -11,6 +12,17 @@ export interface AdminRepositories {
   requestCancel(jobId: string, actor: string): Promise<CancelRequestView>;
   getRetryPreflight(jobId: string): Promise<RetryPreflightView | null>;
   createRetryAttempt(jobId: string, actor: string): Promise<{ runId: string; attempt: number }>;
+  transitionJob(jobId: string, phase: InternalPhase, outcome: UserOutcome, reason?: string): Promise<void>;
+  appendEvent(input: {
+    jobId: string;
+    runId?: string;
+    attempt?: number;
+    phase: string;
+    eventType: string;
+    source: string;
+    message: string;
+    metadata?: unknown;
+  }): Promise<void>;
 }
 
 export interface RetryPreflightView {
@@ -65,12 +77,42 @@ export async function registerAdminRoutes(
     if (preflight.retryable !== true) {
       return reply.code(409).send({ error: "Job is not retryable", preflight });
     }
-    const retry = await repos.createRetryAttempt(request.params.id, "admin");
-    await queue.add(request.params.id, {
-      jobId: request.params.id,
-      runId: retry.runId,
-      attempt: retry.attempt
-    });
+    let retry: { runId: string; attempt: number };
+    try {
+      retry = await repos.createRetryAttempt(request.params.id, "admin");
+    } catch (error) {
+      if (isHttpError(error, 404)) return reply.code(404).send({ error: "Job not found" });
+      if (isHttpError(error, 409)) return reply.code(409).send({ error: getErrorMessage(error) });
+      throw error;
+    }
+    try {
+      await queue.add(request.params.id, {
+        jobId: request.params.id,
+        runId: retry.runId,
+        attempt: retry.attempt
+      });
+    } catch (error) {
+      const message = getErrorMessage(error);
+      await repos.transitionJob(request.params.id, "Failed", "FailedInternal", message);
+      await repos.appendEvent({
+        jobId: request.params.id,
+        runId: retry.runId,
+        attempt: retry.attempt,
+        phase: "Failed",
+        eventType: "job.retry_enqueue_failed",
+        source: "api",
+        message
+      });
+      return reply.code(503).send({ error: "Retry enqueue failed" });
+    }
     return reply.code(202).send({ ok: true, runId: retry.runId, attempt: retry.attempt });
   });
+}
+
+function isHttpError(error: unknown, statusCode: number): boolean {
+  return typeof error === "object" && error !== null && "statusCode" in error && error.statusCode === statusCode;
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Request failed";
 }

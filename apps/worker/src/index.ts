@@ -21,6 +21,7 @@ export function createWorker(env: WorkerEnv = readWorkerEnv()): BullWorker<Agent
           executeGstack(input, {
             runnerImage: env.runnerImage,
             timeoutSeconds: env.jobTimeoutSeconds,
+            githubToken: env.githubToken,
             policy: {
               repositoryAllowlist: env.repositoryAllowlist,
               protectedPathDenylist: env.protectedPathDenylist

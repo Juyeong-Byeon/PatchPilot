@@ -1,8 +1,22 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { AgentResult } from "@ticket-to-pr/core";
 import type { ExecutorInput } from "./worker.js";
 
 export async function executeMock(input: ExecutorInput): Promise<AgentResult> {
   const title = input.job.title.length > 0 ? input.job.title : `Ticket ${input.job.ticketSnapshotId}`;
+  const prBody = [
+    `## Summary`,
+    `Mock implementation for ${title}`,
+    ``,
+    `## Checklist`,
+    `- [x] Mock executor completed`,
+    `- [x] PR body artifact written`,
+    ``
+  ].join("\n");
+
+  await mkdir(input.run.workspacePath, { recursive: true });
+  await writeFile(join(input.run.workspacePath, "PR_BODY.md"), prBody, "utf8");
 
   return {
     schemaVersion: "1.0",
@@ -14,7 +28,7 @@ export async function executeMock(input: ExecutorInput): Promise<AgentResult> {
     targetBranch: input.job.targetBranch,
     baseSha: "mock-base-sha",
     headSha: "mock-head-sha",
-    pushSha: "mock-head-sha",
+    pushSha: "0123456789abcdef0123456789abcdef01234567",
     changedFiles: [`mock/${input.job.jobId}.txt`],
     commits: [{ sha: "mock-commit-sha", message: title }],
     tests: [{ command: "mock test", status: "passed", summary: "Mock executor passed" }],

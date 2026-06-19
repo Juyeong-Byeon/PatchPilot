@@ -24,7 +24,7 @@ describe("publishGitHubPullRequest", () => {
         localRepoDir: "/work/jobs/job_1/repo",
         baseSha: "base",
         headSha: "head",
-        pushSha: "audited-head",
+        pushSha: "abcdefabcdefabcdefabcdefabcdefabcdefabcd",
         commitShas: ["abc"],
         title: "Fix login",
         body: "Summary"
@@ -34,7 +34,12 @@ describe("publishGitHubPullRequest", () => {
       "github_pat_secret"
     );
 
-    expect(pushBranch).toHaveBeenCalledWith("/work/jobs/job_1/repo", "ticket-to-pr/job_1", "audited-head", "github_pat_secret");
+    expect(pushBranch).toHaveBeenCalledWith(
+      "/work/jobs/job_1/repo",
+      "ticket-to-pr/job_1",
+      "abcdefabcdefabcdefabcdefabcdefabcdefabcd",
+      "github_pat_secret"
+    );
     expect(octokit.rest.pulls.create).toHaveBeenCalledWith({
       owner: "acme",
       repo: "web",

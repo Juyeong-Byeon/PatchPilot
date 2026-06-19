@@ -1,5 +1,5 @@
-import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, readFile } from "node:fs/promises";
+import { isAbsolute, join, resolve, sep } from "node:path";
 import { createArtifactId, createPrefixedId, createRunId, deriveOutcome, parseAgentResult } from "@ticket-to-pr/core";
 import type { AgentResult, InternalPhase, Priority, UserOutcome } from "@ticket-to-pr/core";
 import type { AgentJobPayload } from "@ticket-to-pr/queue";
@@ -127,7 +127,7 @@ export async function processAgentJob(payload: AgentJobPayload, options: Process
   const attempt = payload.attempt ?? 1;
   const artifactId = options.ids?.artifactId ?? (() => createArtifactId());
   const pullRequestId = options.ids?.pullRequestId ?? (() => createPrefixedId("pr"));
-  const workBranch = `ticket-to-pr/${job.jobId}`;
+  const workBranch = createAttemptWorkBranch(job.jobId, attempt);
   const workspacePath = join(options.workspaceRoot ?? "/tmp/ticket-to-pr-worker", job.jobId, runId);
   await mkdir(workspacePath, { recursive: true });
 
@@ -235,7 +235,7 @@ export async function processAgentJob(payload: AgentJobPayload, options: Process
     }
 
     await options.repos.transitionJob(job.jobId, "Publishing", deriveOutcome("Publishing"));
-    const published = await options.publisher(createPublishInput(job, run, result));
+    const published = await options.publisher(await createPublishInput(job, run, result));
     await options.repos.savePullRequest({
       id: pullRequestId(),
       jobId: job.jobId,
@@ -265,7 +265,7 @@ async function isCancelRequested(repos: Pick<WorkerRepositories, "getJobForWorke
   return latest?.phase === "CancelRequested" || latest?.phase === "Cancelling";
 }
 
-function createPublishInput(job: WorkerJobRecord, run: WorkerRunRecord, result: AgentResult): PublishInput {
+async function createPublishInput(job: WorkerJobRecord, run: WorkerRunRecord, result: AgentResult): Promise<PublishInput> {
   if (
     result.status !== "completed" ||
     !result.baseSha ||
@@ -276,6 +276,8 @@ function createPublishInput(job: WorkerJobRecord, run: WorkerRunRecord, result: 
   ) {
     throw new Error("Completed AgentResult is missing publish fields");
   }
+
+  const body = await readPullRequestDraftBody(run.workspacePath, result.pullRequestDraft.bodyPath);
 
   return {
     jobId: job.jobId,
@@ -289,14 +291,27 @@ function createPublishInput(job: WorkerJobRecord, run: WorkerRunRecord, result: 
     pushSha: result.pushSha,
     commitShas: result.commits.map((commit) => commit.sha),
     title: result.pullRequestDraft.title,
-    body: createPullRequestBody(result)
+    body
   };
 }
 
-function createPullRequestBody(result: AgentResult): string {
-  const testLines = result.tests.map((test) => `- ${test.status}: ${test.command} - ${test.summary}`);
-  const fileLines = result.changedFiles.map((file) => `- ${file}`);
-  const review = result.review?.summary ?? "No review summary provided.";
+export function createAttemptWorkBranch(jobId: string, attempt: number): string {
+  return attempt > 1 ? `ticket-to-pr/${jobId}-attempt-${attempt}` : `ticket-to-pr/${jobId}`;
+}
 
-  return [`## Summary`, review, ``, `## Changed Files`, ...fileLines, ``, `## Tests`, ...testLines].join("\n");
+async function readPullRequestDraftBody(workspacePath: string, bodyPath: string): Promise<string> {
+  const workspaceRoot = resolve(workspacePath);
+  const resolvedBodyPath = isAbsolute(bodyPath) ? resolve(bodyPath) : resolve(workspaceRoot, bodyPath);
+  if (resolvedBodyPath !== workspaceRoot && !resolvedBodyPath.startsWith(`${workspaceRoot}${sep}`)) {
+    throw new Error("Pull request body path must stay inside the job workspace");
+  }
+
+  try {
+    return await readFile(resolvedBodyPath, "utf8");
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
+      throw new Error(`Missing pull request body artifact: ${bodyPath}`);
+    }
+    throw error;
+  }
 }

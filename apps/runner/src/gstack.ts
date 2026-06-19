@@ -4,7 +4,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { createSecretRedactor } from "@ticket-to-pr/core";
 
-export function runGstack(repoDir: string, logPath: string, timeoutMs: number): Promise<void> {
+export function runGstack(repoDir: string, logPath: string, timeoutMs: number, killGraceMs = 2000): Promise<void> {
   const command = process.env.GSTACK_COMMAND?.trim() || "gstack";
   const args = parseArgs(process.env.GSTACK_ARGS ?? "ship --no-push");
 
@@ -13,11 +13,12 @@ export function runGstack(repoDir: string, logPath: string, timeoutMs: number): 
     let timedOut = false;
     let child: ReturnType<typeof spawn> | undefined;
     let timer: NodeJS.Timeout | undefined;
+    let killTimer: NodeJS.Timeout | undefined;
 
     mkdir(path.dirname(logPath), { recursive: true })
       .then(() => {
         const logStream = createWriteStream(logPath, { flags: "a" });
-        child = spawn(command, args, { cwd: repoDir, stdio: ["ignore", "pipe", "pipe"] });
+        child = spawn(command, args, { cwd: repoDir, detached: true, stdio: ["ignore", "pipe", "pipe"] });
         if (child.stdout === null || child.stderr === null) {
           throw new Error("gstack process streams were not available");
         }
@@ -26,7 +27,10 @@ export function runGstack(repoDir: string, logPath: string, timeoutMs: number): 
 
         timer = setTimeout(() => {
           timedOut = true;
-          child?.kill("SIGTERM");
+          terminateProcessGroup(child, "SIGTERM");
+          killTimer = setTimeout(() => {
+            terminateProcessGroup(child, "SIGKILL");
+          }, killGraceMs);
         }, timeoutMs);
 
         child.stdout.on("data", (chunk: Buffer) => {
@@ -40,6 +44,9 @@ export function runGstack(repoDir: string, logPath: string, timeoutMs: number): 
           if (timer !== undefined) {
             clearTimeout(timer);
           }
+          if (killTimer !== undefined) {
+            clearTimeout(killTimer);
+          }
           logStream.end();
           if (!settled) {
             settled = true;
@@ -50,6 +57,9 @@ export function runGstack(repoDir: string, logPath: string, timeoutMs: number): 
         child.on("close", (code, signal) => {
           if (timer !== undefined) {
             clearTimeout(timer);
+          }
+          if (killTimer !== undefined) {
+            clearTimeout(killTimer);
           }
 
           logStream.write(stdoutRedactor("", true));
@@ -76,6 +86,15 @@ export function runGstack(repoDir: string, logPath: string, timeoutMs: number): 
       })
       .catch(reject);
   });
+}
+
+function terminateProcessGroup(child: ReturnType<typeof spawn> | undefined, signal: NodeJS.Signals): void {
+  if (!child?.pid) return;
+  try {
+    process.kill(-child.pid, signal);
+  } catch {
+    child.kill(signal);
+  }
 }
 
 function parseArgs(value: string): string[] {

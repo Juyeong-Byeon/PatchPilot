@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { maskSecrets } from "@ticket-to-pr/core";
 
 export interface GitResult {
   stdout: string;
@@ -7,7 +8,11 @@ export interface GitResult {
 
 export function runGit(args: string[], cwd?: string): Promise<GitResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn("git", args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn("git", args, {
+      cwd,
+      env: process.env.GITHUB_TOKEN ? buildGitAuthEnv(process.env, process.env.GITHUB_TOKEN) : process.env,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
 
@@ -24,7 +29,7 @@ export function runGit(args: string[], cwd?: string): Promise<GitResult> {
       }
 
       const detail = stderr.trim() || stdout.trim() || `signal ${signal ?? "unknown"}`;
-      reject(new Error(`git ${args.join(" ")} failed with exit code ${code ?? "null"}: ${detail}`));
+      reject(new Error(`git ${args.join(" ")} failed with exit code ${code ?? "null"}: ${maskSecrets(detail)}`));
     });
   });
 }
@@ -54,4 +59,14 @@ export async function getChangedFiles(repoDir: string, targetBranch: string): Pr
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
+}
+
+function buildGitAuthEnv(source: NodeJS.ProcessEnv, token: string): NodeJS.ProcessEnv {
+  const encoded = Buffer.from(`x-access-token:${token}`).toString("base64");
+  return {
+    ...source,
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
+    GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${encoded}`
+  };
 }

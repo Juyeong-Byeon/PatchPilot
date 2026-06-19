@@ -8,6 +8,6 @@ describe("App", () => {
   it("renders operations console", () => {
     render(<App />);
 
-    expect(screen.getByText(/Ticket-to-PR Operations/i)).toBeInTheDocument();
+    expect(screen.getByText("티켓-PR 운영")).toBeInTheDocument();
   });
 });

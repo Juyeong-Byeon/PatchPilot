@@ -16,6 +16,10 @@ import {
 } from "./api.js";
 import { JobDetail } from "./components/JobDetail.js";
 import { JobList } from "./components/JobList.js";
+import { Badge } from "./components/ui/badge.js";
+import { Button } from "./components/ui/button.js";
+import { Input } from "./components/ui/input.js";
+import { adminCopy, getInitialLocale, localeNames, storeLocale, type AdminCopy, type Locale } from "./i18n.js";
 
 interface DetailState {
   job: JobRecord | null;
@@ -23,6 +27,14 @@ interface DetailState {
   logs: LogLine[];
   artifacts: Artifact[];
 }
+
+type StatusState =
+  | { kind: "ready" }
+  | { kind: "enterToken" }
+  | { kind: "loadedJobs"; count: number }
+  | { kind: "refreshFailed" }
+  | { kind: "retryQueued"; attempt: number }
+  | { kind: "cancelRequested"; phase: string };
 
 const emptyDetail: DetailState = {
   job: null,
@@ -32,25 +44,41 @@ const emptyDetail: DetailState = {
 };
 
 export default function App() {
+  const [locale, setLocale] = useState<Locale>(() => getInitialLocale());
+  const copy = adminCopy[locale];
   const [token, setToken] = useState(() => getStoredAdminToken());
   const [jobs, setJobs] = useState<JobRecord[]>([]);
   const [selectedJobId, setSelectedJobId] = useState<string>("");
   const [detail, setDetail] = useState<DetailState>(emptyDetail);
   const [isLoadingJobs, setIsLoadingJobs] = useState(false);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
-  const [status, setStatus] = useState<string>(token ? "Ready" : "Enter ADMIN_TOKEN to load jobs.");
+  const [status, setStatus] = useState<StatusState>(() => (token ? { kind: "ready" } : { kind: "enterToken" }));
   const [error, setError] = useState<string>("");
   const [actionState, setActionState] = useState<string>("");
 
   const selectedJob = useMemo(
-    () => jobs.find((job) => job.id === selectedJobId) ?? detail.job,
+    () => detail.job ?? jobs.find((job) => job.id === selectedJobId) ?? null,
     [detail.job, jobs, selectedJobId]
+  );
+  const jobStats = useMemo(
+    () => ({
+      total: jobs.length,
+      running: jobs.filter((job) => ["Queued", "Planning", "Implementing", "PolicyChecking", "Publishing"].includes(String(job.phase))).length,
+      failed: jobs.filter((job) => String(job.phase).startsWith("Failed") || String(job.outcome).startsWith("Failed")).length,
+      completed: jobs.filter((job) => job.phase === "Completed").length
+    }),
+    [jobs]
   );
 
   useEffect(() => {
     if (!token) return;
     void refreshJobs(token);
   }, [token]);
+
+  useEffect(() => {
+    document.documentElement.lang = locale;
+    document.title = copy.documentTitle;
+  }, [copy.documentTitle, locale]);
 
   useEffect(() => {
     if (!selectedJobId || !token) {
@@ -63,7 +91,7 @@ export default function App() {
 
   async function refreshJobs(activeToken = token) {
     if (!activeToken.trim()) {
-      setStatus("Enter ADMIN_TOKEN to load jobs.");
+      setStatus({ kind: "enterToken" });
       return;
     }
 
@@ -73,10 +101,10 @@ export default function App() {
       const nextJobs = await fetchJobs(activeToken);
       setJobs(nextJobs);
       setSelectedJobId((current) => current || nextJobs[0]?.id || "");
-      setStatus(`Loaded ${nextJobs.length} job${nextJobs.length === 1 ? "" : "s"}.`);
+      setStatus({ kind: "loadedJobs", count: nextJobs.length });
     } catch (caught) {
       setError(errorMessage(caught));
-      setStatus("Job refresh failed.");
+      setStatus({ kind: "refreshFailed" });
     } finally {
       setIsLoadingJobs(false);
     }
@@ -114,10 +142,10 @@ export default function App() {
     try {
       if (action === "retry") {
         const retry = await retryJob(selectedJobId, token);
-        setStatus(`Retry queued as attempt ${retry.attempt}.`);
+        setStatus({ kind: "retryQueued", attempt: retry.attempt });
       } else {
         const cancel = await cancelJob(selectedJobId, token);
-        setStatus(`Cancel requested: ${cancel.phase}.`);
+        setStatus({ kind: "cancelRequested", phase: cancel.phase });
       }
       await refreshJobs(token);
       await refreshDetail(selectedJobId, token);
@@ -128,46 +156,87 @@ export default function App() {
     }
   }
 
+  function changeLocale(nextLocale: Locale) {
+    setLocale(nextLocale);
+    storeLocale(nextLocale);
+  }
+
   return (
-    <main className="ops-shell">
-      <header className="ops-header">
-        <div>
-          <p className="eyebrow">Admin Console</p>
-          <h1>Ticket-to-PR Operations</h1>
-        </div>
+    <main className="min-h-screen bg-linen-white px-4 py-5 text-true-black md:px-6">
+      <header className="mx-auto flex max-w-[var(--page-max-width)] flex-col gap-3">
+        <nav className="flex flex-col gap-3 rounded-xl border border-hairline-gray bg-linen-white px-4 py-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-forest-ink text-sm text-linen-white">✓</span>
+            <div className="min-w-0">
+              <p className="text-xs text-charcoal">{copy.appEyebrow}</p>
+              <h1 className="font-display text-[28px] leading-[1.12] text-forest-ink md:text-[36px]">
+                {copy.appTitle}
+              </h1>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 rounded-lg bg-linen p-1">
+            {(["ko", "en"] as Locale[]).map((entry) => (
+              <Button
+                key={entry}
+                type="button"
+                size="sm"
+                variant={locale === entry ? "default" : "ghost"}
+                className="h-8"
+                onClick={() => changeLocale(entry)}
+              >
+                {localeNames[entry]}
+              </Button>
+            ))}
+          </div>
+        </nav>
+
         <form
-          className="token-form"
+          className="grid gap-3 rounded-xl border border-hairline-gray bg-linen px-3 py-3 md:grid-cols-[120px_minmax(240px,1fr)_auto_auto] md:items-center"
           onSubmit={(event) => {
             event.preventDefault();
             saveToken();
           }}
         >
-          <label htmlFor="admin-token">ADMIN_TOKEN</label>
-          <input
+          <label className="text-sm text-charcoal" htmlFor="admin-token">
+            {copy.tokenLabel}
+          </label>
+          <Input
             id="admin-token"
             value={token}
             type="password"
             autoComplete="off"
-            placeholder="Bearer token"
+            placeholder={copy.tokenPlaceholder}
             onChange={(event) => setToken(event.target.value)}
           />
-          <button type="submit">Apply</button>
-          <button type="button" onClick={() => void refreshJobs(token)}>
-            Refresh
-          </button>
+          <Button type="submit">
+            {copy.apply}
+          </Button>
+          <Button type="button" variant="outline" onClick={() => void refreshJobs(token)}>
+            {copy.refresh}
+          </Button>
         </form>
+        <div className="flex flex-col gap-3 rounded-xl border border-hairline-gray bg-linen-white px-4 py-3 md:flex-row md:items-center md:justify-between" aria-live="polite">
+          <div className="flex flex-wrap gap-2">
+            <MetricPill label={copy.totalJobs} value={jobStats.total} />
+            <MetricPill label={copy.runningJobs} value={jobStats.running} />
+            <MetricPill label={copy.failedJobs} value={jobStats.failed} />
+            <MetricPill label={copy.completedJobs} value={jobStats.completed} />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge>{jobs.length}</Badge>
+            <span className="text-sm text-charcoal">{renderStatus(status, copy)}</span>
+            {error ? <strong className="rounded-full bg-forest-ink px-3 py-1 text-xs font-normal text-linen-white">{error}</strong> : null}
+          </div>
+        </div>
       </header>
 
-      <section className="status-strip" aria-live="polite">
-        <span>{status}</span>
-        {error ? <strong>{error}</strong> : null}
-      </section>
-
-      <section className="ops-grid">
+      <section className="mx-auto mt-4 grid max-w-[var(--page-max-width)] items-start gap-4 xl:grid-cols-[minmax(500px,0.9fr)_minmax(0,1.1fr)]">
         <JobList
           jobs={jobs}
           selectedJobId={selectedJobId}
           isLoading={isLoadingJobs}
+          copy={copy}
+          locale={locale}
           onSelectJob={setSelectedJobId}
         />
         <JobDetail
@@ -177,6 +246,8 @@ export default function App() {
           artifacts={detail.artifacts}
           isLoading={isLoadingDetail}
           actionState={actionState}
+          copy={copy}
+          locale={locale}
           onCancel={() => void runAction("cancel")}
           onRetry={() => void runAction("retry")}
         />
@@ -187,4 +258,22 @@ export default function App() {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unknown error";
+}
+
+function renderStatus(status: StatusState, copy: AdminCopy): string {
+  if (status.kind === "ready") return copy.ready;
+  if (status.kind === "enterToken") return copy.enterToken;
+  if (status.kind === "loadedJobs") return copy.loadedJobs(status.count);
+  if (status.kind === "refreshFailed") return copy.refreshFailed;
+  if (status.kind === "retryQueued") return copy.retryQueued(status.attempt);
+  return copy.cancelRequested(status.phase);
+}
+
+function MetricPill({ label, value }: { label: string; value: number }) {
+  return (
+    <span className="inline-flex items-center gap-2 rounded-full bg-linen px-3 py-1 text-xs text-charcoal">
+      {label}
+      <strong className="font-normal text-forest-ink">{value}</strong>
+    </span>
+  );
 }

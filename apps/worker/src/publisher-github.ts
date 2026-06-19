@@ -86,10 +86,11 @@ export async function pushBranchToOrigin(repoDir: string, workBranch: string, pu
 }
 
 function buildGitAuthEnv(source: NodeJS.ProcessEnv, token: string): NodeJS.ProcessEnv {
+  const encoded = Buffer.from(`x-access-token:${token}`).toString("base64");
   return {
     ...source,
     GIT_CONFIG_COUNT: "1",
     GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
-    GIT_CONFIG_VALUE_0: `AUTHORIZATION: bearer ${token}`
+    GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${encoded}`
   };
 }

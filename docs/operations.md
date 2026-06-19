@@ -63,13 +63,17 @@ Use a fine-grained personal access token, not a classic broad token.
 cp .env.example .env
 docker compose build
 docker compose up -d postgres redis
-npm --workspace @ticket-to-pr/db run migrate
+DATABASE_URL=postgres://ticket_to_pr:ticket_to_pr@localhost:5432/ticket_to_pr npm --workspace @ticket-to-pr/db run migrate
 docker compose up -d api worker
 docker compose logs -f api worker
 ```
 
 Open `http://localhost:3000` for the operations console and enter the
 `ADMIN_TOKEN` value from `.env`.
+
+`.env.example` uses Docker service hostnames for processes running inside
+Compose. Use the `localhost` database URL above for migrations launched from the
+host shell.
 
 ## Health Check
 
@@ -90,8 +94,9 @@ executor or pushing to GitHub.
 
 1. Set `EXECUTOR_MODE=mock` and `PUBLISHER_MODE=mock`.
 2. Start Postgres, Redis, API, and worker.
-3. Send a Lark webhook with all required fields, `Status=Progress`, and
-   `Agent Run Requested=true`.
+3. Send a Lark webhook with header
+   `x-lark-webhook-secret: <LARK_WEBHOOK_SECRET>`, all required fields,
+   `Status=Progress`, and `Agent Run Requested=true`.
 4. Confirm the job appears in Admin.
 5. Confirm timeline events, logs, artifacts, and simulated PR metadata appear.
 6. Confirm the successful user-facing outcome is `NeedsReview`.

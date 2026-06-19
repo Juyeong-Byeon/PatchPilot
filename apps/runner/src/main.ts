@@ -30,6 +30,7 @@ export async function runRunner(env: NodeJS.ProcessEnv = process.env): Promise<v
   console.log(`Starting runner job ${config.jobId} run ${config.runId}`);
   await cloneRepository(config.repositoryUrl, paths.repoDir);
   await checkoutBaseAndCreateBranch(paths.repoDir, config.targetBranch, config.workBranch);
+  delete process.env.GITHUB_TOKEN;
 
   const baseSha = await getHeadSha(paths.repoDir);
   console.log(`Checked out ${config.workBranch} from ${config.targetBranch} at ${baseSha}`);

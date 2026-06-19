@@ -1,11 +1,19 @@
 import { useMemo, useState } from "react";
 import type { LogLine } from "../api.js";
+import type { AdminCopy } from "../i18n.js";
+import { Button } from "./ui/button.js";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
+import { Input } from "./ui/input.js";
+import { Select } from "./ui/select.js";
 
 interface LogViewerProps {
   logs: LogLine[];
+  copy: AdminCopy;
+  highlightSource?: string;
+  onClearHighlight?(): void;
 }
 
-export function LogViewer({ logs }: LogViewerProps) {
+export function LogViewer({ logs, copy, highlightSource, onClearHighlight }: LogViewerProps) {
   const [source, setSource] = useState("all");
   const [query, setQuery] = useState("");
   const sources = useMemo(
@@ -16,53 +24,64 @@ export function LogViewer({ logs }: LogViewerProps) {
     const needle = query.trim().toLowerCase();
     return logs.filter((line) => {
       const sourceMatches = source === "all" || line.source === source;
+      const highlightMatches = !highlightSource || line.source === highlightSource;
       const queryMatches = !needle || (line.text ?? "").toLowerCase().includes(needle);
-      return sourceMatches && queryMatches;
+      return sourceMatches && highlightMatches && queryMatches;
     });
-  }, [logs, query, source]);
-  const text = filteredLogs.map(formatLine).join("\n");
+  }, [highlightSource, logs, query, source]);
+  const text = filteredLogs.map((line) => formatLine(line, copy)).join("\n");
 
   return (
-    <section className="panel log-panel">
-      <div className="panel-header">
+    <Card>
+      <CardHeader className="flex-col items-stretch xl:flex-row xl:items-center">
         <div>
-          <h2>Logs</h2>
-          <span>{filteredLogs.length}/{logs.length}</span>
+          <CardTitle>{copy.logs}</CardTitle>
+          <span className="text-xs text-charcoal">{filteredLogs.length}/{logs.length}</span>
         </div>
-        <div className="log-controls">
-          <select aria-label="Filter logs by source" value={source} onChange={(event) => setSource(event.target.value)}>
-            <option value="all">All sources</option>
+        <div className="grid gap-2 md:grid-cols-[150px_minmax(180px,1fr)_auto_auto]">
+          <Select aria-label={copy.filterLogsLabel} value={source} onChange={(event) => setSource(event.target.value)}>
+            <option value="all">{copy.allSources}</option>
             {sources.map((entry) => (
               <option key={entry} value={entry}>
                 {entry}
               </option>
             ))}
-          </select>
-          <input
-            aria-label="Search logs"
+          </Select>
+          <Input
+            aria-label={copy.searchLogsLabel}
             value={query}
-            placeholder="Search logs"
+            placeholder={copy.searchLogsPlaceholder}
             onChange={(event) => setQuery(event.target.value)}
           />
-          <button type="button" onClick={() => void navigator.clipboard?.writeText(text)}>
-            Copy
-          </button>
-          <button type="button" onClick={() => downloadText(text)}>
-            Download
-          </button>
+          <Button type="button" variant="outline" onClick={() => void navigator.clipboard?.writeText(text)}>
+            {copy.copy}
+          </Button>
+          <Button type="button" onClick={() => downloadText(text)}>
+            {copy.download}
+          </Button>
         </div>
-      </div>
-      <pre className="logs">{text || "No logs recorded."}</pre>
-    </section>
+      </CardHeader>
+      {highlightSource ? (
+        <div className="flex items-center justify-between gap-3 border-b border-hairline-gray bg-linen px-5 py-2 text-xs text-charcoal">
+          <span>{copy.correlatedLogs}: {highlightSource}</span>
+          <Button type="button" variant="ghost" size="sm" onClick={onClearHighlight}>
+            {copy.clear}
+          </Button>
+        </div>
+      ) : null}
+      <CardContent className="p-0">
+        <pre className="m-0 max-h-[320px] min-h-[180px] overflow-auto border-t border-hairline-gray bg-linen p-4 text-xs leading-normal whitespace-pre-wrap text-true-black">{text || copy.noLogs}</pre>
+      </CardContent>
+    </Card>
   );
 }
 
-function formatLine(line: LogLine): string {
+function formatLine(line: LogLine, copy: AdminCopy): string {
   const time = line.created_at ?? "-";
-  const source = line.source ?? "system";
-  const stream = line.stream ?? "log";
+  const source = line.source ?? copy.sourceSystem;
+  const stream = line.stream ?? copy.logDefaultStream;
   const sequence = line.sequence ?? "-";
-  const redacted = line.redaction_applied ? " redacted" : "";
+  const redacted = line.redaction_applied ? ` ${copy.redacted}` : "";
   return `[${time}] [${source}/${stream} #${sequence}${redacted}] ${line.text ?? ""}`;
 }
 

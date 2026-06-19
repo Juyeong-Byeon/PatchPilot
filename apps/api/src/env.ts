@@ -3,6 +3,7 @@ export interface ApiEnv {
   redisUrl: string;
   port: number;
   adminToken: string;
+  larkWebhookSecret: string;
 }
 
 export function readApiEnv(env: NodeJS.ProcessEnv = process.env): ApiEnv {
@@ -10,7 +11,8 @@ export function readApiEnv(env: NodeJS.ProcessEnv = process.env): ApiEnv {
     databaseUrl: requiredEnv(env, "DATABASE_URL"),
     redisUrl: requiredEnv(env, "REDIS_URL"),
     port: Number.parseInt(env.PORT ?? "3000", 10),
-    adminToken: requiredEnv(env, "ADMIN_TOKEN")
+    adminToken: requiredEnv(env, "ADMIN_TOKEN"),
+    larkWebhookSecret: requiredEnv(env, "LARK_WEBHOOK_SECRET")
   };
 }
 

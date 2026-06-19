@@ -1,14 +1,20 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import type { JobRecord } from "../api.js";
+import { translateState, type AdminCopy, type Locale } from "../i18n.js";
+import { Badge } from "./ui/badge.js";
+import { Card, CardHeader, CardTitle } from "./ui/card.js";
+import { Input } from "./ui/input.js";
 
 interface JobListProps {
   jobs: JobRecord[];
   selectedJobId: string;
   isLoading: boolean;
+  copy: AdminCopy;
+  locale: Locale;
   onSelectJob(jobId: string): void;
 }
 
-export function JobList({ jobs, selectedJobId, isLoading, onSelectJob }: JobListProps) {
+export function JobList({ jobs, selectedJobId, isLoading, copy, locale, onSelectJob }: JobListProps) {
   const [query, setQuery] = useState("");
   const filteredJobs = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -23,72 +29,89 @@ export function JobList({ jobs, selectedJobId, isLoading, onSelectJob }: JobList
   }, [jobs, query]);
 
   return (
-    <section className="panel job-list" aria-label="Jobs">
-      <div className="panel-header">
+    <Card aria-label={copy.jobs}>
+      <CardHeader className="flex-col items-stretch md:flex-row md:items-center">
         <div>
-          <h2>Jobs</h2>
-          <span>{isLoading ? "Loading" : `${filteredJobs.length}/${jobs.length}`}</span>
+          <CardTitle>{copy.jobs}</CardTitle>
+          <span className="text-xs text-charcoal">{isLoading ? copy.loading : `${filteredJobs.length}/${jobs.length}`}</span>
         </div>
-        <input
-          aria-label="Filter jobs"
+        <Input
+          className="w-full md:w-[260px]"
+          aria-label={copy.filterJobsLabel}
           value={query}
-          placeholder="Filter job, repo, branch"
+          placeholder={copy.filterJobsPlaceholder}
           onChange={(event) => setQuery(event.target.value)}
         />
-      </div>
+      </CardHeader>
 
-      <div className="table-wrap">
-        <table>
+      <div className="max-h-[calc(100vh-240px)] overflow-auto">
+        <table className="w-full table-fixed border-collapse text-left text-xs">
           <thead>
             <tr>
-              <th>Job</th>
-              <th>Outcome</th>
-              <th>Phase</th>
-              <th>Repo</th>
-              <th>Branch</th>
-              <th>Runtime</th>
-              <th>Last Event</th>
-              <th>PR</th>
+              <HeaderCell>{copy.tableOutcome}</HeaderCell>
+              <HeaderCell>{copy.tableJob}</HeaderCell>
+              <HeaderCell>{copy.tableBranch}</HeaderCell>
+              <HeaderCell>{copy.tableRuntime}</HeaderCell>
+              <HeaderCell>{copy.tableLastEvent}</HeaderCell>
+              <HeaderCell>{copy.tablePr}</HeaderCell>
             </tr>
           </thead>
           <tbody>
             {filteredJobs.map((job) => {
               const selected = job.id === selectedJobId;
               return (
-                <tr key={job.id} className={selected ? "selected-row" : undefined}>
-                  <td>
-                    <button className="link-button mono" type="button" onClick={() => onSelectJob(job.id)}>
+                <tr key={job.id} className={selected ? "border-l-4 border-forest-ink bg-linen text-true-black" : "border-l-4 border-transparent bg-linen-white text-true-black hover:bg-linen"}>
+                  <BodyCell>
+                    <div className="grid gap-1">
+                      <StatusPill value={job.outcome ?? copy.unknown} label={translateState(job.outcome, locale)} />
+                      <span className="text-xs text-charcoal">{translateState(job.phase, locale)}</span>
+                    </div>
+                  </BodyCell>
+                  <BodyCell>
+                    <button className="font-mono text-xs text-forest-ink underline decoration-mist-blue underline-offset-4 hover:text-true-black" type="button" onClick={() => onSelectJob(job.id)}>
                       {job.id}
                     </button>
-                  </td>
-                  <td>
-                    <StatusPill value={job.outcome ?? "Unknown"} />
-                  </td>
-                  <td>{job.phase ?? "-"}</td>
-                  <td>{job.repository ?? "-"}</td>
-                  <td>{getValue(job, "target_branch", "targetBranch") ?? "-"}</td>
-                  <td>{runtime(job)}</td>
-                  <td>{job.last_event ?? getValue(job, "lastEvent") ?? "-"}</td>
-                  <td>{job.pr_url ? <a href={job.pr_url}>Open</a> : "-"}</td>
+                    <p className="mt-1 truncate text-xs text-charcoal">{job.repository ?? copy.empty}</p>
+                  </BodyCell>
+                  <BodyCell>{getValue(job, "target_branch", "targetBranch") ?? copy.empty}</BodyCell>
+                  <BodyCell>{runtime(job, copy)}</BodyCell>
+                  <BodyCell>{job.last_event ?? getValue(job, "lastEvent") ?? copy.empty}</BodyCell>
+                  <BodyCell>
+                    {job.pr_url ? (
+                      <a href={job.pr_url}>
+                        {copy.openPr}
+                      </a>
+                    ) : (
+                      copy.empty
+                    )}
+                  </BodyCell>
                 </tr>
               );
             })}
             {filteredJobs.length === 0 ? (
               <tr>
-                <td colSpan={8} className="empty-cell">
-                  No jobs match the current filter.
-                </td>
+                <td colSpan={6} className="px-5 py-8 text-center text-sm text-charcoal">{copy.noJobMatches}</td>
               </tr>
             ) : null}
           </tbody>
         </table>
       </div>
-    </section>
+    </Card>
   );
 }
 
-function StatusPill({ value }: { value: string }) {
-  return <span className={`pill ${value.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}>{value}</span>;
+function HeaderCell({ children }: { children: ReactNode }) {
+  return <th className="sticky top-0 z-10 border-b border-hairline-gray bg-linen-white px-3 py-2 text-[11px] font-normal text-charcoal">{children}</th>;
+}
+
+function BodyCell({ children }: { children: ReactNode }) {
+  return <td className="border-b border-hairline-gray px-3 py-2 align-top [overflow-wrap:anywhere]">{children}</td>;
+}
+
+function StatusPill({ value, label }: { value: string; label: string }) {
+  const normalized = value.toLowerCase();
+  const variant = normalized.includes("failed") || normalized.includes("cancel") ? "dark" : normalized.includes("review") || normalized.includes("queued") ? "warning" : "default";
+  return <Badge variant={variant}>{label}</Badge>;
 }
 
 function getValue(job: JobRecord, ...keys: string[]): string | undefined {
@@ -99,10 +122,10 @@ function getValue(job: JobRecord, ...keys: string[]): string | undefined {
   return undefined;
 }
 
-function runtime(job: JobRecord): string {
+function runtime(job: JobRecord, copy: AdminCopy): string {
   const started = parseTime(getValue(job, "started_at", "created_at"));
   const finished = parseTime(getValue(job, "finished_at", "updated_at"));
-  if (!started || !finished) return "-";
+  if (!started || !finished) return copy.empty;
   const seconds = Math.max(0, Math.round((finished - started) / 1000));
   if (seconds < 60) return `${seconds}s`;
   return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;

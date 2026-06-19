@@ -6,6 +6,7 @@ import { createPool, Repositories } from "@ticket-to-pr/db";
 import { createAgentQueue } from "@ticket-to-pr/queue";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
+import { assertLarkWebhookSecret } from "./auth.js";
 import { readApiEnv } from "./env.js";
 import { handleLarkWebhook, type AgentQueue, type LarkWebhookInput } from "./lark-webhook.js";
 import { registerAdminRoutes, type AdminRepositories } from "./routes-admin.js";
@@ -15,17 +16,24 @@ export interface ApiServerDependencies {
   repos: Pick<Repositories, "createJobFromTicket" | "appendEvent"> & Partial<AdminRepositories>;
   queue: AgentQueue;
   adminToken?: string;
+  larkWebhookSecret?: string;
+  allowUnauthenticatedLarkWebhook?: boolean;
   adminStaticRoot?: string;
 }
 
 export async function buildServer(deps: ApiServerDependencies): Promise<FastifyInstance> {
   const app = Fastify({ logger: true });
+  const larkWebhookSecret = deps.larkWebhookSecret?.trim();
+  if (!larkWebhookSecret && deps.allowUnauthenticatedLarkWebhook !== true) {
+    throw new Error("Lark webhook secret is required");
+  }
 
   await registerHealthRoutes(app);
   if (deps.adminToken && hasAdminRepositories(deps.repos)) {
     await registerAdminRoutes(app, deps.repos, deps.queue, deps.adminToken);
   }
   app.post<{ Body: LarkWebhookInput }>("/webhooks/lark", async (request, reply) => {
+    if (larkWebhookSecret) assertLarkWebhookSecret(request, larkWebhookSecret);
     const result = await handleLarkWebhook(request.body, deps.repos, deps.queue);
     const statusCode = result.action === "enqueued" ? 202 : 200;
     return reply.code(statusCode).send(result);
@@ -48,6 +56,7 @@ export async function startServer(): Promise<void> {
     repos: new Repositories(pool),
     queue,
     adminToken: env.adminToken,
+    larkWebhookSecret: env.larkWebhookSecret,
     adminStaticRoot: join(process.cwd(), "apps/admin/dist")
   });
 
@@ -82,6 +91,8 @@ function hasAdminRepositories(
     typeof repos.getJobArtifacts === "function" &&
     typeof repos.requestCancel === "function" &&
     typeof repos.getRetryPreflight === "function" &&
-    typeof repos.createRetryAttempt === "function"
+    typeof repos.createRetryAttempt === "function" &&
+    typeof repos.transitionJob === "function" &&
+    typeof repos.appendEvent === "function"
   );
 }

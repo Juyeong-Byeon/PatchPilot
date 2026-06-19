@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -6,6 +6,7 @@ import {
   applyTrustedGitEvidence,
   buildGstackDockerCommand,
   maskExecutorOutput,
+  runCommand,
   writeRunnerInputArtifacts
 } from "../src/executor-gstack.js";
 
@@ -88,7 +89,7 @@ describe("buildGstackDockerCommand", () => {
         targetBranch: "main",
         baseSha: "trusted-base",
         headSha: "trusted-head",
-        pushSha: "trusted-push",
+        pushSha: "abcdefabcdefabcdefabcdefabcdefabcdefabcd",
         changedFiles: ["infra/prod.tf"],
         commits: [{ sha: "trusted-commit", message: "Trusted commit" }]
       }
@@ -97,7 +98,7 @@ describe("buildGstackDockerCommand", () => {
     expect(result).toMatchObject({
       baseSha: "trusted-base",
       headSha: "trusted-head",
-      pushSha: "trusted-push",
+      pushSha: "abcdefabcdefabcdefabcdefabcdefabcdefabcd",
       changedFiles: ["infra/prod.tf"],
       commits: [{ sha: "trusted-commit", message: "Trusted commit" }]
     });
@@ -109,6 +110,49 @@ describe("buildGstackDockerCommand", () => {
     expect(masked.text).toContain("GITHUB_TOKEN=[REDACTED_GITHUB_TOKEN]");
     expect(masked.text).toContain("[REDACTED_GITHUB_TOKEN]");
     expect(masked.redactionApplied).toBe(true);
+  });
+
+  it("terminates external runner commands after the worker timeout", async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), "ticket-to-pr-run-command-timeout-"));
+    tempDirs.push(workspacePath);
+    const command = join(workspacePath, "stubborn-command.sh");
+    await writeFile(command, "#!/bin/sh\ntrap '' TERM\nsleep 2\n");
+    await chmod(command, 0o755);
+
+    const startedAt = Date.now();
+
+    await expect(
+      runCommand(
+        { file: command, args: [] },
+        {
+          job: {
+            jobId: "job_1",
+            ticketSnapshotId: "ts_1",
+            larkRecordId: "rec_1",
+            triggerVersion: "v1",
+            title: "Fix login",
+            description: "Login fails",
+            definitionOfDone: "Users can log in",
+            repository: "acme/web",
+            targetBranch: "main",
+            priority: "Normal",
+            phase: "Queued",
+            outcome: "Queued",
+            rawFields: {}
+          },
+          run: {
+            runId: "run_1",
+            attempt: 1,
+            workspacePath,
+            workBranch: "ticket-to-pr/job_1"
+          }
+        },
+        50,
+        50
+      )
+    ).rejects.toThrow("gstack runner timed out");
+
+    expect(Date.now() - startedAt).toBeLessThan(1200);
   });
 
   it("writes ticket, context, and policy artifacts for the runner", async () => {

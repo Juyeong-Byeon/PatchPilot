@@ -21,6 +21,7 @@ export interface GstackCommandInput {
     workBranch: string;
   };
   timeoutSeconds?: number;
+  githubToken?: string;
 }
 
 export interface CommandSpec {
@@ -32,6 +33,7 @@ export interface GstackExecutorOptions {
   runnerImage: string;
   resultPath?: string;
   timeoutSeconds?: number;
+  githubToken?: string;
   policy?: {
     repositoryAllowlist: string[];
     protectedPathDenylist: string[];
@@ -48,6 +50,7 @@ export interface TrustedGitEvidence {
 }
 
 export function buildGstackDockerCommand(input: GstackCommandInput): CommandSpec {
+  const authArgs = input.githubToken ? ["-e", `GITHUB_TOKEN=${input.githubToken}`] : [];
   return {
     file: "docker",
     args: [
@@ -75,6 +78,7 @@ export function buildGstackDockerCommand(input: GstackCommandInput): CommandSpec
       `WORK_BRANCH=${input.run.workBranch}`,
       "-e",
       `TIMEOUT_SECONDS=${input.timeoutSeconds ?? 3600}`,
+      ...authArgs,
       input.runnerImage
     ]
   };
@@ -82,13 +86,14 @@ export function buildGstackDockerCommand(input: GstackCommandInput): CommandSpec
 
 export async function executeGstack(input: ExecutorInput, options: GstackExecutorOptions): Promise<AgentResult> {
   const repositoryUrl = toRepositoryUrl(input.job.repository);
-  const trustedBaseSha = await resolveRemoteTargetSha(repositoryUrl, input.job.targetBranch);
+  const trustedBaseSha = await resolveRemoteTargetSha(repositoryUrl, input.job.targetBranch, options.githubToken);
   const command = buildGstackDockerCommand({
     runnerImage: options.runnerImage,
     workspacePath: input.run.workspacePath,
     job: input.job,
     run: input.run,
-    timeoutSeconds: options.timeoutSeconds
+    timeoutSeconds: options.timeoutSeconds,
+    githubToken: options.githubToken
   });
 
   await writeRunnerInputArtifacts({
@@ -97,7 +102,7 @@ export async function executeGstack(input: ExecutorInput, options: GstackExecuto
     run: input.run,
     policy: options.policy ?? { repositoryAllowlist: [], protectedPathDenylist: [] }
   });
-  await runCommand(command, input);
+  await runCommand(command, input, ((options.timeoutSeconds ?? 3600) + 30) * 1000);
 
   const resultPath = options.resultPath ?? getWorkspacePaths(input.run.workspacePath).resultJson;
   const result = parseAgentResult(JSON.parse(await readFile(resultPath, "utf8")) as unknown);
@@ -124,8 +129,8 @@ export function applyTrustedGitEvidence(result: AgentResult, evidence: TrustedGi
   });
 }
 
-export async function resolveRemoteTargetSha(repositoryUrl: string, targetBranch: string): Promise<string> {
-  const stdout = (await runGit(["ls-remote", "--heads", repositoryUrl, targetBranch])).stdout;
+export async function resolveRemoteTargetSha(repositoryUrl: string, targetBranch: string, githubToken?: string): Promise<string> {
+  const stdout = (await runGit(["ls-remote", "--heads", repositoryUrl, targetBranch], undefined, githubToken)).stdout;
   const [sha] = stdout.trim().split(/\s+/);
   if (!sha) throw new Error(`Unable to resolve remote target branch ${targetBranch}`);
   return sha;
@@ -234,11 +239,15 @@ function toRepositoryUrl(repository: string): string {
   return `https://github.com/${repository}.git`;
 }
 
-async function runCommand(command: CommandSpec, input: ExecutorInput): Promise<void> {
+export async function runCommand(command: CommandSpec, input: ExecutorInput, timeoutMs = 3_630_000, killGraceMs = 2000): Promise<void> {
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(command.file, command.args, { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(command.file, command.args, { detached: true, stdio: ["ignore", "pipe", "pipe"] });
     let stdoutSequence = 0;
     let stderrSequence = 0;
+    let timedOut = false;
+    let settled = false;
+    let timeout: NodeJS.Timeout | undefined;
+    let killTimeout: NodeJS.Timeout | undefined;
     const pendingLogs: Promise<void>[] = [];
     const stdoutRedactor = createSecretRedactor();
     const stderrRedactor = createSecretRedactor();
@@ -246,6 +255,21 @@ async function runCommand(command: CommandSpec, input: ExecutorInput): Promise<v
     const appendLog = (log: Parameters<NonNullable<ExecutorInput["appendLog"]>>[0]) => {
       if (input.appendLog) pendingLogs.push(input.appendLog(log));
     };
+
+    const settleReject = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      clearRunCommandTimers(timeout, killTimeout);
+      reject(error);
+    };
+
+    timeout = setTimeout(() => {
+      timedOut = true;
+      terminateProcessGroup(child, "SIGTERM");
+      killTimeout = setTimeout(() => {
+        terminateProcessGroup(child, "SIGKILL");
+      }, killGraceMs);
+    }, timeoutMs);
 
     child.stdout.on("data", (chunk: Buffer) => {
       const masked = maskExecutorOutput(stdoutRedactor(chunk.toString("utf8")));
@@ -255,8 +279,9 @@ async function runCommand(command: CommandSpec, input: ExecutorInput): Promise<v
       const masked = maskExecutorOutput(stderrRedactor(chunk.toString("utf8")));
       appendLog({ source: "gstack", stream: "stderr", sequence: stderrSequence++, ...masked });
     });
-    child.on("error", reject);
+    child.on("error", (error) => settleReject(error));
     child.on("close", async (code) => {
+      clearRunCommandTimers(timeout, killTimeout);
       const stdoutTail = stdoutRedactor("", true);
       if (stdoutTail) {
         const masked = maskExecutorOutput(stdoutTail);
@@ -270,21 +295,45 @@ async function runCommand(command: CommandSpec, input: ExecutorInput): Promise<v
       const logResults = await Promise.allSettled(pendingLogs);
       const rejectedLog = logResults.find((result) => result.status === "rejected");
       if (rejectedLog?.status === "rejected") {
-        reject(rejectedLog.reason instanceof Error ? rejectedLog.reason : new Error(String(rejectedLog.reason)));
+        settleReject(rejectedLog.reason instanceof Error ? rejectedLog.reason : new Error(String(rejectedLog.reason)));
+        return;
+      }
+      if (timedOut) {
+        settleReject(new Error(`gstack runner timed out after ${timeoutMs}ms`));
         return;
       }
       if (code === 0) {
+        if (settled) return;
+        settled = true;
         resolve();
         return;
       }
-      reject(new Error(`gstack runner exited with code ${code ?? "unknown"}`));
+      settleReject(new Error(`gstack runner exited with code ${code ?? "unknown"}`));
     });
   });
 }
 
-function runGit(args: string[], cwd?: string): Promise<{ stdout: string; stderr: string }> {
+function clearRunCommandTimers(timeout: NodeJS.Timeout | undefined, killTimeout: NodeJS.Timeout | undefined): void {
+  if (timeout !== undefined) clearTimeout(timeout);
+  if (killTimeout !== undefined) clearTimeout(killTimeout);
+}
+
+function terminateProcessGroup(child: ReturnType<typeof spawn>, signal: NodeJS.Signals): void {
+  if (!child.pid) return;
+  try {
+    process.kill(-child.pid, signal);
+  } catch {
+    child.kill(signal);
+  }
+}
+
+function runGit(args: string[], cwd?: string, githubToken?: string): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn("git", args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn("git", args, {
+      cwd,
+      env: githubToken ? buildGitAuthEnv(process.env, githubToken) : process.env,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
 
@@ -301,4 +350,14 @@ function runGit(args: string[], cwd?: string): Promise<{ stdout: string; stderr:
       reject(new Error(`git ${args.join(" ")} failed with code ${code ?? "unknown"}: ${maskSecrets(stderr || stdout)}`));
     });
   });
+}
+
+function buildGitAuthEnv(source: NodeJS.ProcessEnv, token: string): NodeJS.ProcessEnv {
+  const encoded = Buffer.from(`x-access-token:${token}`).toString("base64");
+  return {
+    ...source,
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
+    GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${encoded}`
+  };
 }

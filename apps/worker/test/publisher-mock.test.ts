@@ -11,7 +11,7 @@ describe("publishMockPullRequest", () => {
       workBranch: "ticket-to-pr/job_1",
       baseSha: "base",
       headSha: "head",
-      pushSha: "head",
+      pushSha: "0123456789abcdef0123456789abcdef01234567",
       commitShas: ["abc"],
       title: "Fix login",
       body: "Summary"
@@ -23,7 +23,7 @@ describe("publishMockPullRequest", () => {
       workBranch: "ticket-to-pr/job_1",
       baseSha: "base",
       headSha: "head",
-      pushSha: "head",
+      pushSha: "0123456789abcdef0123456789abcdef01234567",
       commitShas: ["abc"],
       prUrl: "https://github.local/acme/web/pull/mock-job_1",
       prNumber: 1,

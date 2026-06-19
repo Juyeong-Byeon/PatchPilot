@@ -1,6 +1,11 @@
+import { useState } from "react";
 import type { Artifact, JobRecord, LogLine, RunEvent } from "../api.js";
+import { translateState, type AdminCopy, type Locale } from "../i18n.js";
 import { LogViewer } from "./LogViewer.js";
-import { RunTimeline } from "./RunTimeline.js";
+import { RunTimeline, type SpanSelection } from "./RunTimeline.js";
+import { Badge } from "./ui/badge.js";
+import { Button } from "./ui/button.js";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
 
 interface JobDetailProps {
   job: JobRecord | null;
@@ -9,6 +14,8 @@ interface JobDetailProps {
   artifacts: Artifact[];
   isLoading: boolean;
   actionState: string;
+  copy: AdminCopy;
+  locale: Locale;
   onRetry(): void;
   onCancel(): void;
 }
@@ -20,15 +27,23 @@ export function JobDetail({
   artifacts,
   isLoading,
   actionState,
+  copy,
+  locale,
   onRetry,
   onCancel
 }: JobDetailProps) {
+  const [selectedSpan, setSelectedSpan] = useState<SpanSelection | null>(null);
+
   if (!job) {
     return (
-      <section className="panel detail-panel empty-detail">
-        <h2>Job Detail</h2>
-        <p>{isLoading ? "Loading job detail..." : "Select a job to inspect runtime state."}</p>
-      </section>
+      <Card className="min-h-[180px]">
+        <CardHeader>
+          <CardTitle>{copy.jobDetail}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-charcoal">{isLoading ? copy.loadingDetail : copy.selectJob}</p>
+        </CardContent>
+      </Card>
     );
   }
   const terminal = isTerminalPhase(job.phase);
@@ -36,77 +51,96 @@ export function JobDetail({
   const cancelDisabled = Boolean(actionState) || terminal;
 
   return (
-    <section className="detail-stack">
-      <section className="panel detail-panel">
-        <div className="detail-header">
+    <section className="grid gap-4">
+      <Card className="bg-linen-white">
+        <CardContent className="grid gap-4">
+          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+            <div className="min-w-0">
+              <p className="font-mono text-xs text-graphite">{job.id}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <Badge>{translateState(job.phase, locale)}</Badge>
+                <Badge variant={String(job.outcome).includes("Failed") ? "dark" : "outline"}>{translateState(job.outcome, locale)}</Badge>
+              </div>
+              <h2 className="mt-3 font-display text-[32px] leading-[1.2] text-forest-ink">
+                {stringValue(job.repository, copy)}
+              </h2>
+              <p className="mt-1 text-sm text-charcoal">
+                {stringValue(job.target_branch ?? job.targetBranch, copy)} · {stringValue(job.work_branch ?? job.workBranch, copy)}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" disabled={retryDisabled} onClick={onRetry}>
+                {actionState === "retry" ? copy.retrying : copy.retry}
+              </Button>
+              <Button type="button" variant="outline" disabled={cancelDisabled} onClick={onCancel}>
+                {actionState === "cancel" ? copy.cancelling : copy.cancel}
+              </Button>
+            </div>
+          </div>
+
+          {(job.failure_reason || job.next_action) ? (
+            <section className="rounded-xl border border-forest-ink bg-linen px-4 py-3">
+              <p className="text-xs text-charcoal">{copy.failureSummary}</p>
+              {job.failure_reason ? <p className="mt-2 text-sm text-forest-ink">{job.failure_reason}</p> : null}
+              {job.next_action ? (
+                <p className="mt-2 text-sm text-true-black">
+                  <span className="text-charcoal">{copy.nextAction}: </span>
+                  {job.next_action}
+                </p>
+              ) : null}
+            </section>
+          ) : null}
+
+          <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <Fact label={copy.priority} value={stringValue(job.priority, copy)} />
+            <Fact label={copy.attempt} value={stringValue(job.attempt, copy)} />
+            <Fact label={copy.updated} value={formatDate(job.updated_at, locale, copy)} />
+            <Fact label={copy.failure} value={stringValue(job.failure_category, copy)} tone="danger" />
+          </dl>
+        </CardContent>
+      </Card>
+
+      <RunTimeline events={events} copy={copy} locale={locale} selectedSpan={selectedSpan} onSelectSpan={setSelectedSpan} />
+      <LogViewer logs={logs} copy={copy} highlightSource={selectedSpan?.source} onClearHighlight={() => setSelectedSpan(null)} />
+
+      <Card>
+        <CardHeader>
           <div>
-            <p className="mono muted">{job.id}</p>
-            <h2>{job.outcome ?? "Unknown"} / {job.phase ?? "Unknown"}</h2>
+            <CardTitle>{copy.artifacts}</CardTitle>
+            <span className="text-xs text-charcoal">{artifacts.length}</span>
           </div>
-          <div className="detail-actions">
-            <button type="button" disabled={retryDisabled} onClick={onRetry}>
-              {actionState === "retry" ? "Retrying" : "Retry"}
-            </button>
-            <button type="button" disabled={cancelDisabled} onClick={onCancel}>
-              {actionState === "cancel" ? "Cancelling" : "Cancel"}
-            </button>
-          </div>
-        </div>
-
-        <dl className="facts-grid">
-          <Fact label="Repository" value={stringValue(job.repository)} />
-          <Fact label="Target" value={stringValue(job.target_branch ?? job.targetBranch)} />
-          <Fact label="Work Branch" value={stringValue(job.work_branch ?? job.workBranch)} />
-          <Fact label="Priority" value={stringValue(job.priority)} />
-          <Fact label="Attempt" value={stringValue(job.attempt)} />
-          <Fact label="Updated" value={formatDate(job.updated_at)} />
-          <Fact label="Failure" value={stringValue(job.failure_category)} tone="danger" />
-          <Fact label="Next Action" value={stringValue(job.next_action)} />
-        </dl>
-
-        {job.failure_reason ? <p className="error-summary">{job.failure_reason}</p> : null}
-      </section>
-
-      <RunTimeline events={events} />
-
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <h2>Artifacts</h2>
-            <span>{artifacts.length}</span>
-          </div>
-        </div>
-        <div className="artifact-grid">
+        </CardHeader>
+        <CardContent className="grid max-h-[360px] gap-3 overflow-auto">
           {artifacts.map((artifact, index) => (
-            <article className="artifact" key={String(artifact.id ?? `${artifact.kind}-${index}`)}>
-              <header>
-                <strong>{artifact.kind ?? "artifact"}</strong>
-                <span>{formatDate(artifact.created_at)}</span>
+            <article className="rounded-xl border border-hairline-gray bg-linen p-4" key={String(artifact.id ?? `${artifact.kind}-${index}`)}>
+              <header className="flex justify-between gap-3 text-xs">
+                <strong className="font-normal text-forest-ink">{artifact.kind ?? "artifact"}</strong>
+                <span className="text-charcoal">{formatDate(artifact.created_at, locale, copy)}</span>
               </header>
-              <p className="mono">{artifact.path ?? "inline content"}</p>
-              {artifact.content ? <pre>{formatJson(artifact.content)}</pre> : null}
+              <p className="my-2 font-mono text-xs text-graphite">{artifact.path ?? copy.inlineContent}</p>
+              {artifact.content ? <pre className="max-h-[180px] overflow-auto rounded-lg bg-forest-ink p-3 text-xs leading-normal text-linen-white">{formatJson(artifact.content)}</pre> : null}
             </article>
           ))}
-          {artifacts.length === 0 ? <p className="empty-copy">No artifacts recorded.</p> : null}
-        </div>
-      </section>
-
-      <LogViewer logs={logs} />
+          {artifacts.length === 0 ? <p className="px-2 py-4 text-sm text-charcoal">{copy.noArtifacts}</p> : null}
+        </CardContent>
+      </Card>
     </section>
   );
 }
 
 function Fact({ label, value, tone }: { label: string; value: string; tone?: "danger" }) {
   return (
-    <div className={tone === "danger" && value !== "-" ? "fact danger" : "fact"}>
-      <dt>{label}</dt>
-      <dd>{value}</dd>
+    <div className="min-w-0 rounded-xl border border-hairline-gray bg-linen p-3">
+      <dt className="mb-2 text-xs text-charcoal">{label}</dt>
+      <dd className="m-0 text-sm text-true-black [overflow-wrap:anywhere]">
+        {tone === "danger" && value !== "-" ? <Badge variant="dark">{value}</Badge> : value}
+      </dd>
     </div>
   );
 }
 
-function stringValue(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "-";
+function stringValue(value: unknown, copy: AdminCopy): string {
+  if (value === null || value === undefined || value === "") return copy.empty;
   return String(value);
 }
 
@@ -114,11 +148,11 @@ function isTerminalPhase(phase: unknown): boolean {
   return phase === "Completed" || phase === "Failed" || phase === "Cancelled" || phase === "CancelFailed";
 }
 
-function formatDate(value: string | undefined): string {
-  if (!value) return "-";
+function formatDate(value: string | undefined, locale: Locale, copy: AdminCopy): string {
+  if (!value) return copy.empty;
   const time = Date.parse(value);
   if (Number.isNaN(time)) return value;
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(locale === "ko" ? "ko-KR" : "en-US", {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
