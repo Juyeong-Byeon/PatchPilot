@@ -23,4 +23,37 @@ describe("parseAgentResult", () => {
     });
     expect(result.status).toBe("completed");
   });
+
+  it("rejects failed results without failure details", () => {
+    expect(() =>
+      parseAgentResult({
+        schemaVersion: "1.0",
+        runId: "run_1",
+        jobId: "job_1",
+        ticketId: "rec1",
+        triggerVersion: "v1",
+        status: "failed",
+        failure: null,
+        retryable: true
+      })
+    ).toThrow();
+  });
+
+  it("rejects completed results without local evidence and PR draft", () => {
+    expect(() =>
+      parseAgentResult({
+        schemaVersion: "1.0",
+        runId: "run_1",
+        jobId: "job_1",
+        ticketId: "rec1",
+        triggerVersion: "v1",
+        status: "completed",
+        changedFiles: [],
+        commits: [],
+        tests: [],
+        failure: null,
+        retryable: false
+      })
+    ).toThrow();
+  });
 });

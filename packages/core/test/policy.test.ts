@@ -12,4 +12,8 @@ describe("policy helpers", () => {
     expect(isProtectedPath(".env.local", [".env.*"])).toBe(true);
     expect(isProtectedPath("src/app.ts", ["infra/**", ".env.*"])).toBe(false);
   });
+
+  it("does not match same-prefix paths for recursive denylist entries", () => {
+    expect(isProtectedPath("infrastructure/main.tf", ["infra/**"])).toBe(false);
+  });
 });
