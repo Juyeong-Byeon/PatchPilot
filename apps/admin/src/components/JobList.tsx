@@ -1,6 +1,7 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type KeyboardEvent } from "react";
 import type { JobRecord } from "../api.js";
 import { translateState, type AdminCopy, type Locale } from "../i18n.js";
+import { cn } from "../lib/utils.js";
 import { Badge } from "./ui/badge.js";
 import { Card, CardHeader, CardTitle } from "./ui/card.js";
 import { Input } from "./ui/input.js";
@@ -11,10 +12,12 @@ interface JobListProps {
   isLoading: boolean;
   copy: AdminCopy;
   locale: Locale;
-  onSelectJob(jobId: string): void;
+  onOpenJob(jobId: string): void;
 }
 
-export function JobList({ jobs, selectedJobId, isLoading, copy, locale, onSelectJob }: JobListProps) {
+const rowColumns = "grid-cols-[136px_176px_minmax(180px,1fr)_108px_148px_minmax(260px,1.25fr)_92px]";
+
+export function JobList({ jobs, selectedJobId, isLoading, copy, locale, onOpenJob }: JobListProps) {
   const [query, setQuery] = useState("");
   const filteredJobs = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -29,11 +32,13 @@ export function JobList({ jobs, selectedJobId, isLoading, copy, locale, onSelect
   }, [jobs, query]);
 
   return (
-    <Card aria-label={copy.jobs}>
-      <CardHeader className="flex-col items-stretch md:flex-row md:items-center">
-        <div>
+    <Card aria-label={copy.jobs} className="overflow-hidden">
+      <CardHeader className="flex-col items-stretch gap-3 md:flex-row md:items-center">
+        <div className="min-w-0">
           <CardTitle>{copy.jobs}</CardTitle>
-          <span className="text-[12px] leading-4 text-charcoal">{isLoading ? copy.loading : `${filteredJobs.length}/${jobs.length}`}</span>
+          <span className="mt-1 block text-[12px] leading-4 text-charcoal">
+            {isLoading ? copy.loading : `${filteredJobs.length}/${jobs.length}`} · {copy.jobsSubtitle}
+          </span>
         </div>
         <Input
           className="w-full md:w-[280px]"
@@ -44,73 +49,105 @@ export function JobList({ jobs, selectedJobId, isLoading, copy, locale, onSelect
         />
       </CardHeader>
 
-      <div className="max-h-[calc(100vh-240px)] overflow-auto">
-        <table className="w-full table-fixed border-collapse text-left text-[13px]">
-          <thead>
-            <tr>
-              <HeaderCell>{copy.tableOutcome}</HeaderCell>
-              <HeaderCell>{copy.tableJob}</HeaderCell>
-              <HeaderCell>{copy.tableBranch}</HeaderCell>
-              <HeaderCell>{copy.tableRuntime}</HeaderCell>
-              <HeaderCell>{copy.tableLastEvent}</HeaderCell>
-              <HeaderCell>{copy.tablePr}</HeaderCell>
-            </tr>
-          </thead>
-          <tbody>
+      <div className="overflow-x-auto">
+        <div className="min-w-[1020px]">
+          <div className={cn("sticky top-0 z-10 grid border-b border-hairline-gray bg-linen-white px-4 py-2 text-[12px] font-medium leading-4 text-charcoal", rowColumns)}>
+            <span>{copy.tableUpdated}</span>
+            <span>{copy.tableJob}</span>
+            <span>{copy.tableRepo}</span>
+            <span>{copy.tableBranch}</span>
+            <span>{copy.tableOutcome}</span>
+            <span>{copy.tableLastEvent}</span>
+            <span>{copy.tableAction}</span>
+          </div>
+          <ol className="m-0 max-h-[calc(100vh-292px)] list-none overflow-auto p-0">
             {filteredJobs.map((job) => {
               const selected = job.id === selectedJobId;
+              const rawLastEvent = stringValue(job.last_event ?? getValue(job, "lastEvent"), copy);
+              const lastEvent = compactText(rawLastEvent, copy, 150);
+              const repo = compactText(job.repository, copy, 120);
+
               return (
-                <tr key={job.id} className={selected ? "border-l-4 border-forest-ink bg-linen text-true-black" : "border-l-4 border-transparent bg-linen-white text-true-black hover:bg-linen"}>
-                  <BodyCell>
-                    <div className="grid gap-1">
-                      <StatusPill value={job.outcome ?? copy.unknown} label={translateState(job.outcome, locale)} />
-                      <span className="text-[12px] leading-4 text-charcoal">{translateState(job.phase, locale)}</span>
-                    </div>
-                  </BodyCell>
-                  <BodyCell>
-                    <button className="font-mono text-[12px] leading-4 text-forest-ink underline decoration-mist-blue underline-offset-4 hover:text-true-black" type="button" onClick={() => onSelectJob(job.id)}>
-                      {job.id}
-                    </button>
-                    <p className="mt-1 truncate text-[12px] leading-4 text-charcoal">{job.repository ?? copy.empty}</p>
-                  </BodyCell>
-                  <BodyCell>{getValue(job, "target_branch", "targetBranch") ?? copy.empty}</BodyCell>
-                  <BodyCell>{runtime(job, copy)}</BodyCell>
-                  <BodyCell>{job.last_event ?? getValue(job, "lastEvent") ?? copy.empty}</BodyCell>
-                  <BodyCell>
-                    {job.pr_url ? (
-                      <a href={job.pr_url}>
-                        {copy.openPr}
-                      </a>
-                    ) : (
-                      copy.empty
+                <li key={job.id}>
+                  <button
+                    aria-current={selected ? "page" : undefined}
+                    className={cn(
+                      "grid w-full border-b border-l-4 border-hairline-gray px-4 py-3 text-left text-[13px] leading-5 transition-colors",
+                      rowColumns,
+                      selected
+                        ? "border-l-forest-ink bg-linen text-true-black"
+                        : "border-l-transparent bg-linen-white text-true-black hover:border-l-sage-wash hover:bg-linen"
                     )}
-                  </BodyCell>
-                </tr>
+                    type="button"
+                    onClick={() => onOpenJob(job.id)}
+                    onKeyDown={(event) => openWithKeyboard(event, job.id, onOpenJob)}
+                  >
+                    <span className="min-w-0 pr-4 text-[12px] leading-4 text-charcoal">
+                      {formatDate(getValue(job, "updated_at", "created_at"), locale, copy)}
+                    </span>
+                    <span className="min-w-0 pr-4">
+                      <span className="block truncate font-mono text-[12px] leading-4 text-forest-ink" title={job.id}>
+                        {shortJobId(job.id, copy)}
+                      </span>
+                      <span className="mt-1 block text-[12px] leading-4 text-charcoal">
+                        {copy.attempt} {stringValue(job.attempt, copy)}
+                      </span>
+                    </span>
+                    <span className="min-w-0 pr-4">
+                      <span className="block truncate font-medium text-true-black" title={job.repository ?? ""}>
+                        {repo}
+                      </span>
+                      <span className="mt-1 block truncate text-[12px] leading-4 text-charcoal" title={getValue(job, "work_branch", "workBranch") ?? ""}>
+                        {getValue(job, "work_branch", "workBranch") ?? copy.empty}
+                      </span>
+                    </span>
+                    <span className="min-w-0 pr-4 text-[12px] leading-4 text-charcoal">
+                      {getValue(job, "target_branch", "targetBranch") ?? copy.empty}
+                    </span>
+                    <span className="min-w-0 pr-4">
+                      <span className="flex flex-wrap gap-1.5">
+                        <StatusPill value={job.outcome ?? copy.unknown} label={translateState(job.outcome, locale)} />
+                        <StatusPill value={job.phase ?? copy.unknown} label={translateState(job.phase, locale)} subtle />
+                      </span>
+                      <span className="mt-1 block text-[12px] leading-4 text-charcoal">{runtime(job, copy)}</span>
+                    </span>
+                    <span className="min-w-0 pr-4 text-[12px] leading-4 text-charcoal text-clamp-2" title={rawLastEvent}>
+                      {lastEvent}
+                    </span>
+                    <span className="flex min-w-0 items-start">
+                      <span className="inline-flex h-8 items-center rounded-lg border border-hairline-gray bg-linen-white px-2.5 text-[12px] font-medium text-forest-ink">
+                        {copy.openJobDetail} -&gt;
+                      </span>
+                    </span>
+                  </button>
+                </li>
               );
             })}
             {filteredJobs.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-5 py-8 text-center text-[13px] text-charcoal">{copy.noJobMatches}</td>
-              </tr>
+              <li className="px-5 py-8 text-center text-[13px] text-charcoal">{copy.noJobMatches}</li>
             ) : null}
-          </tbody>
-        </table>
+          </ol>
+        </div>
       </div>
     </Card>
   );
 }
 
-function HeaderCell({ children }: { children: ReactNode }) {
-  return <th className="sticky top-0 z-10 border-b border-hairline-gray bg-linen-white px-4 py-2 text-[12px] font-medium text-charcoal">{children}</th>;
+function openWithKeyboard(event: KeyboardEvent<HTMLButtonElement>, jobId: string, onOpenJob: (jobId: string) => void) {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  onOpenJob(jobId);
 }
 
-function BodyCell({ children }: { children: ReactNode }) {
-  return <td className="border-b border-hairline-gray px-4 py-3 align-top leading-5 [overflow-wrap:anywhere]">{children}</td>;
-}
-
-function StatusPill({ value, label }: { value: string; label: string }) {
+function StatusPill({ value, label, subtle = false }: { value: string; label: string; subtle?: boolean }) {
   const normalized = value.toLowerCase();
-  const variant = normalized.includes("failed") || normalized.includes("cancel") ? "dark" : normalized.includes("review") || normalized.includes("queued") ? "warning" : "default";
+  const variant = subtle
+    ? "outline"
+    : normalized.includes("failed") || normalized.includes("cancel")
+      ? "dark"
+      : normalized.includes("review") || normalized.includes("queued")
+        ? "warning"
+        : "default";
   return <Badge variant={variant}>{label}</Badge>;
 }
 
@@ -129,6 +166,36 @@ function runtime(job: JobRecord, copy: AdminCopy): string {
   const seconds = Math.max(0, Math.round((finished - started) / 1000));
   if (seconds < 60) return `${seconds}s`;
   return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
+
+function shortJobId(value: string | undefined, copy: AdminCopy): string {
+  if (!value) return copy.empty;
+  if (value.length <= 22) return value;
+  return `${value.slice(0, 11)}...${value.slice(-6)}`;
+}
+
+function compactText(value: unknown, copy: AdminCopy, maxLength: number): string {
+  const text = stringValue(value, copy).replace(/\s+/g, " ").trim();
+  if (!text || text === copy.empty) return copy.empty;
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength - 3)}...`;
+}
+
+function stringValue(value: unknown, copy: AdminCopy): string {
+  if (value === null || value === undefined || value === "") return copy.empty;
+  return String(value);
+}
+
+function formatDate(value: string | undefined, locale: Locale, copy: AdminCopy): string {
+  if (!value) return copy.empty;
+  const time = Date.parse(value);
+  if (Number.isNaN(time)) return value;
+  return new Intl.DateTimeFormat(locale === "ko" ? "ko-KR" : "en-US", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(time);
 }
 
 function parseTime(value: string | undefined): number | null {

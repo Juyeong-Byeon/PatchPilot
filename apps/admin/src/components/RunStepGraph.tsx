@@ -39,41 +39,43 @@ export function RunStepGraph({ events, currentPhase, copy, locale, selectedStep,
         </div>
       </CardHeader>
       <CardContent>
-        <ol className="grid gap-3 lg:grid-cols-6" aria-label={copy.stepGraph}>
+        <ol className="m-0 grid list-none gap-2 p-0" aria-label={copy.stepGraph}>
           {steps.map((step, index) => {
             const selected = selectedStep?.phase === step.phase;
             return (
               <li className="relative min-w-0" key={step.phase}>
                 {index < steps.length - 1 ? (
                   <span
-                    className={`absolute left-[calc(50%+18px)] right-[-50%] top-5 hidden h-px lg:block ${connectorClass(step.status)}`}
+                    className={`absolute bottom-[-8px] left-[31px] top-12 w-px ${connectorClass(step.status)}`}
                     aria-hidden="true"
                   />
                 ) : null}
                 <button
-                  className={`relative grid w-full min-w-0 gap-2 rounded-xl border bg-linen-white p-3 text-left transition-colors ${
+                  className={`relative grid w-full min-w-0 grid-cols-[40px_minmax(0,1fr)_auto] gap-3 rounded-xl border bg-linen-white px-4 py-3 text-left transition-colors ${
                     selected ? "border-forest-ink ring-2 ring-forest-ink/10" : "border-hairline-gray hover:border-forest-ink hover:bg-linen"
                   }`}
                   type="button"
                   onClick={() => onSelectStep?.({ phase: step.phase, source: step.sources[0] })}
                 >
-                  <span className="flex items-center gap-2">
-                    <span className={`flex size-8 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold ${nodeClass(step.status)}`}>
-                      {statusGlyph(step.status)}
-                    </span>
-                    <span className="min-w-0">
-                      <strong className="block truncate text-[13px] font-semibold leading-5 text-true-black">
+                  <span className={`flex size-8 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold ${nodeClass(step.status)}`}>
+                    {statusGlyph(step.status)}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                      <strong className="truncate text-[13px] font-semibold leading-5 text-true-black">
                         {translateState(step.phase, locale)}
                       </strong>
-                      <span className="block text-[12px] leading-4 text-charcoal">{statusLabel(step.status, copy)}</span>
+                      <span className="rounded-full bg-linen px-2 py-0.5 text-[11px] leading-4 text-charcoal">
+                        {statusLabel(step.status, copy)}
+                      </span>
+                    </span>
+                    <span className="mt-1 block text-[12px] leading-4 text-charcoal text-clamp-1" title={step.latestMessage || copy.stepWaitingForSignal}>
+                      {step.latestMessage || copy.stepWaitingForSignal}
                     </span>
                   </span>
-                  <span className="grid gap-1 text-[12px] leading-4 text-charcoal">
-                    <span className="truncate">{step.latestMessage || copy.stepWaitingForSignal}</span>
-                    <span className="flex items-center justify-between gap-2">
-                      <span>{step.eventCount > 0 ? copy.spanEvents(step.eventCount) : copy.spanNoEvents}</span>
-                      <span className="font-mono">{formatDuration(step.durationMs)}</span>
-                    </span>
+                  <span className="grid justify-items-end gap-1 whitespace-nowrap text-[12px] leading-4 text-charcoal">
+                    <span>{step.eventCount > 0 ? copy.spanEvents(step.eventCount) : copy.spanNoEvents}</span>
+                    <span className="font-mono">{formatDuration(step.durationMs)}</span>
                   </span>
                 </button>
               </li>

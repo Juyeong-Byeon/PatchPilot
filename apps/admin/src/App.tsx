@@ -28,6 +28,10 @@ interface DetailState {
   artifacts: Artifact[];
 }
 
+type AdminRoute =
+  | { page: "list" }
+  | { page: "detail"; jobId: string };
+
 type StatusState =
   | { kind: "ready" }
   | { kind: "enterToken" }
@@ -44,21 +48,22 @@ const emptyDetail: DetailState = {
 };
 
 export default function App() {
+  const [route, setRoute] = useState<AdminRoute>(() => readRoute());
   const [locale, setLocale] = useState<Locale>(() => getInitialLocale());
   const copy = adminCopy[locale];
   const [token, setToken] = useState(() => getStoredAdminToken());
   const [jobs, setJobs] = useState<JobRecord[]>([]);
-  const [selectedJobId, setSelectedJobId] = useState<string>("");
   const [detail, setDetail] = useState<DetailState>(emptyDetail);
   const [isLoadingJobs, setIsLoadingJobs] = useState(false);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [status, setStatus] = useState<StatusState>(() => (token ? { kind: "ready" } : { kind: "enterToken" }));
   const [error, setError] = useState<string>("");
   const [actionState, setActionState] = useState<string>("");
+  const selectedJobId = route.page === "detail" ? route.jobId : "";
 
   const selectedJob = useMemo(
-    () => detail.job ?? jobs.find((job) => job.id === selectedJobId) ?? null,
-    [detail.job, jobs, selectedJobId]
+    () => route.page === "detail" ? detail.job ?? jobs.find((job) => job.id === route.jobId) ?? null : null,
+    [detail.job, jobs, route]
   );
   const jobStats = useMemo(
     () => ({
@@ -74,6 +79,19 @@ export default function App() {
     if (!token) return;
     void refreshJobs(token);
   }, [token]);
+
+  useEffect(() => {
+    if (window.location.pathname === "/") {
+      window.history.replaceState(null, "", "/jobs");
+    }
+
+    function syncRoute() {
+      setRoute(readRoute());
+    }
+
+    window.addEventListener("popstate", syncRoute);
+    return () => window.removeEventListener("popstate", syncRoute);
+  }, []);
 
   useEffect(() => {
     document.documentElement.lang = locale;
@@ -100,7 +118,6 @@ export default function App() {
     try {
       const nextJobs = await fetchJobs(activeToken);
       setJobs(nextJobs);
-      setSelectedJobId((current) => current || nextJobs[0]?.id || "");
       setStatus({ kind: "loadedJobs", count: nextJobs.length });
     } catch (caught) {
       setError(errorMessage(caught, copy));
@@ -159,6 +176,19 @@ export default function App() {
   function changeLocale(nextLocale: Locale) {
     setLocale(nextLocale);
     storeLocale(nextLocale);
+  }
+
+  function openJob(jobId: string) {
+    navigate({ page: "detail", jobId });
+  }
+
+  function openJobList() {
+    navigate({ page: "list" });
+  }
+
+  function refreshCurrentDetail() {
+    if (!selectedJobId) return;
+    void refreshDetail(selectedJobId, token);
   }
 
   return (
@@ -230,34 +260,58 @@ export default function App() {
         </div>
       </header>
 
-      <section className="mx-auto mt-3 grid max-w-[var(--page-max-width)] items-start gap-4 xl:grid-cols-[minmax(520px,0.95fr)_minmax(0,1.05fr)]">
-        <JobList
-          jobs={jobs}
-          selectedJobId={selectedJobId}
-          isLoading={isLoadingJobs}
-          copy={copy}
-          locale={locale}
-          onSelectJob={setSelectedJobId}
-        />
-        <JobDetail
-          job={selectedJob}
-          events={detail.events}
-          logs={detail.logs}
-          artifacts={detail.artifacts}
-          isLoading={isLoadingDetail}
-          actionState={actionState}
-          copy={copy}
-          locale={locale}
-          onCancel={() => void runAction("cancel")}
-          onRetry={() => void runAction("retry")}
-        />
+      <section className="mx-auto mt-3 max-w-[var(--page-max-width)]">
+        {route.page === "list" ? (
+          <JobList
+            jobs={jobs}
+            selectedJobId={selectedJobId}
+            isLoading={isLoadingJobs}
+            copy={copy}
+            locale={locale}
+            onOpenJob={openJob}
+          />
+        ) : (
+          <JobDetail
+            job={selectedJob}
+            events={detail.events}
+            logs={detail.logs}
+            artifacts={detail.artifacts}
+            isLoading={isLoadingDetail}
+            actionState={actionState}
+            copy={copy}
+            locale={locale}
+            onBack={openJobList}
+            onRefresh={refreshCurrentDetail}
+            onCancel={() => void runAction("cancel")}
+            onRetry={() => void runAction("retry")}
+          />
+        )}
       </section>
     </main>
   );
 }
 
+function readRoute(): AdminRoute {
+  const match = window.location.pathname.match(/^\/jobs\/(.+)$/);
+  if (!match) return { page: "list" };
+
+  try {
+    return { page: "detail", jobId: decodeURIComponent(match[1]) };
+  } catch {
+    return { page: "list" };
+  }
+}
+
+function navigate(route: AdminRoute) {
+  const path = route.page === "detail" ? `/jobs/${encodeURIComponent(route.jobId)}` : "/jobs";
+  window.history.pushState(null, "", path);
+  window.dispatchEvent(new Event("popstate"));
+}
+
 function errorMessage(error: unknown, copy: AdminCopy): string {
   if (error instanceof Error && error.message === "admin_access_key_required") return copy.tokenRequired;
+  if (error instanceof Error && error.message === "admin_access_key_invalid") return copy.tokenInvalid;
+  if (error instanceof Error && error.message === "admin_api_unavailable") return copy.apiUnavailable;
   return error instanceof Error ? error.message : "Unknown error";
 }
 

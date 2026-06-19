@@ -85,3 +85,18 @@ code,
   font-family: var(--font-faire-octave);
   font-weight: 300;
 }
+
+.text-clamp-1,
+.text-clamp-2 {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+}
+
+.text-clamp-1 {
+  -webkit-line-clamp: 1;
+}
+
+.text-clamp-2 {
+  -webkit-line-clamp: 2;
+}

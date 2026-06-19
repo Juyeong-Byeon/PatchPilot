@@ -17,6 +17,8 @@ interface JobDetailProps {
   actionState: string;
   copy: AdminCopy;
   locale: Locale;
+  onBack?(): void;
+  onRefresh?(): void;
   onRetry(): void;
   onCancel(): void;
 }
@@ -30,6 +32,8 @@ export function JobDetail({
   actionState,
   copy,
   locale,
+  onBack,
+  onRefresh,
   onRetry,
   onCancel
 }: JobDetailProps) {
@@ -38,8 +42,13 @@ export function JobDetail({
   if (!job) {
     return (
       <Card className="min-h-[176px]">
-        <CardHeader>
+        <CardHeader className="items-start">
           <CardTitle>{copy.jobDetail}</CardTitle>
+          {onBack ? (
+            <Button type="button" variant="outline" onClick={onBack}>
+              {copy.backToJobs}
+            </Button>
+          ) : null}
         </CardHeader>
         <CardContent>
           <p className="text-[13px] leading-5 text-charcoal">{isLoading ? copy.loadingDetail : copy.selectJob}</p>
@@ -57,7 +66,7 @@ export function JobDetail({
         <CardContent className="grid gap-4">
           <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
             <div className="min-w-0">
-              <p className="font-mono text-[12px] leading-4 text-graphite">{job.id}</p>
+              <p className="truncate font-mono text-[12px] leading-4 text-graphite" title={job.id}>{job.id}</p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <Badge>{translateState(job.phase, locale)}</Badge>
                 <Badge variant={String(job.outcome).includes("Failed") ? "dark" : "outline"}>{translateState(job.outcome, locale)}</Badge>
@@ -70,6 +79,26 @@ export function JobDetail({
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
+              {onBack ? (
+                <Button type="button" variant="outline" onClick={onBack}>
+                  {copy.backToJobs}
+                </Button>
+              ) : null}
+              {onRefresh ? (
+                <Button type="button" variant="outline" disabled={isLoading} onClick={onRefresh}>
+                  {copy.refresh}
+                </Button>
+              ) : null}
+              {job.pr_url ? (
+                <a
+                  className="inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-hairline-gray bg-linen-white px-3 text-[13px] font-medium text-forest-ink no-underline hover:border-forest-ink hover:bg-linen"
+                  href={job.pr_url}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  {copy.openPr}
+                </a>
+              ) : null}
               <Button type="button" disabled={retryDisabled} onClick={onRetry}>
                 {actionState === "retry" ? copy.retrying : copy.retry}
               </Button>
@@ -82,9 +111,9 @@ export function JobDetail({
           {(job.failure_reason || job.next_action) ? (
             <section className="rounded-xl border border-forest-ink bg-linen px-4 py-3">
               <p className="text-[12px] leading-4 text-charcoal">{copy.failureSummary}</p>
-              {job.failure_reason ? <p className="mt-2 text-[13px] leading-5 text-forest-ink">{job.failure_reason}</p> : null}
+              {job.failure_reason ? <p className="mt-2 break-words text-[13px] leading-5 text-forest-ink">{job.failure_reason}</p> : null}
               {job.next_action ? (
-                <p className="mt-2 text-[13px] leading-5 text-true-black">
+                <p className="mt-2 break-words text-[13px] leading-5 text-true-black">
                   <span className="text-charcoal">{copy.nextAction}: </span>
                   {job.next_action}
                 </p>
@@ -110,29 +139,31 @@ export function JobDetail({
         onSelectStep={setSelectedSpan}
       />
       <RunTimeline events={events} copy={copy} locale={locale} selectedSpan={selectedSpan} onSelectSpan={setSelectedSpan} />
-      <LogViewer logs={logs} copy={copy} highlightSource={selectedSpan?.source} onClearHighlight={() => setSelectedSpan(null)} />
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <LogViewer logs={logs} copy={copy} highlightSource={selectedSpan?.source} onClearHighlight={() => setSelectedSpan(null)} />
 
-      <Card>
-        <CardHeader>
-          <div>
-            <CardTitle>{copy.artifacts}</CardTitle>
-            <span className="text-xs text-charcoal">{artifacts.length}</span>
-          </div>
-        </CardHeader>
-        <CardContent className="grid max-h-[360px] gap-3 overflow-auto">
-          {artifacts.map((artifact, index) => (
-            <article className="rounded-xl border border-hairline-gray bg-linen p-4" key={String(artifact.id ?? `${artifact.kind}-${index}`)}>
-              <header className="flex justify-between gap-3 text-xs">
-                <strong className="font-medium text-forest-ink">{artifact.kind ?? "artifact"}</strong>
-                <span className="text-charcoal">{formatDate(artifact.created_at, locale, copy)}</span>
-              </header>
-              <p className="my-2 font-mono text-[12px] leading-4 text-graphite">{artifact.path ?? copy.inlineContent}</p>
-              {artifact.content ? <pre className="max-h-[180px] overflow-auto rounded-lg bg-forest-ink p-3 text-xs leading-normal text-linen-white">{formatJson(artifact.content)}</pre> : null}
-            </article>
-          ))}
-          {artifacts.length === 0 ? <p className="px-2 py-4 text-[13px] text-charcoal">{copy.noArtifacts}</p> : null}
-        </CardContent>
-      </Card>
+        <Card>
+          <CardHeader>
+            <div>
+              <CardTitle>{copy.artifacts}</CardTitle>
+              <span className="text-xs text-charcoal">{artifacts.length}</span>
+            </div>
+          </CardHeader>
+          <CardContent className="grid max-h-[360px] gap-3 overflow-auto">
+            {artifacts.map((artifact, index) => (
+              <article className="rounded-xl border border-hairline-gray bg-linen p-4" key={String(artifact.id ?? `${artifact.kind}-${index}`)}>
+                <header className="flex justify-between gap-3 text-xs">
+                  <strong className="font-medium text-forest-ink">{artifact.kind ?? "artifact"}</strong>
+                  <span className="text-charcoal">{formatDate(artifact.created_at, locale, copy)}</span>
+                </header>
+                <p className="my-2 truncate font-mono text-[12px] leading-4 text-graphite" title={artifact.path ?? copy.inlineContent}>{artifact.path ?? copy.inlineContent}</p>
+                {artifact.content ? <pre className="max-h-[180px] overflow-auto rounded-lg bg-forest-ink p-3 text-xs leading-normal text-linen-white">{formatJson(artifact.content)}</pre> : null}
+              </article>
+            ))}
+            {artifacts.length === 0 ? <p className="px-2 py-4 text-[13px] text-charcoal">{copy.noArtifacts}</p> : null}
+          </CardContent>
+        </Card>
+      </div>
     </section>
   );
 }
@@ -141,7 +172,7 @@ function Fact({ label, value, tone }: { label: string; value: string; tone?: "da
   return (
     <div className="min-w-0 rounded-xl border border-hairline-gray bg-linen p-3">
       <dt className="mb-2 text-[12px] leading-4 text-charcoal">{label}</dt>
-      <dd className="m-0 text-[13px] leading-5 text-true-black [overflow-wrap:anywhere]">
+      <dd className="m-0 break-words text-[13px] leading-5 text-true-black">
         {tone === "danger" && value !== "-" ? <Badge variant="dark">{value}</Badge> : value}
       </dd>
     </div>

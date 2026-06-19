@@ -135,9 +135,17 @@ async function adminRequest<T>(
   });
 
   if (!response.ok) {
+    if (response.status === 401) throw new Error("admin_access_key_invalid");
     const message = await response.text();
     throw new Error(`${response.status} ${response.statusText}${message ? `: ${message}` : ""}`);
   }
 
-  return (await response.json()) as T;
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) throw new Error("admin_api_unavailable");
+
+  try {
+    return (await response.json()) as T;
+  } catch {
+    throw new Error("admin_api_unavailable");
+  }
 }
