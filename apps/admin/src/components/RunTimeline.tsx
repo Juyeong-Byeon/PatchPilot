@@ -50,13 +50,13 @@ export function RunTimeline({ events, copy, locale, selectedSpan, onSelectSpan }
         </div>
       </CardHeader>
       <CardContent className="p-0">
-        <section aria-label={copy.traceFlow} className="border-b border-hairline-gray px-5 py-4">
+        <section aria-label={copy.traceFlow} className="border-b border-hairline-gray px-4 py-3">
           <div className="mb-4 flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
             <div>
-              <h3 className="text-sm font-normal text-forest-ink">{copy.traceFlow}</h3>
-              <p className="m-0 text-xs text-charcoal">{copy.traceFlowSummary}</p>
+              <h3 className="text-[13px] font-semibold leading-5 text-forest-ink">{copy.traceFlow}</h3>
+              <p className="m-0 text-[12px] leading-4 text-charcoal">{copy.traceFlowSummary}</p>
             </div>
-            <span className="text-xs text-charcoal">{formatDuration(totalDuration(spans))}</span>
+            <span className="text-[12px] leading-4 text-charcoal">{formatDuration(totalDuration(spans))}</span>
           </div>
 
           <div className="grid gap-2">
@@ -64,17 +64,17 @@ export function RunTimeline({ events, copy, locale, selectedSpan, onSelectSpan }
               const selected = selectedSpan?.phase === span.phase && (!selectedSpan.source || span.sources.includes(selectedSpan.source));
               return (
               <button
-                className={`grid gap-2 rounded-xl px-2 py-2 text-left text-xs md:grid-cols-[112px_96px_1fr_82px] md:items-center ${selected ? "bg-linen-white ring-1 ring-forest-ink" : "hover:bg-linen-white"}`}
+                className={`grid gap-2 rounded-lg px-3 py-2 text-left text-[12px] md:grid-cols-[116px_112px_1fr_90px] md:items-center ${selected ? "bg-linen-white ring-1 ring-forest-ink" : "hover:bg-linen-white"}`}
                 key={span.phase}
                 type="button"
                 onClick={() => onSelectSpan?.({ phase: span.phase, source: span.sources[0] })}
               >
                 <div className="min-w-0">
-                  <p className="m-0 text-sm text-true-black">{translateState(span.phase, locale)}</p>
+                  <p className="m-0 text-[13px] font-medium leading-5 text-true-black">{translateState(span.phase, locale)}</p>
                   <span className="text-charcoal">{statusLabel(span.status, copy)}</span>
                 </div>
                 <div className="min-w-0">
-                  <p className="m-0 text-xs text-charcoal">{copy.service}</p>
+                  <p className="m-0 text-[12px] leading-4 text-charcoal">{copy.service}</p>
                   <span className="truncate text-forest-ink">{span.sources.join(", ") || copy.sourceSystem}</span>
                 </div>
                 <div className="relative h-8 overflow-hidden rounded-full bg-linen">
@@ -95,22 +95,22 @@ export function RunTimeline({ events, copy, locale, selectedSpan, onSelectSpan }
           </div>
         </section>
 
-        <div className="px-5 pt-4">
-          <h3 className="text-sm font-normal text-forest-ink">{copy.eventLog}</h3>
+        <div className="px-4 pt-3">
+          <h3 className="text-[13px] font-semibold leading-5 text-forest-ink">{copy.eventLog}</h3>
         </div>
         <ol className="m-0 max-h-[260px] list-none overflow-auto p-0">
           {orderedEvents.map((event, index) => (
-            <li className="grid gap-3 border-b border-hairline-gray px-5 py-3 text-sm md:grid-cols-[128px_150px_1fr_112px]" key={String(event.id ?? `${event.event_type ?? event.eventType}-${index}`)}>
-              <time className="font-mono text-xs text-charcoal">{formatDate(event.created_at, locale, copy)}</time>
+            <li className="grid gap-3 border-b border-hairline-gray px-4 py-3 text-[13px] md:grid-cols-[128px_150px_1fr_112px]" key={String(event.id ?? `${event.event_type ?? event.eventType}-${index}`)}>
+              <time className="font-mono text-[12px] leading-4 text-charcoal">{formatDate(event.created_at, locale, copy)}</time>
               <div className="flex min-w-0 flex-wrap gap-2">
                 <strong className="font-normal text-true-black">{translateEventType(event.event_type ?? event.eventType, locale)}</strong>
                 <span className="text-charcoal">{translateState(event.phase, locale)}</span>
               </div>
               <p className="m-0 text-charcoal [overflow-wrap:anywhere]">{event.message ?? copy.empty}</p>
-              <small className="text-xs text-charcoal">{event.source ?? copy.sourceSystem} {event.attempt ? `${copy.attempt} ${event.attempt}` : ""}</small>
+              <small className="text-[12px] leading-4 text-charcoal">{event.source ?? copy.sourceSystem} {event.attempt ? `${copy.attempt} ${event.attempt}` : ""}</small>
             </li>
           ))}
-          {orderedEvents.length === 0 ? <li className="px-5 py-5 text-sm text-charcoal">{copy.noEvents}</li> : null}
+          {orderedEvents.length === 0 ? <li className="px-4 py-5 text-[13px] text-charcoal">{copy.noEvents}</li> : null}
         </ol>
       </CardContent>
     </Card>

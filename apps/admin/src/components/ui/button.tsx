@@ -3,7 +3,7 @@ import type { ButtonHTMLAttributes } from "react";
 import { cn } from "../../lib/utils.js";
 
 const buttonVariants = cva(
-  "inline-flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border px-4 text-sm font-normal outline-none transition-colors disabled:pointer-events-none disabled:border-hairline-gray disabled:bg-linen disabled:text-graphite focus-visible:ring-2 focus-visible:ring-forest-ink/20",
+  "inline-flex h-9 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg border px-3 text-[13px] font-medium outline-none transition-colors disabled:pointer-events-none disabled:border-hairline-gray disabled:bg-linen disabled:text-graphite focus-visible:ring-2 focus-visible:ring-forest-ink/20",
   {
     variants: {
       variant: {
@@ -13,9 +13,9 @@ const buttonVariants = cva(
         danger: "border-forest-ink bg-forest-ink text-linen-white hover:bg-charcoal"
       },
       size: {
-        default: "h-10 px-4",
-        sm: "h-8 rounded-lg px-3 text-xs",
-        icon: "size-10 p-0"
+        default: "h-9 px-3",
+        sm: "h-8 px-3 text-xs",
+        icon: "size-9 p-0"
       }
     },
     defaultVariants: {

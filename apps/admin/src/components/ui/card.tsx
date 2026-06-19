@@ -15,9 +15,9 @@ export function CardHeader({ className, ...props }: HTMLAttributes<HTMLDivElemen
 }
 
 export function CardTitle({ className, ...props }: HTMLAttributes<HTMLHeadingElement>) {
-  return <h2 className={cn("font-sans text-[23px] font-light leading-[1.25] text-forest-ink", className)} {...props} />;
+  return <h2 className={cn("font-sans text-[18px] font-semibold leading-[1.25] text-forest-ink", className)} {...props} />;
 }
 
 export function CardContent({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("px-4 py-4", className)} {...props} />;
+  return <div className={cn("px-4 py-3", className)} {...props} />;
 }

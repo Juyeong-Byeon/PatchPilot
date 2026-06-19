@@ -124,7 +124,7 @@ async function adminRequest<T>(
   options: { method?: "GET" | "POST"; token?: string } = {}
 ): Promise<T> {
   const token = options.token?.trim();
-  if (!token) throw new Error("ADMIN_TOKEN is required.");
+  if (!token) throw new Error("admin_access_key_required");
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: options.method ?? "GET",

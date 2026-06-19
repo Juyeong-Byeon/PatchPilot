@@ -16,20 +16,6 @@
   --font-display: var(--font-faire-octave);
   --font-mono: var(--font-space-mono);
 
-  --spacing-4: 4px;
-  --spacing-7: 7px;
-  --spacing-9: 9px;
-  --spacing-11: 11px;
-  --spacing-14: 14px;
-  --spacing-18: 18px;
-  --spacing-21: 21px;
-  --spacing-28: 28px;
-  --spacing-35: 35px;
-  --spacing-42: 42px;
-  --spacing-49: 49px;
-  --spacing-56: 56px;
-  --spacing-70: 70px;
-
   --radius-lg: 7px;
   --radius-xl: 14px;
   --radius-full: 999px;
@@ -40,7 +26,7 @@
   --font-faire-octave: "Cormorant Garamond", "Playfair Display", Georgia, serif;
   --font-suisse-intl: "Inter", "Helvetica Neue", Arial, ui-sans-serif, system-ui, sans-serif;
   --font-space-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  --page-max-width: 1200px;
+  --page-max-width: 1280px;
 }
 
 * {
@@ -54,16 +40,19 @@ body {
   background: #fffefc;
   color: #000000;
   font-family: var(--font-suisse-intl);
-  font-size: 14px;
   font-weight: 400;
   letter-spacing: 0;
   line-height: 1.5;
 }
 
+body {
+  font-size: 14px;
+}
+
 button,
 input,
 select {
-  font: inherit;
+  font-family: inherit;
 }
 
 button {

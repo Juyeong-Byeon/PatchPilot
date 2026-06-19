@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Artifact, JobRecord, LogLine, RunEvent } from "../api.js";
 import { translateState, type AdminCopy, type Locale } from "../i18n.js";
 import { LogViewer } from "./LogViewer.js";
+import { RunStepGraph } from "./RunStepGraph.js";
 import { RunTimeline, type SpanSelection } from "./RunTimeline.js";
 import { Badge } from "./ui/badge.js";
 import { Button } from "./ui/button.js";
@@ -36,12 +37,12 @@ export function JobDetail({
 
   if (!job) {
     return (
-      <Card className="min-h-[180px]">
+      <Card className="min-h-[176px]">
         <CardHeader>
           <CardTitle>{copy.jobDetail}</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-charcoal">{isLoading ? copy.loadingDetail : copy.selectJob}</p>
+          <p className="text-[13px] leading-5 text-charcoal">{isLoading ? copy.loadingDetail : copy.selectJob}</p>
         </CardContent>
       </Card>
     );
@@ -56,15 +57,15 @@ export function JobDetail({
         <CardContent className="grid gap-4">
           <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
             <div className="min-w-0">
-              <p className="font-mono text-xs text-graphite">{job.id}</p>
+              <p className="font-mono text-[12px] leading-4 text-graphite">{job.id}</p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <Badge>{translateState(job.phase, locale)}</Badge>
                 <Badge variant={String(job.outcome).includes("Failed") ? "dark" : "outline"}>{translateState(job.outcome, locale)}</Badge>
               </div>
-              <h2 className="mt-3 font-display text-[32px] leading-[1.2] text-forest-ink">
+              <h2 className="mt-3 font-sans text-[22px] font-semibold leading-[1.25] text-forest-ink">
                 {stringValue(job.repository, copy)}
               </h2>
-              <p className="mt-1 text-sm text-charcoal">
+              <p className="mt-1 text-[13px] leading-5 text-charcoal">
                 {stringValue(job.target_branch ?? job.targetBranch, copy)} · {stringValue(job.work_branch ?? job.workBranch, copy)}
               </p>
             </div>
@@ -80,10 +81,10 @@ export function JobDetail({
 
           {(job.failure_reason || job.next_action) ? (
             <section className="rounded-xl border border-forest-ink bg-linen px-4 py-3">
-              <p className="text-xs text-charcoal">{copy.failureSummary}</p>
-              {job.failure_reason ? <p className="mt-2 text-sm text-forest-ink">{job.failure_reason}</p> : null}
+              <p className="text-[12px] leading-4 text-charcoal">{copy.failureSummary}</p>
+              {job.failure_reason ? <p className="mt-2 text-[13px] leading-5 text-forest-ink">{job.failure_reason}</p> : null}
               {job.next_action ? (
-                <p className="mt-2 text-sm text-true-black">
+                <p className="mt-2 text-[13px] leading-5 text-true-black">
                   <span className="text-charcoal">{copy.nextAction}: </span>
                   {job.next_action}
                 </p>
@@ -100,6 +101,14 @@ export function JobDetail({
         </CardContent>
       </Card>
 
+      <RunStepGraph
+        events={events}
+        currentPhase={job.phase}
+        copy={copy}
+        locale={locale}
+        selectedStep={selectedSpan}
+        onSelectStep={setSelectedSpan}
+      />
       <RunTimeline events={events} copy={copy} locale={locale} selectedSpan={selectedSpan} onSelectSpan={setSelectedSpan} />
       <LogViewer logs={logs} copy={copy} highlightSource={selectedSpan?.source} onClearHighlight={() => setSelectedSpan(null)} />
 
@@ -114,14 +123,14 @@ export function JobDetail({
           {artifacts.map((artifact, index) => (
             <article className="rounded-xl border border-hairline-gray bg-linen p-4" key={String(artifact.id ?? `${artifact.kind}-${index}`)}>
               <header className="flex justify-between gap-3 text-xs">
-                <strong className="font-normal text-forest-ink">{artifact.kind ?? "artifact"}</strong>
+                <strong className="font-medium text-forest-ink">{artifact.kind ?? "artifact"}</strong>
                 <span className="text-charcoal">{formatDate(artifact.created_at, locale, copy)}</span>
               </header>
-              <p className="my-2 font-mono text-xs text-graphite">{artifact.path ?? copy.inlineContent}</p>
+              <p className="my-2 font-mono text-[12px] leading-4 text-graphite">{artifact.path ?? copy.inlineContent}</p>
               {artifact.content ? <pre className="max-h-[180px] overflow-auto rounded-lg bg-forest-ink p-3 text-xs leading-normal text-linen-white">{formatJson(artifact.content)}</pre> : null}
             </article>
           ))}
-          {artifacts.length === 0 ? <p className="px-2 py-4 text-sm text-charcoal">{copy.noArtifacts}</p> : null}
+          {artifacts.length === 0 ? <p className="px-2 py-4 text-[13px] text-charcoal">{copy.noArtifacts}</p> : null}
         </CardContent>
       </Card>
     </section>
@@ -131,8 +140,8 @@ export function JobDetail({
 function Fact({ label, value, tone }: { label: string; value: string; tone?: "danger" }) {
   return (
     <div className="min-w-0 rounded-xl border border-hairline-gray bg-linen p-3">
-      <dt className="mb-2 text-xs text-charcoal">{label}</dt>
-      <dd className="m-0 text-sm text-true-black [overflow-wrap:anywhere]">
+      <dt className="mb-2 text-[12px] leading-4 text-charcoal">{label}</dt>
+      <dd className="m-0 text-[13px] leading-5 text-true-black [overflow-wrap:anywhere]">
         {tone === "danger" && value !== "-" ? <Badge variant="dark">{value}</Badge> : value}
       </dd>
     </div>

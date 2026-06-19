@@ -33,10 +33,10 @@ export function JobList({ jobs, selectedJobId, isLoading, copy, locale, onSelect
       <CardHeader className="flex-col items-stretch md:flex-row md:items-center">
         <div>
           <CardTitle>{copy.jobs}</CardTitle>
-          <span className="text-xs text-charcoal">{isLoading ? copy.loading : `${filteredJobs.length}/${jobs.length}`}</span>
+          <span className="text-[12px] leading-4 text-charcoal">{isLoading ? copy.loading : `${filteredJobs.length}/${jobs.length}`}</span>
         </div>
         <Input
-          className="w-full md:w-[260px]"
+          className="w-full md:w-[280px]"
           aria-label={copy.filterJobsLabel}
           value={query}
           placeholder={copy.filterJobsPlaceholder}
@@ -45,7 +45,7 @@ export function JobList({ jobs, selectedJobId, isLoading, copy, locale, onSelect
       </CardHeader>
 
       <div className="max-h-[calc(100vh-240px)] overflow-auto">
-        <table className="w-full table-fixed border-collapse text-left text-xs">
+        <table className="w-full table-fixed border-collapse text-left text-[13px]">
           <thead>
             <tr>
               <HeaderCell>{copy.tableOutcome}</HeaderCell>
@@ -64,14 +64,14 @@ export function JobList({ jobs, selectedJobId, isLoading, copy, locale, onSelect
                   <BodyCell>
                     <div className="grid gap-1">
                       <StatusPill value={job.outcome ?? copy.unknown} label={translateState(job.outcome, locale)} />
-                      <span className="text-xs text-charcoal">{translateState(job.phase, locale)}</span>
+                      <span className="text-[12px] leading-4 text-charcoal">{translateState(job.phase, locale)}</span>
                     </div>
                   </BodyCell>
                   <BodyCell>
-                    <button className="font-mono text-xs text-forest-ink underline decoration-mist-blue underline-offset-4 hover:text-true-black" type="button" onClick={() => onSelectJob(job.id)}>
+                    <button className="font-mono text-[12px] leading-4 text-forest-ink underline decoration-mist-blue underline-offset-4 hover:text-true-black" type="button" onClick={() => onSelectJob(job.id)}>
                       {job.id}
                     </button>
-                    <p className="mt-1 truncate text-xs text-charcoal">{job.repository ?? copy.empty}</p>
+                    <p className="mt-1 truncate text-[12px] leading-4 text-charcoal">{job.repository ?? copy.empty}</p>
                   </BodyCell>
                   <BodyCell>{getValue(job, "target_branch", "targetBranch") ?? copy.empty}</BodyCell>
                   <BodyCell>{runtime(job, copy)}</BodyCell>
@@ -90,7 +90,7 @@ export function JobList({ jobs, selectedJobId, isLoading, copy, locale, onSelect
             })}
             {filteredJobs.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-5 py-8 text-center text-sm text-charcoal">{copy.noJobMatches}</td>
+                <td colSpan={6} className="px-5 py-8 text-center text-[13px] text-charcoal">{copy.noJobMatches}</td>
               </tr>
             ) : null}
           </tbody>
@@ -101,11 +101,11 @@ export function JobList({ jobs, selectedJobId, isLoading, copy, locale, onSelect
 }
 
 function HeaderCell({ children }: { children: ReactNode }) {
-  return <th className="sticky top-0 z-10 border-b border-hairline-gray bg-linen-white px-3 py-2 text-[11px] font-normal text-charcoal">{children}</th>;
+  return <th className="sticky top-0 z-10 border-b border-hairline-gray bg-linen-white px-4 py-2 text-[12px] font-medium text-charcoal">{children}</th>;
 }
 
 function BodyCell({ children }: { children: ReactNode }) {
-  return <td className="border-b border-hairline-gray px-3 py-2 align-top [overflow-wrap:anywhere]">{children}</td>;
+  return <td className="border-b border-hairline-gray px-4 py-3 align-top leading-5 [overflow-wrap:anywhere]">{children}</td>;
 }
 
 function StatusPill({ value, label }: { value: string; label: string }) {

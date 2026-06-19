@@ -36,7 +36,7 @@ export function LogViewer({ logs, copy, highlightSource, onClearHighlight }: Log
       <CardHeader className="flex-col items-stretch xl:flex-row xl:items-center">
         <div>
           <CardTitle>{copy.logs}</CardTitle>
-          <span className="text-xs text-charcoal">{filteredLogs.length}/{logs.length}</span>
+          <span className="text-[12px] leading-4 text-charcoal">{filteredLogs.length}/{logs.length}</span>
         </div>
         <div className="grid gap-2 md:grid-cols-[150px_minmax(180px,1fr)_auto_auto]">
           <Select aria-label={copy.filterLogsLabel} value={source} onChange={(event) => setSource(event.target.value)}>
@@ -62,7 +62,7 @@ export function LogViewer({ logs, copy, highlightSource, onClearHighlight }: Log
         </div>
       </CardHeader>
       {highlightSource ? (
-        <div className="flex items-center justify-between gap-3 border-b border-hairline-gray bg-linen px-5 py-2 text-xs text-charcoal">
+        <div className="flex items-center justify-between gap-3 border-b border-hairline-gray bg-linen px-4 py-2 text-[12px] text-charcoal">
           <span>{copy.correlatedLogs}: {highlightSource}</span>
           <Button type="button" variant="ghost" size="sm" onClick={onClearHighlight}>
             {copy.clear}
@@ -70,7 +70,7 @@ export function LogViewer({ logs, copy, highlightSource, onClearHighlight }: Log
         </div>
       ) : null}
       <CardContent className="p-0">
-        <pre className="m-0 max-h-[320px] min-h-[180px] overflow-auto border-t border-hairline-gray bg-linen p-4 text-xs leading-normal whitespace-pre-wrap text-true-black">{text || copy.noLogs}</pre>
+        <pre className="m-0 max-h-[320px] min-h-[180px] overflow-auto border-t border-hairline-gray bg-linen p-4 text-[12px] leading-5 whitespace-pre-wrap text-true-black">{text || copy.noLogs}</pre>
       </CardContent>
     </Card>
   );

@@ -103,7 +103,7 @@ export default function App() {
       setSelectedJobId((current) => current || nextJobs[0]?.id || "");
       setStatus({ kind: "loadedJobs", count: nextJobs.length });
     } catch (caught) {
-      setError(errorMessage(caught));
+      setError(errorMessage(caught, copy));
       setStatus({ kind: "refreshFailed" });
     } finally {
       setIsLoadingJobs(false);
@@ -122,7 +122,7 @@ export default function App() {
       ]);
       setDetail({ job, events, logs, artifacts });
     } catch (caught) {
-      setError(errorMessage(caught));
+      setError(errorMessage(caught, copy));
       setDetail(emptyDetail);
     } finally {
       setIsLoadingDetail(false);
@@ -150,7 +150,7 @@ export default function App() {
       await refreshJobs(token);
       await refreshDetail(selectedJobId, token);
     } catch (caught) {
-      setError(errorMessage(caught));
+      setError(errorMessage(caught, copy));
     } finally {
       setActionState("");
     }
@@ -162,14 +162,14 @@ export default function App() {
   }
 
   return (
-    <main className="min-h-screen bg-linen-white px-4 py-5 text-true-black md:px-6">
-      <header className="mx-auto flex max-w-[var(--page-max-width)] flex-col gap-3">
+    <main className="min-h-screen bg-linen-white px-4 py-4 text-true-black md:px-6">
+      <header className="mx-auto flex max-w-[var(--page-max-width)] flex-col gap-2">
         <nav className="flex flex-col gap-3 rounded-xl border border-hairline-gray bg-linen-white px-4 py-3 md:flex-row md:items-center md:justify-between">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-forest-ink text-sm text-linen-white">✓</span>
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-forest-ink text-sm text-linen-white">✓</span>
             <div className="min-w-0">
-              <p className="text-xs text-charcoal">{copy.appEyebrow}</p>
-              <h1 className="font-display text-[28px] leading-[1.12] text-forest-ink md:text-[36px]">
+              <p className="text-[12px] leading-4 text-charcoal">{copy.appEyebrow}</p>
+              <h1 className="font-sans text-[24px] font-semibold leading-[1.15] text-forest-ink md:text-[26px]">
                 {copy.appTitle}
               </h1>
             </div>
@@ -191,13 +191,13 @@ export default function App() {
         </nav>
 
         <form
-          className="grid gap-3 rounded-xl border border-hairline-gray bg-linen px-3 py-3 md:grid-cols-[120px_minmax(240px,1fr)_auto_auto] md:items-center"
+          className="grid gap-3 rounded-xl border border-hairline-gray bg-linen px-4 py-3 md:grid-cols-[120px_minmax(240px,1fr)_auto_auto] md:items-center"
           onSubmit={(event) => {
             event.preventDefault();
             saveToken();
           }}
         >
-          <label className="text-sm text-charcoal" htmlFor="admin-token">
+          <label className="text-[13px] font-medium text-charcoal" htmlFor="admin-token">
             {copy.tokenLabel}
           </label>
           <Input
@@ -215,7 +215,7 @@ export default function App() {
             {copy.refresh}
           </Button>
         </form>
-        <div className="flex flex-col gap-3 rounded-xl border border-hairline-gray bg-linen-white px-4 py-3 md:flex-row md:items-center md:justify-between" aria-live="polite">
+        <div className="flex flex-col gap-3 rounded-xl border border-hairline-gray bg-linen-white px-4 py-2.5 md:flex-row md:items-center md:justify-between" aria-live="polite">
           <div className="flex flex-wrap gap-2">
             <MetricPill label={copy.totalJobs} value={jobStats.total} />
             <MetricPill label={copy.runningJobs} value={jobStats.running} />
@@ -224,13 +224,13 @@ export default function App() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge>{jobs.length}</Badge>
-            <span className="text-sm text-charcoal">{renderStatus(status, copy)}</span>
+            <span className="text-[13px] text-charcoal">{renderStatus(status, copy)}</span>
             {error ? <strong className="rounded-full bg-forest-ink px-3 py-1 text-xs font-normal text-linen-white">{error}</strong> : null}
           </div>
         </div>
       </header>
 
-      <section className="mx-auto mt-4 grid max-w-[var(--page-max-width)] items-start gap-4 xl:grid-cols-[minmax(500px,0.9fr)_minmax(0,1.1fr)]">
+      <section className="mx-auto mt-3 grid max-w-[var(--page-max-width)] items-start gap-4 xl:grid-cols-[minmax(520px,0.95fr)_minmax(0,1.05fr)]">
         <JobList
           jobs={jobs}
           selectedJobId={selectedJobId}
@@ -256,7 +256,8 @@ export default function App() {
   );
 }
 
-function errorMessage(error: unknown): string {
+function errorMessage(error: unknown, copy: AdminCopy): string {
+  if (error instanceof Error && error.message === "admin_access_key_required") return copy.tokenRequired;
   return error instanceof Error ? error.message : "Unknown error";
 }
 
@@ -271,9 +272,9 @@ function renderStatus(status: StatusState, copy: AdminCopy): string {
 
 function MetricPill({ label, value }: { label: string; value: number }) {
   return (
-    <span className="inline-flex items-center gap-2 rounded-full bg-linen px-3 py-1 text-xs text-charcoal">
+    <span className="inline-flex items-center gap-2 rounded-full bg-linen px-2.5 py-1 text-[12px] leading-4 text-charcoal">
       {label}
-      <strong className="font-normal text-forest-ink">{value}</strong>
+      <strong className="font-semibold text-forest-ink">{value}</strong>
     </span>
   );
 }
