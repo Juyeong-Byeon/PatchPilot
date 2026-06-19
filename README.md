@@ -2,6 +2,8 @@
 
 Lark Base tickets in, audited GitHub pull requests out.
 
+Canonical repository: `https://github.com/Juyeong-Byeon/ticket-to-pr`
+
 This repository is a Docker Compose MVP for routing approved Lark Base records
 to an agent runner, collecting logs/artifacts, applying repository policy gates,
 and publishing draft pull requests. It includes an admin console for Korean and
