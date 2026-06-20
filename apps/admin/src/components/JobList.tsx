@@ -192,8 +192,8 @@ function formatRunningPhase(job: JobRecord, locale: Locale, copy: AdminCopy): st
 function StatusPill({ value, label }: { value: string; label: string }) {
   const normalized = value.toLowerCase();
   const variant =
-    normalized.includes("failed") || normalized.includes("cancel")
-      ? "dark"
+    normalized.includes("failed") || normalized === "cancelfailed"
+      ? "danger"
       : normalized.includes("review") || normalized.includes("queued")
         ? "warning"
         : "default";

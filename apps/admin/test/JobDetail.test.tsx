@@ -41,6 +41,28 @@ describe("JobDetail", () => {
     expect(screen.getByRole("button", { name: "재시도" })).toBeEnabled();
   });
 
+  it("uses danger colors for all failure badges", () => {
+    render(
+      <JobDetail
+        {...baseProps}
+        job={{
+          id: "job_1",
+          phase: "Failed",
+          outcome: "FailedInternal",
+          failure_category: "github_auth"
+        }}
+      />
+    );
+
+    const outcome = screen.getByText("내부 실패");
+    const category = screen.getByText("github_auth");
+
+    expect(outcome).toHaveClass("bg-danger-wash", "text-danger", "border-danger");
+    expect(outcome).not.toHaveClass("bg-forest-ink");
+    expect(category).toHaveClass("bg-danger-wash", "text-danger", "border-danger");
+    expect(category).not.toHaveClass("bg-forest-ink");
+  });
+
   it("can render an empty detail state and then hydrate the job after refresh", () => {
     const { rerender } = render(
       <JobDetail

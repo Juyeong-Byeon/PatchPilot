@@ -94,7 +94,10 @@ describe("JobList", () => {
     expect(within(completedRow).getByText("PR 리뷰 대기중")).toBeInTheDocument();
     expect(within(completedRow).queryByText("완료")).not.toBeInTheDocument();
     expect(within(failedRow).getAllByTestId("job-status-pill")).toHaveLength(1);
-    expect(within(failedRow).getByText("내부 실패")).toBeInTheDocument();
+    const failurePill = within(failedRow).getByText("내부 실패");
+    expect(failurePill).toBeInTheDocument();
+    expect(failurePill).toHaveClass("bg-danger-wash", "text-danger", "border-danger");
+    expect(failurePill).not.toHaveClass("bg-forest-ink");
     expect(within(failedRow).queryByText("실패")).not.toBeInTheDocument();
   });
 });

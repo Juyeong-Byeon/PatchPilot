@@ -87,7 +87,7 @@ export function JobDetail({
               <p className="truncate font-mono text-[12px] leading-4 text-graphite" title={job.id}>{job.id}</p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <Badge>{translateState(job.phase, locale)}</Badge>
-                <Badge variant={String(job.outcome).includes("Failed") ? "dark" : "outline"}>{translateState(job.outcome, locale)}</Badge>
+                <Badge variant={String(job.outcome).includes("Failed") ? "danger" : "outline"}>{translateState(job.outcome, locale)}</Badge>
               </div>
               <h2 className="mt-3 font-sans text-[22px] font-semibold leading-[1.25] text-forest-ink">
                 {stringValue(job.repository, copy)}
@@ -437,7 +437,7 @@ function Fact({ label, value, tone }: { label: string; value: string; tone?: "da
     <div className="min-w-0 rounded-xl border border-hairline-gray bg-linen-white p-3">
       <dt className="mb-2 text-[12px] leading-4 text-charcoal">{label}</dt>
       <dd className="m-0 break-words text-[13px] leading-5 text-true-black">
-        {tone === "danger" && value !== "-" ? <Badge variant="dark">{value}</Badge> : value}
+        {tone === "danger" && value !== "-" ? <Badge variant="danger">{value}</Badge> : value}
       </dd>
     </div>
   );

@@ -8,6 +8,7 @@ const badgeVariants = cva("inline-flex max-w-full items-center rounded-full bord
       default: "border-transparent bg-mist-blue text-forest-ink shadow-electric-blue/10",
       outline: "border-hairline-gray bg-linen-white text-charcoal shadow-midnight-ink/5",
       warning: "border-transparent bg-linen text-cobalt-surface shadow-cobalt-surface/10",
+      danger: "border-danger bg-danger-wash text-danger shadow-danger/10",
       dark: "border-transparent bg-forest-ink text-linen-white shadow-midnight-ink/15"
     }
   },
