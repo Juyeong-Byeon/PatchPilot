@@ -399,7 +399,9 @@ The admin UI supports:
 - Datadog-style phase spans for `Queued -> Planning -> Implementing ->
 PolicyChecking -> Publishing -> Completed`.
 - Span-to-log correlation by source for faster debugging.
-- Pipeline stage notes (plan / review / verify) rendered from the staged runner.
+- Pipeline stage notes (plan / review / verify) rendered from the staged runner,
+  plus a live sub-stage indicator on the Implementing step (e.g. "리뷰 3/4") and
+  highlighted stage dividers in the log stream.
 - Artifacts, raw logs, retry, and cancel actions. Retry is enabled only for
   internally-failed jobs, matching the backend retry preflight. Cancelling a
   running job stops the runner container and shows where it was cancelled.

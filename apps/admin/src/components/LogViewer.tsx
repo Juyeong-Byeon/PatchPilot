@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import { Copy, Download, X } from "lucide-react";
 import type { LogLine } from "../api.js";
 import type { AdminCopy } from "../i18n.js";
+import { isStageBannerText } from "../lib/status.js";
+import { cn } from "../lib/utils.js";
 import { Button } from "./ui/button.js";
 import { Card, CardTitle } from "./ui/card.js";
 import { Input } from "./ui/input.js";
@@ -108,7 +110,16 @@ export function LogViewer({
       ) : null}
       <div>
         <pre className="terminal-surface m-0 max-h-[320px] min-h-[180px] overflow-auto p-4 text-[12px] leading-5 whitespace-pre-wrap text-true-black">
-          {text || copy.noLogs}
+          {filteredLogs.length === 0
+            ? copy.noLogs
+            : filteredLogs.map((line, index) => (
+                <span
+                  key={String(line.id ?? index)}
+                  className={cn("block", isStageBannerText(line.text) && "mt-1 font-semibold text-cobalt-surface")}
+                >
+                  {formatLine(line, copy)}
+                </span>
+              ))}
         </pre>
       </div>
     </>
