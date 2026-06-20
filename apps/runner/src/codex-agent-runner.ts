@@ -134,6 +134,9 @@ export function runCodexCommand(input: {
   command: string;
   args: string[];
   prompt: string;
+  /** Per-invocation wall-clock budget. The outer runner timeout is the hard backstop. */
+  timeoutMs?: number;
+  killGraceMs?: number;
 }): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(input.command, input.args, {
@@ -141,9 +144,31 @@ export function runCodexCommand(input: {
       env: { ...process.env, CODEX_HOME: input.codexHome },
       stdio: ["pipe", "inherit", "inherit"],
     });
+    let timedOut = false;
+    let timer: NodeJS.Timeout | undefined;
+    let killTimer: NodeJS.Timeout | undefined;
+    const clearTimers = () => {
+      if (timer) clearTimeout(timer);
+      if (killTimer) clearTimeout(killTimer);
+    };
+    if (input.timeoutMs && input.timeoutMs > 0) {
+      timer = setTimeout(() => {
+        timedOut = true;
+        child.kill("SIGTERM");
+        killTimer = setTimeout(() => child.kill("SIGKILL"), input.killGraceMs ?? 2000);
+      }, input.timeoutMs);
+    }
     child.stdin.end(input.prompt);
-    child.on("error", reject);
+    child.on("error", (error) => {
+      clearTimers();
+      reject(error);
+    });
     child.on("close", (code, signal) => {
+      clearTimers();
+      if (timedOut) {
+        reject(new Error(`codex runner timed out after ${input.timeoutMs}ms`));
+        return;
+      }
       if (code === 0) {
         resolve();
         return;
@@ -181,6 +206,8 @@ export async function writeResultArtifacts(input: {
   reviewSummary?: string;
   /** Extra markdown sections appended to pr-body.md (e.g. staged plan/review/qa output). */
   prBodySections?: string[];
+  /** Real verification results to record in result.json (gated by the policy gate). */
+  tests?: Array<{ command: string; status: "passed" | "failed" | "skipped"; summary?: string }>;
 }): Promise<void> {
   const paths = getWorkspacePaths(input.workspaceRoot);
   const headSha = await gitStdout(["rev-parse", "HEAD"], input.repoDir);
@@ -214,7 +241,7 @@ export async function writeResultArtifacts(input: {
     pushSha: headSha,
     changedFiles,
     commits,
-    tests: [
+    tests: input.tests ?? [
       {
         command: "git diff --name-only",
         status: "passed",

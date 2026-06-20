@@ -269,26 +269,40 @@ Codex skills directory can contain symlinks to gstack helper binaries.
 ### gstack staged pipeline (plan → implement → review → verify)
 
 `codex-agent-runner.js` runs the agent in a single pass. To run the agent through
-gstack's staged workflow instead — a separate Codex pass per stage, each scoped to
-a gstack skill — point `GSTACK_ARGS` at the staged runner:
+gstack's staged workflow instead — a separate Codex pass per stage (plan and
+review use gstack skills) — point `GSTACK_ARGS` at the staged runner (keep
+`GSTACK_COMMAND=node`):
 
 ```env
+GSTACK_COMMAND=node
 GSTACK_ARGS=/opt/runner/apps/runner/dist/gstack-staged-runner.js
 ```
 
 Stages run sequentially and fail fast (the stage name is included in the failure):
 
 1. **plan** — `gstack-autoplan` writes an implementation plan to `output/plan.md`.
-2. **implement** — plain Codex coding driven by the plan; creates local commits.
+2. **implement** — plain Codex coding driven by the plan; creates local commits
+   (committed before review so review/verify see the full diff).
 3. **review** — `gstack-review` analyzes the diff and fixes blocking issues.
-4. **verify** — runs the project's tests/build (and may use `gstack-qa` for a
-   runnable web app).
+4. **verify** — runs the project's tests/build and writes a structured
+   `output/qa.json` (`{passed, command, summary}`). A failing verification **fails
+   the run**, and the result is recorded in the policy-gated `tests` field.
 
 Each stage's notes are folded into the PR body, and the platform still derives the
 PR's trusted git evidence after the run. The same `CODEX_*` /
 `GSTACK_SKILL_SOURCE_DIR` mounts apply; the runner image bundles `ripgrep`, which
-gstack skills require. Browser-based QA via `gstack-qa` additionally needs a
-headless browser in the runner image (not bundled yet).
+gstack skills require.
+
+Operational notes:
+
+- **Cost:** four Codex passes each reload a large gstack skill, so a staged run
+  costs roughly 4× the single-pass runner. Prefer it for higher-stakes tickets.
+- **Cancel:** cancellation is checked between platform phases, so it does not
+  interrupt a staged run mid-pass (the container runs to completion). The whole
+  pipeline shares one timeout, split evenly across stages.
+- **Rollback:** point `GSTACK_ARGS` back at `codex-agent-runner.js` for single-pass.
+- Browser-based QA via `gstack-qa` needs a headless browser in the runner image
+  (not bundled); the verify stage uses test/build checks, not browser QA.
 
 ## Lark Webhook
 
