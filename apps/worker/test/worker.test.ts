@@ -85,6 +85,7 @@ describe("processAgentJob", () => {
       prTitle: "Fix login",
       prBody: "Generated body"
     });
+    const larkUpdater = vi.fn().mockResolvedValue(undefined);
 
     const outcome = await processAgentJob(
       { jobId: "job_1", ticketSnapshotId: "ts_1", larkRecordId: "rec_1", triggerVersion: "v1" },
@@ -92,6 +93,7 @@ describe("processAgentJob", () => {
         repos,
         executor,
         publisher,
+        larkUpdater,
         policyConfig: { repositoryAllowlist: ["acme/web"], protectedPathDenylist: ["infra/**"] },
         ids: {
           runId: () => "run_1",
@@ -107,6 +109,22 @@ describe("processAgentJob", () => {
     expect(publisher).toHaveBeenCalledWith(expect.objectContaining({ title: "Fix login" }));
     expect(repos.savePullRequest).toHaveBeenCalledWith(expect.objectContaining({ id: "pr_1", prUrl: expect.any(String) }));
     expect(repos.transitionJob).toHaveBeenLastCalledWith("job_1", "Completed", "NeedsReview");
+    expect(larkUpdater).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recordId: "rec_1",
+        status: "Running",
+        jobId: "job_1"
+      })
+    );
+    expect(larkUpdater).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        recordId: "rec_1",
+        status: "NeedsReview",
+        jobId: "job_1",
+        prUrl: "https://github.local/acme/web/pull/mock-job_1",
+        prNumber: 1
+      })
+    );
   });
 
   it("writes simplified progress logs for the operator while each phase runs", async () => {
@@ -163,7 +181,7 @@ describe("processAgentJob", () => {
         }),
         expect.objectContaining({
           source: "publisher",
-          text: "[게시] 브랜치를 푸시하고 draft PR을 생성하고 있습니다."
+          text: "[게시] 브랜치를 푸시하고 PR을 생성하고 있습니다."
         }),
         expect.objectContaining({
           source: "worker",

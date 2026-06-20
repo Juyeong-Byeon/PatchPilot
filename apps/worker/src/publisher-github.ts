@@ -46,7 +46,7 @@ export async function publishGitHubPullRequest(
     body: input.body,
     head: input.workBranch,
     base: input.targetBranch,
-    draft: true
+    draft: false
   });
 
   return {

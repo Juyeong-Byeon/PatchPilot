@@ -100,6 +100,24 @@ export interface AppendAuditEventInput {
   metadata?: unknown;
 }
 
+export interface MarkPullRequestMergedInput {
+  repository: string;
+  prNumber: number;
+  prUrl?: string;
+  mergedAt?: string | null;
+}
+
+export type MarkPullRequestMergedResult =
+  | {
+      status: "updated";
+      jobId: string;
+      runId: string;
+      larkRecordId: string;
+      prUrl: string;
+      prNumber: number;
+    }
+  | { status: "not_found" };
+
 export interface RetryPreflight {
   jobId: string;
   phase: string;

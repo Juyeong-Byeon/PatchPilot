@@ -2,6 +2,7 @@ export * from "./branch.js";
 export * from "./config.js";
 export * from "./ids.js";
 export * from "./lark.js";
+export * from "./lark-status.js";
 export * from "./masking.js";
 export * from "./policy.js";
 export * from "./result-schema.js";

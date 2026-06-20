@@ -1,4 +1,4 @@
-# Ticket-to-PR Operations
+# PatchPilot Operations
 
 This runbook covers the local Docker Compose MVP for receiving Lark Base tickets,
 running agent work, and publishing reviewable GitHub pull requests.
@@ -36,7 +36,16 @@ Copy `.env.example` to `.env` and replace secrets before starting the stack.
 | `LARK_APP_ID` | Lark app id. |
 | `LARK_APP_SECRET` | Lark app secret. |
 | `LARK_WEBHOOK_SECRET` | Shared secret for validating webhook origin. |
+| `LARK_BASE_APP_TOKEN` | Lark Base app token for source-record write-back. |
+| `LARK_BASE_TABLE_ID` | Lark Base table id for source-record write-back. |
+| `LARK_STATUS_FIELD` | Lark field that receives `Queued`, `Running`, `NeedsReview`, `Completed`, failed states, or `Cancelled`. |
+| `LARK_JOB_ID_FIELD` | Lark field that receives the PatchPilot job id. |
+| `LARK_PR_URL_FIELD` | Lark field that receives the published PR URL. |
+| `LARK_PR_NUMBER_FIELD` | Lark field that receives the published PR number. |
+| `LARK_FAILURE_FIELD` | Lark field that receives the latest failure summary. |
+| `LARK_UPDATED_AT_FIELD` | Lark field that receives the latest write-back timestamp. |
 | `GITHUB_TOKEN` | GitHub fine-grained PAT used by the platform publisher. |
+| `GITHUB_WEBHOOK_SECRET` | Shared secret for GitHub pull request merge webhooks. |
 | `REPOSITORY_ALLOWLIST` | Comma-separated `owner/repo` allowlist. |
 | `PROTECTED_PATH_DENYLIST` | Comma-separated protected paths/globs that block publish. |
 | `JOB_WORKSPACE_ROOT` | Host/container path where job workspaces are created. |
@@ -62,6 +71,20 @@ Use a fine-grained personal access token, not a classic broad token.
 - Repository permissions: `Pull requests: Read and write`.
 - Avoid granting organization, administration, secrets, workflow, or packages
   permissions for the MVP publisher.
+
+## GitHub Webhook
+
+Add a repository webhook that sends pull request events to:
+
+```text
+<PUBLIC_BASE_URL>/webhooks/github
+```
+
+Set the webhook secret to `GITHUB_WEBHOOK_SECRET`. PatchPilot verifies
+`x-hub-signature-256`, ignores non-merged PR closures, and marks the matching
+job `Completed` after GitHub reports that the PR was merged. The same transition
+is written back to the source Lark Base record when Lark write-back is
+configured.
 
 ## Docker Startup
 
@@ -108,6 +131,8 @@ executor or pushing to GitHub.
 4. Confirm the job appears in Admin.
 5. Confirm timeline events, logs, artifacts, and simulated PR metadata appear.
 6. Confirm the successful user-facing outcome is `NeedsReview`.
+7. Confirm Lark receives `PatchPilot Status=NeedsReview` when write-back is
+   configured.
 
 ## Real Executor Smoke
 
@@ -154,7 +179,9 @@ Use real mode only against a disposable test repository in the allowlist.
    runs the policy gate against the exact audited commit SHA.
 10. Confirm the platform pushes that audited SHA to the work branch and creates
     a PR.
-11. Confirm Admin and Lark show the PR URL.
+11. Confirm Admin and Lark show the PR URL with `NeedsReview`.
+12. Merge the test PR and confirm the GitHub webhook marks Admin and Lark as
+    `Completed`.
 
 If worker or runner source changed since the last smoke, rebuild before
 submitting the ticket:
@@ -185,7 +212,8 @@ Failure triage should start in Admin:
 - Check the job `Failure` and `Next Action` fields.
 - Inspect the run timeline for the first failing phase.
 - Filter logs by `api`, `worker`, `runner`, `gstack`, `docker`, or `github`.
-- Review artifacts, especially `result_json`, policy reports, and PR drafts.
+- Review artifacts, especially `result_json`, policy reports, and PR text
+  drafts.
 
 ## Retry and Cancel
 
@@ -202,7 +230,7 @@ Both routes require `Authorization: Bearer <ADMIN_TOKEN>`.
 ## Security Boundaries
 
 - Admin routes are protected by `ADMIN_TOKEN`; keep it out of source control.
-- The runner creates local commits and PR drafts, but the platform owns policy
+- The runner creates local commits and PR text drafts, but the platform owns policy
   gates, push, and PR creation.
 - The GitHub token belongs to the platform publisher, not to the agent process.
 - Repository access is constrained by `REPOSITORY_ALLOWLIST` before the runner

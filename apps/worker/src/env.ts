@@ -1,3 +1,5 @@
+import { readLarkRecordUpdaterConfig, type LarkRecordUpdaterConfig } from "@ticket-to-pr/core";
+
 export type WorkerExecutorMode = "mock" | "gstack";
 export type WorkerPublisherMode = "mock" | "github";
 
@@ -19,6 +21,7 @@ export interface WorkerEnv {
   gstackSkillSourceDir?: string;
   jobTimeoutSeconds: number;
   githubToken?: string;
+  larkRecordUpdaterConfig?: LarkRecordUpdaterConfig;
 }
 
 export function readWorkerEnv(source: NodeJS.ProcessEnv = process.env): WorkerEnv {
@@ -49,7 +52,8 @@ export function readWorkerEnv(source: NodeJS.ProcessEnv = process.env): WorkerEn
     codexSkillsDir: parseOptional(source.CODEX_SKILLS_DIR),
     gstackSkillSourceDir: parseOptional(source.GSTACK_SKILL_SOURCE_DIR),
     jobTimeoutSeconds: parsePositiveInteger(source.WORKER_JOB_TIMEOUT_SECONDS ?? source.JOB_TIMEOUT_SECONDS, 3600),
-    githubToken
+    githubToken,
+    larkRecordUpdaterConfig: readLarkRecordUpdaterConfig(source)
   };
 }
 

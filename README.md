@@ -10,7 +10,7 @@ Canonical repository: `https://github.com/Juyeong-Byeon/ticket-to-pr`
 
 This repository is a Docker Compose MVP for routing approved Lark Base records
 to an agent runner, collecting logs/artifacts, applying repository policy gates,
-and publishing draft pull requests. It includes an admin console for Korean and
+and publishing pull requests. It includes an admin console for Korean and
 English operations teams to inspect job state, retry or cancel jobs, read logs,
 and debug execution with a Datadog-style span flow.
 
@@ -22,7 +22,9 @@ and debug execution with a Datadog-style span flow.
   an isolated Docker workspace.
 - Stores job phases, run attempts, logs, artifacts, policy results, and pull
   request metadata in Postgres.
-- Publishes draft pull requests through GitHub only after policy checks pass.
+- Publishes GitHub pull requests only after policy checks pass.
+- Writes job status, PR metadata, and failure summaries back to the source Lark
+  Base record.
 - Provides an admin UI with Korean-first i18n, Tailwind v4, shadcn-style
   primitives, and Ease Health visual tokens.
 
@@ -36,7 +38,7 @@ Lark Base
   -> Worker
   -> Docker runner workspace
   -> Policy gate
-  -> GitHub draft pull request
+  -> GitHub pull request
   -> Admin console for observability
 ```
 
@@ -62,6 +64,7 @@ sequenceDiagram
   API->>API: Verify x-lark-webhook-secret
   API->>DB: Upsert job, ticket snapshot, audit event
   API->>Queue: Enqueue run job
+  API->>Lark: Mark PatchPilot Status = Queued
   Admin->>API: Poll jobs, events, logs, artifacts
   API->>DB: Read operational state
   API-->>Admin: Job list and detail payloads
@@ -71,7 +74,7 @@ sequenceDiagram
   Worker->>Runner: Launch isolated workspace container
   Runner->>GitHub: Clone or fetch target repository
   Runner->>Agent: Run configured agent command
-  Agent->>Runner: Local commit, draft PR title/body, artifacts
+  Agent->>Runner: Local commit, PR title/body, artifacts
   Runner-->>Worker: Agent result contract
   Worker->>DB: Persist logs, artifacts, run events
 
@@ -79,12 +82,19 @@ sequenceDiagram
   Policy-->>Worker: Pass or fail with reason
   alt Policy passes
     Worker->>GitHub: Push work branch
-    Worker->>GitHub: Open draft pull request
+    Worker->>GitHub: Open pull request
     GitHub-->>Worker: PR URL and metadata
-    Worker->>DB: Mark Completed and store PR metadata
+    Worker->>DB: Mark NeedsReview and store PR metadata
+    Worker->>Lark: Mark PatchPilot Status = NeedsReview
   else Policy fails or runner errors
     Worker->>DB: Mark Failed, failure category, next action
+    Worker->>Lark: Mark PatchPilot Status = failed outcome
   end
+
+  GitHub->>API: PR closed webhook
+  API->>API: Verify x-hub-signature-256
+  API->>DB: If merged, mark job Completed
+  API->>Lark: Mark PatchPilot Status = Completed
 
   Admin->>API: Refresh detail every 3 seconds
   API->>DB: Read latest job trace
@@ -142,7 +152,16 @@ REDIS_URL=redis://redis:6379
 LARK_APP_ID=cli_xxx
 LARK_APP_SECRET=secret_xxx
 LARK_WEBHOOK_SECRET=webhook_secret_xxx
+LARK_BASE_APP_TOKEN=base_app_token_xxx
+LARK_BASE_TABLE_ID=table_xxx
+LARK_STATUS_FIELD=PatchPilot Status
+LARK_JOB_ID_FIELD=PatchPilot Job ID
+LARK_PR_URL_FIELD=PR URL
+LARK_PR_NUMBER_FIELD=PR Number
+LARK_FAILURE_FIELD=PatchPilot Failure
+LARK_UPDATED_AT_FIELD=PatchPilot Updated At
 GITHUB_TOKEN=github_pat_xxx
+GITHUB_WEBHOOK_SECRET=github_webhook_secret_xxx
 REPOSITORY_ALLOWLIST=owner/repo
 PROTECTED_PATH_DENYLIST=.env,.env.*,infra/**,terraform/**,secrets/**,migrations/prod/**
 EXECUTOR_MODE=mock
@@ -162,7 +181,7 @@ Use `WORKER_EXECUTOR_MODE` and `WORKER_PUBLISHER_MODE` to override worker modes
 without changing app-wide variables.
 
 `gstack` is an executor mode, not a publisher mode. Use `PUBLISHER_MODE=github`
-for real draft PR creation. Older local `.env` files with
+for real PR creation. Older local `.env` files with
 `PUBLISHER_MODE=gstack` are treated as `github` by the worker for compatibility,
 but new configs should use `github` explicitly.
 
@@ -172,6 +191,7 @@ Production-like GitHub publishing requires:
 WORKER_EXECUTOR_MODE=gstack
 WORKER_PUBLISHER_MODE=github
 GITHUB_TOKEN=github_pat_xxx
+GITHUB_WEBHOOK_SECRET=github_webhook_secret_xxx
 REPOSITORY_ALLOWLIST=Juyeong-Byeon/example-repo
 ```
 
@@ -218,6 +238,32 @@ x-lark-webhook-secret: <LARK_WEBHOOK_SECRET>
 ```
 
 Requests without the shared secret are rejected before ticket processing.
+
+## GitHub Webhook
+
+Configure a GitHub repository webhook for pull request events:
+
+```http
+POST <PUBLIC_BASE_URL>/webhooks/github
+x-hub-signature-256: sha256=<HMAC>
+```
+
+Use `GITHUB_WEBHOOK_SECRET` as the webhook secret. When GitHub sends a merged
+`pull_request.closed` event, PatchPilot marks the matching job `Completed` and
+writes `PatchPilot Status=Completed` back to Lark.
+
+## Lark Status Write-back
+
+Set `LARK_BASE_APP_TOKEN` and `LARK_BASE_TABLE_ID` to let PatchPilot update the
+source Lark Base record after each major state transition. The default field
+mapping writes:
+
+- `PatchPilot Status`: `Queued`, `Running`, `NeedsReview`, `Completed`,
+  `FailedActionable`, `FailedInternal`, or `Cancelled`.
+- `PatchPilot Job ID`: durable job id for Admin lookup.
+- `PR URL` and `PR Number`: published pull request metadata.
+- `PatchPilot Failure`: latest failure summary.
+- `PatchPilot Updated At`: ISO timestamp of the write-back.
 
 ## Runner Image
 
@@ -306,7 +352,7 @@ Postgres database.
 - Completed agent results must include full 40-character Git SHAs and a real PR
   body artifact.
 - The platform owns push and PR creation. The agent creates local commits and
-  draft content only.
+  PR text drafts only.
 
 ## Operations
 

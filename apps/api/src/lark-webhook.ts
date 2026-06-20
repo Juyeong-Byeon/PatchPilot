@@ -5,6 +5,7 @@ import {
   parseLarkTicket,
   shouldCreateJobFromTicket
 } from "@ticket-to-pr/core";
+import type { LarkStatusUpdater } from "@ticket-to-pr/core";
 import type { Repositories } from "@ticket-to-pr/db";
 import type { AgentJobPayload } from "@ticket-to-pr/queue";
 
@@ -21,7 +22,8 @@ export interface AgentQueue {
 export async function handleLarkWebhook(
   input: LarkWebhookInput,
   repos: Pick<Repositories, "createJobFromTicket" | "appendEvent">,
-  queue: AgentQueue
+  queue: AgentQueue,
+  larkUpdater?: LarkStatusUpdater
 ): Promise<{ action: "ignored" | "duplicate" | "enqueued"; jobId?: string }> {
   const ticket = parseLarkTicket(input.recordId, input.triggerVersion, input.fields);
   if (!shouldCreateJobFromTicket(ticket)) return { action: "ignored" };
@@ -46,6 +48,17 @@ export async function handleLarkWebhook(
     source: "api",
     message: `Queued ${createWorkBranchName(ticket.larkRecordId, ticket.title)}`
   });
+  if (larkUpdater) {
+    try {
+      await larkUpdater({
+        recordId: ticket.larkRecordId,
+        status: "Queued",
+        jobId: created.jobId
+      });
+    } catch {
+      // Lark write-back must not fail webhook ingestion after the job is queued.
+    }
+  }
 
   return { action: "enqueued", jobId: created.jobId };
 }

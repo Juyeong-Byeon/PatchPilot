@@ -1,7 +1,7 @@
 import { mkdir, readFile } from "node:fs/promises";
 import { isAbsolute, join, resolve, sep } from "node:path";
 import { createArtifactId, createPrefixedId, createRunId, deriveOutcome, parseAgentResult } from "@ticket-to-pr/core";
-import type { AgentResult, InternalPhase, Priority, UserOutcome } from "@ticket-to-pr/core";
+import type { AgentResult, InternalPhase, LarkStatusUpdater, Priority, UserOutcome } from "@ticket-to-pr/core";
 import type { AgentJobPayload } from "@ticket-to-pr/queue";
 import { getWorkspacePaths } from "@ticket-to-pr/runner-contract";
 import { evaluatePolicyGate, evaluatePreExecutionPolicy, type WorkerPolicyConfig } from "./policy-gate.js";
@@ -101,6 +101,7 @@ export interface ProcessAgentJobOptions {
   repos: WorkerRepositories;
   executor: Executor;
   publisher: Publisher;
+  larkUpdater?: LarkStatusUpdater;
   policyConfig: WorkerPolicyConfig;
   workspaceRoot?: string;
   ids?: {
@@ -160,10 +161,23 @@ export async function processAgentJob(payload: AgentJobPayload, options: Process
       sequence: progressSequence++,
       text: `[${phaseLabel(phase)}] ${message}`
     });
+  const transitionJob = async (
+    phase: InternalPhase,
+    outcome: UserOutcome,
+    reason?: string,
+    lark?: { status: string; prUrl?: string; prNumber?: number; failureReason?: string }
+  ) => {
+    if (reason === undefined) {
+      await options.repos.transitionJob(job.jobId, phase, outcome);
+    } else {
+      await options.repos.transitionJob(job.jobId, phase, outcome, reason);
+    }
+    if (lark) await syncLarkStatus(options.larkUpdater, job, lark);
+  };
 
   try {
     if (await isCancelRequested(options.repos, job.jobId)) {
-      await options.repos.transitionJob(job.jobId, "Cancelled", "Cancelled");
+      await transitionJob("Cancelled", "Cancelled", undefined, { status: "Cancelled" });
       await appendEvent("Cancelled", "worker.cancelled", "Worker stopped before execution");
       return { status: "cancelled", runId: run.runId };
     }
@@ -182,16 +196,19 @@ export async function processAgentJob(payload: AgentJobPayload, options: Process
         kind: "policy-gate",
         content: preExecutionGate.artifact
       });
-      await options.repos.transitionJob(job.jobId, "Failed", "FailedActionable", preExecutionGate.reason);
+      await transitionJob("Failed", "FailedActionable", preExecutionGate.reason, {
+        status: "FailedActionable",
+        failureReason: preExecutionGate.reason
+      });
       await appendEvent("Failed", "policy.blocked", preExecutionGate.reason ?? "Pre-execution policy gate blocked job", preExecutionGate.artifact);
       return { status: "policy_blocked", runId: run.runId };
     }
 
-    await options.repos.transitionJob(job.jobId, "Planning", deriveOutcome("Planning"));
+    await transitionJob("Planning", deriveOutcome("Planning"), undefined, { status: "Running" });
     await appendEvent("Planning", "worker.started", "Worker picked up job");
     await appendProgressLog("Planning", "worker", "작업자가 티켓과 저장소 정책을 확인하고 있습니다.");
 
-    await options.repos.transitionJob(job.jobId, "Implementing", deriveOutcome("Implementing"));
+    await transitionJob("Implementing", deriveOutcome("Implementing"));
     await appendEvent("Implementing", "runner.started", "AI runner started", undefined, "gstack");
     await appendProgressLog("Implementing", "gstack", "실행 워크스페이스를 준비하고 AI runner를 시작합니다.");
     const rawResult = await options.executor({
@@ -210,19 +227,20 @@ export async function processAgentJob(payload: AgentJobPayload, options: Process
     });
 
     if (await isCancelRequested(options.repos, job.jobId)) {
-      await options.repos.transitionJob(job.jobId, "Cancelled", "Cancelled");
+      await transitionJob("Cancelled", "Cancelled", undefined, { status: "Cancelled" });
       await appendEvent("Cancelled", "worker.cancelled", "Worker stopped before policy check");
       return { status: "cancelled", runId: run.runId };
     }
 
     if (result.status !== "completed") {
       const reason = result.failure?.message ?? `Agent result status: ${result.status}`;
-      await options.repos.transitionJob(job.jobId, "Failed", result.retryable ? "FailedInternal" : "FailedActionable", reason);
+      const outcome = result.retryable ? "FailedInternal" : "FailedActionable";
+      await transitionJob("Failed", outcome, reason, { status: outcome, failureReason: reason });
       await appendEvent("Failed", "worker.failed", reason, result.failure);
       return { status: "failed", runId: run.runId };
     }
 
-    await options.repos.transitionJob(job.jobId, "PolicyChecking", deriveOutcome("PolicyChecking"));
+    await transitionJob("PolicyChecking", deriveOutcome("PolicyChecking"));
     await appendEvent("PolicyChecking", "policy.started", "Policy gate started", undefined, "policy");
     await appendProgressLog("PolicyChecking", "policy", "변경 파일과 저장소 허용 정책을 검사하고 있습니다.");
     const gate = evaluatePolicyGate(result, {
@@ -239,20 +257,20 @@ export async function processAgentJob(payload: AgentJobPayload, options: Process
       content: gate.artifact
     });
     if (!gate.allowed) {
-      await options.repos.transitionJob(job.jobId, "Failed", "FailedActionable", gate.reason);
+      await transitionJob("Failed", "FailedActionable", gate.reason, { status: "FailedActionable", failureReason: gate.reason });
       await appendEvent("Failed", "policy.blocked", gate.reason ?? "Policy gate blocked result", gate.artifact);
       return { status: "policy_blocked", runId: run.runId };
     }
 
     if (await isCancelRequested(options.repos, job.jobId)) {
-      await options.repos.transitionJob(job.jobId, "Cancelled", "Cancelled");
+      await transitionJob("Cancelled", "Cancelled", undefined, { status: "Cancelled" });
       await appendEvent("Cancelled", "worker.cancelled", "Worker stopped before publishing");
       return { status: "cancelled", runId: run.runId };
     }
 
-    await options.repos.transitionJob(job.jobId, "Publishing", deriveOutcome("Publishing"));
+    await transitionJob("Publishing", deriveOutcome("Publishing"));
     await appendEvent("Publishing", "publisher.started", "Publisher started", undefined, "publisher");
-    await appendProgressLog("Publishing", "publisher", "브랜치를 푸시하고 draft PR을 생성하고 있습니다.");
+    await appendProgressLog("Publishing", "publisher", "브랜치를 푸시하고 PR을 생성하고 있습니다.");
     const published = await options.publisher(await createPublishInput(job, run, result));
     await options.repos.savePullRequest({
       id: pullRequestId(),
@@ -267,15 +285,39 @@ export async function processAgentJob(payload: AgentJobPayload, options: Process
       runId: run.runId,
       metadata: { prUrl: published.prUrl, prNumber: published.prNumber }
     });
-    await options.repos.transitionJob(job.jobId, "Completed", deriveOutcome("Completed"));
+    await transitionJob("Completed", deriveOutcome("Completed"), undefined, {
+      status: "NeedsReview",
+      prUrl: published.prUrl,
+      prNumber: published.prNumber
+    });
     await appendEvent("Completed", "worker.completed", "Worker completed job", { prUrl: published.prUrl });
     await appendProgressLog("Completed", "worker", "PR 생성이 끝났습니다.");
     return { status: "completed", runId: run.runId };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown worker error";
-    await options.repos.transitionJob(job.jobId, "Failed", "FailedInternal", message);
+    await transitionJob("Failed", "FailedInternal", message, { status: "FailedInternal", failureReason: message });
     await appendEvent("Failed", "worker.error", message);
     return { status: "failed", runId: run.runId };
+  }
+}
+
+async function syncLarkStatus(
+  larkUpdater: LarkStatusUpdater | undefined,
+  job: WorkerJobRecord,
+  update: { status: string; prUrl?: string; prNumber?: number; failureReason?: string }
+): Promise<void> {
+  if (!larkUpdater) return;
+  try {
+    await larkUpdater({
+      recordId: job.larkRecordId,
+      status: update.status,
+      jobId: job.jobId,
+      prUrl: update.prUrl,
+      prNumber: update.prNumber,
+      failureReason: update.failureReason
+    });
+  } catch {
+    // Lark write-back must not fail the platform-owned job execution.
   }
 }
 

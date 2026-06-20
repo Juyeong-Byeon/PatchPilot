@@ -1,5 +1,6 @@
 import { Worker as BullWorker } from "bullmq";
 import { pathToFileURL } from "node:url";
+import { createLarkRecordUpdater } from "@ticket-to-pr/core";
 import { createPool, Repositories } from "@ticket-to-pr/db";
 import { AGENT_JOB_QUEUE, type AgentJobPayload } from "@ticket-to-pr/queue";
 import { executeGstack } from "./executor-gstack.js";
@@ -37,6 +38,7 @@ export function createWorker(env: WorkerEnv = readWorkerEnv()): BullWorker<Agent
           });
   const publisher: Publisher =
     env.publisherMode === "mock" ? publishMockPullRequest : createGitHubPublisher(env.githubToken ?? "");
+  const larkUpdater = env.larkRecordUpdaterConfig ? createLarkRecordUpdater(env.larkRecordUpdaterConfig) : undefined;
 
   return new BullWorker<AgentJobPayload>(
     AGENT_JOB_QUEUE,
@@ -45,6 +47,7 @@ export function createWorker(env: WorkerEnv = readWorkerEnv()): BullWorker<Agent
         repos,
         executor,
         publisher,
+        larkUpdater,
         policyConfig: {
           repositoryAllowlist: env.repositoryAllowlist,
           protectedPathDenylist: env.protectedPathDenylist

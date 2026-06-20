@@ -1,28 +1,34 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { createLarkRecordUpdater, type LarkStatusUpdater } from "@ticket-to-pr/core";
 import fastifyStatic from "@fastify/static";
 import { createPool, Repositories } from "@ticket-to-pr/db";
 import { createAgentQueue } from "@ticket-to-pr/queue";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import { assertLarkWebhookSecret } from "./auth.js";
+import { assertGitHubWebhookSignature, assertLarkWebhookSecret } from "./auth.js";
 import { readApiEnv } from "./env.js";
+import { handleGitHubPullRequestWebhook, type GitHubWebhookRepositories } from "./github-webhook.js";
 import { handleLarkWebhook, type AgentQueue, type LarkWebhookInput } from "./lark-webhook.js";
 import { registerAdminRoutes, type AdminRepositories } from "./routes-admin.js";
 import { registerHealthRoutes } from "./routes-health.js";
 
 export interface ApiServerDependencies {
-  repos: Pick<Repositories, "createJobFromTicket" | "appendEvent"> & Partial<AdminRepositories>;
+  repos: Pick<Repositories, "createJobFromTicket" | "appendEvent"> & Partial<AdminRepositories> & Partial<GitHubWebhookRepositories>;
   queue: AgentQueue;
   adminToken?: string;
   larkWebhookSecret?: string;
+  githubWebhookSecret?: string;
   allowUnauthenticatedLarkWebhook?: boolean;
+  allowUnauthenticatedGitHubWebhook?: boolean;
+  larkUpdater?: LarkStatusUpdater;
   adminStaticRoot?: string;
 }
 
 export async function buildServer(deps: ApiServerDependencies): Promise<FastifyInstance> {
   const app = Fastify({ logger: true });
+  installRawJsonBodyParser(app);
   const larkWebhookSecret = deps.larkWebhookSecret?.trim();
   if (!larkWebhookSecret && deps.allowUnauthenticatedLarkWebhook !== true) {
     throw new Error("Lark webhook secret is required");
@@ -34,10 +40,22 @@ export async function buildServer(deps: ApiServerDependencies): Promise<FastifyI
   }
   app.post<{ Body: LarkWebhookInput }>("/webhooks/lark", async (request, reply) => {
     if (larkWebhookSecret) assertLarkWebhookSecret(request, larkWebhookSecret);
-    const result = await handleLarkWebhook(request.body, deps.repos, deps.queue);
+    const result = await handleLarkWebhook(request.body, deps.repos, deps.queue, deps.larkUpdater);
     const statusCode = result.action === "enqueued" ? 202 : 200;
     return reply.code(statusCode).send(result);
   });
+  const githubWebhookSecret = deps.githubWebhookSecret?.trim();
+  if (githubWebhookSecret || deps.allowUnauthenticatedGitHubWebhook === true) {
+    app.post("/webhooks/github", async (request, reply) => {
+      if (githubWebhookSecret) assertGitHubWebhookSignature(request, githubWebhookSecret, readRawBody(request));
+      if (request.headers["x-github-event"] !== "pull_request") return reply.code(200).send({ action: "ignored" });
+      if (!hasGitHubWebhookRepositories(deps.repos)) return reply.code(503).send({ error: "GitHub webhook repository unavailable" });
+
+      const result = await handleGitHubPullRequestWebhook(request.body as never, deps.repos, deps.larkUpdater);
+      const statusCode = result.action === "completed" ? 202 : 200;
+      return reply.code(statusCode).send(result);
+    });
+  }
   if (deps.adminStaticRoot && existsSync(deps.adminStaticRoot)) {
     await app.register(fastifyStatic, {
       root: deps.adminStaticRoot,
@@ -57,6 +75,8 @@ export async function startServer(): Promise<void> {
     queue,
     adminToken: env.adminToken,
     larkWebhookSecret: env.larkWebhookSecret,
+    githubWebhookSecret: env.githubWebhookSecret,
+    larkUpdater: env.larkRecordUpdaterConfig ? createLarkRecordUpdater(env.larkRecordUpdaterConfig) : undefined,
     adminStaticRoot: join(process.cwd(), "apps/admin/dist")
   });
 
@@ -74,6 +94,29 @@ export async function startServer(): Promise<void> {
   });
 
   await app.listen({ port: env.port, host: "0.0.0.0" });
+}
+
+function hasGitHubWebhookRepositories(
+  repos: Pick<Repositories, "createJobFromTicket" | "appendEvent"> & Partial<AdminRepositories> & Partial<GitHubWebhookRepositories>
+): repos is Pick<Repositories, "createJobFromTicket" | "appendEvent"> & GitHubWebhookRepositories {
+  return typeof repos.markPullRequestMerged === "function";
+}
+
+function installRawJsonBodyParser(app: FastifyInstance): void {
+  app.removeContentTypeParser("application/json");
+  app.addContentTypeParser("application/json", { parseAs: "string" }, (request, body, done) => {
+    const rawBody = typeof body === "string" ? body : body.toString("utf8");
+    (request as typeof request & { rawBody?: string }).rawBody = rawBody;
+    try {
+      done(null, rawBody ? JSON.parse(rawBody) : {});
+    } catch (error) {
+      done(error as Error);
+    }
+  });
+}
+
+function readRawBody(request: unknown): string {
+  return typeof (request as { rawBody?: unknown }).rawBody === "string" ? (request as { rawBody: string }).rawBody : "";
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { publishGitHubPullRequest } from "../src/publisher-github.js";
 
 describe("publishGitHubPullRequest", () => {
-  it("creates a GitHub pull request through Octokit", async () => {
+  it("creates a ready-for-review GitHub pull request through Octokit", async () => {
     const octokit = {
       rest: {
         pulls: {
@@ -47,7 +47,7 @@ describe("publishGitHubPullRequest", () => {
       body: "Summary",
       head: "ticket-to-pr/job_1",
       base: "main",
-      draft: true
+      draft: false
     });
     expect(published).toMatchObject({
       prUrl: "https://github.com/acme/web/pull/42",

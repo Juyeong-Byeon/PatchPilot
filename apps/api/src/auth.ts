@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import type { FastifyRequest } from "fastify";
 
 export function assertAdminToken(request: FastifyRequest, expectedToken: string): void {
@@ -14,6 +14,17 @@ export function assertLarkWebhookSecret(request: FastifyRequest, expectedSecret:
   const providedSecret = Array.isArray(headerValue) ? headerValue[0] : headerValue;
   if (!providedSecret || !safeEqual(providedSecret, expectedSecret)) {
     const error = new Error("Invalid Lark webhook secret");
+    Object.assign(error, { statusCode: 401 });
+    throw error;
+  }
+}
+
+export function assertGitHubWebhookSignature(request: FastifyRequest, expectedSecret: string, rawBody: string): void {
+  const headerValue = request.headers["x-hub-signature-256"];
+  const providedSignature = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+  const expectedSignature = `sha256=${createHmac("sha256", expectedSecret).update(rawBody).digest("hex")}`;
+  if (!providedSignature || !safeEqual(providedSignature, expectedSignature)) {
+    const error = new Error("Invalid GitHub webhook signature");
     Object.assign(error, { statusCode: 401 });
     throw error;
   }

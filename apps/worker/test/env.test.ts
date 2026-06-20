@@ -19,7 +19,11 @@ describe("readWorkerEnv", () => {
       CODEX_CONFIG_FILE: "/Users/me/.codex/config.toml",
       CODEX_SKILLS_DIR: "/Users/me/.codex/skills",
       GSTACK_SKILL_SOURCE_DIR: "/Users/me/gstack",
-      JOB_TIMEOUT_SECONDS: "120"
+      JOB_TIMEOUT_SECONDS: "120",
+      LARK_APP_ID: "cli_app",
+      LARK_APP_SECRET: "lark_secret",
+      LARK_BASE_APP_TOKEN: "base_token",
+      LARK_BASE_TABLE_ID: "table_id"
     });
 
     expect(env.executorMode).toBe("gstack");
@@ -36,6 +40,11 @@ describe("readWorkerEnv", () => {
     expect((env as { codexSkillsDir?: string }).codexSkillsDir).toBe("/Users/me/.codex/skills");
     expect((env as { gstackSkillSourceDir?: string }).gstackSkillSourceDir).toBe("/Users/me/gstack");
     expect(env.jobTimeoutSeconds).toBe(120);
+    expect(env.larkRecordUpdaterConfig).toMatchObject({
+      appId: "cli_app",
+      baseAppToken: "base_token",
+      tableId: "table_id"
+    });
   });
 
   it("treats legacy app-wide PUBLISHER_MODE=gstack as GitHub publishing", () => {

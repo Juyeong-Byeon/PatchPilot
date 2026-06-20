@@ -4,6 +4,7 @@ export type UserOutcome =
   | "Queued"
   | "Running"
   | "NeedsReview"
+  | "Completed"
   | "FailedActionable"
   | "FailedInternal"
   | "Cancelled";

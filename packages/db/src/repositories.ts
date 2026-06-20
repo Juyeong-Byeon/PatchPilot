@@ -7,6 +7,8 @@ import type {
   AppendLogInput,
   CreateJobResult,
   CreateRunInput,
+  MarkPullRequestMergedInput,
+  MarkPullRequestMergedResult,
   RetryPreflight,
   RunRecord,
   SaveArtifactInput,
@@ -234,6 +236,69 @@ export class Repositories {
         input.prBody
       ]
     );
+  }
+
+  async markPullRequestMerged(input: MarkPullRequestMergedInput): Promise<MarkPullRequestMergedResult> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const result = await client.query<{
+        job_id: string;
+        run_id: string;
+        lark_record_id: string;
+        pr_url: string;
+        pr_number: number;
+      }>(
+        `select pr.job_id, pr.run_id, j.lark_record_id, pr.pr_url, pr.pr_number
+         from pull_requests pr
+         join jobs j on j.id = pr.job_id
+         where pr.repository=$1 and pr.pr_number=$2
+         order by pr.created_at desc
+         limit 1`,
+        [input.repository, input.prNumber]
+      );
+      const row = result.rows[0];
+      if (!row) {
+        await client.query("commit");
+        return { status: "not_found" };
+      }
+
+      await client.query(
+        `update jobs
+         set phase='Completed', outcome='Completed', failure_reason=null, updated_at=now()
+         where id=$1`,
+        [row.job_id]
+      );
+      await client.query(
+        `insert into run_events(job_id, run_id, phase, event_type, source, message, metadata)
+         values ($1,$2,'Completed','pull_request.merged','github',$3,$4)`,
+        [
+          row.job_id,
+          row.run_id,
+          `Pull request #${row.pr_number} was merged`,
+          JSON.stringify({ prUrl: input.prUrl ?? row.pr_url, prNumber: row.pr_number, mergedAt: input.mergedAt ?? null })
+        ]
+      );
+      await client.query(
+        `insert into audit_events(actor, action, job_id, run_id, metadata)
+         values ('github','pull_request.merged',$1,$2,$3)`,
+        [row.job_id, row.run_id, JSON.stringify({ prUrl: input.prUrl ?? row.pr_url, prNumber: row.pr_number, mergedAt: input.mergedAt ?? null })]
+      );
+      await client.query("commit");
+      return {
+        status: "updated",
+        jobId: row.job_id,
+        runId: row.run_id,
+        larkRecordId: row.lark_record_id,
+        prUrl: input.prUrl ?? row.pr_url,
+        prNumber: row.pr_number
+      };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async listJobs(): Promise<Array<Record<string, unknown>>> {
