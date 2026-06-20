@@ -38,7 +38,7 @@ export function JobList({ jobs, selectedJobId, isLoading, copy, locale, onOpenJo
         <div className="min-w-0">
           <CardTitle>{copy.jobs}</CardTitle>
           <span className="mt-1 block text-[12px] leading-4 text-charcoal">
-            {isLoading ? copy.loading : `${filteredJobs.length}/${jobs.length}`} · {copy.jobsSubtitle}
+            {isLoading ? copy.loading : `${filteredJobs.length}/${jobs.length}`}
           </span>
         </div>
         <Input
@@ -73,8 +73,8 @@ export function JobList({ jobs, selectedJobId, isLoading, copy, locale, onOpenJo
                       "grid w-full border-b border-l-4 border-hairline-gray px-4 py-3 text-left text-[13px] leading-5 transition-colors",
                       rowColumns,
                       selected
-                        ? "border-l-forest-ink bg-linen text-true-black"
-                        : "border-l-transparent bg-linen-white text-true-black hover:border-l-sage-wash hover:bg-linen"
+                        ? "border-l-cobalt-surface bg-mist-blue text-true-black"
+                        : "border-l-transparent bg-linen-white text-true-black hover:border-l-electric-blue hover:bg-mist-blue"
                     )}
                     type="button"
                     onClick={() => onOpenJob(job.id)}
@@ -84,7 +84,7 @@ export function JobList({ jobs, selectedJobId, isLoading, copy, locale, onOpenJo
                       {formatDate(getValue(job, "updated_at", "created_at"), locale, copy)}
                     </span>
                     <span className="min-w-0 pr-4">
-                      <span className="block truncate font-mono text-[12px] leading-5 text-forest-ink" title={job.id}>
+                      <span className="block truncate font-mono text-[12px] leading-5 text-cobalt-surface" title={job.id}>
                         {jobUuid}
                       </span>
                     </span>
@@ -101,7 +101,7 @@ export function JobList({ jobs, selectedJobId, isLoading, copy, locale, onOpenJo
                     </span>
                     <span className="flex min-w-0 items-start">
                       <span
-                        className="inline-flex size-8 items-center justify-center rounded-lg border border-hairline-gray bg-linen-white text-forest-ink"
+                        className="inline-flex size-8 items-center justify-center rounded-lg border border-hairline-gray bg-linen-white text-cobalt-surface"
                         title={copy.openJobDetail}
                       >
                         <ArrowRight aria-hidden="true" size={16} strokeWidth={2} />

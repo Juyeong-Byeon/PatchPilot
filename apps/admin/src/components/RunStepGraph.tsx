@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { AlertCircle, CheckCircle2, CircleDashed, LoaderCircle, MinusCircle } from "lucide-react";
 import type { RunEvent } from "../api.js";
 import { translateState, type AdminCopy, type Locale } from "../i18n.js";
 import type { SpanSelection } from "./RunTimeline.js";
@@ -19,7 +20,6 @@ interface GraphStep {
   phase: string;
   status: StepStatus;
   eventCount: number;
-  latestMessage: string;
   sources: string[];
   durationMs: number;
 }
@@ -35,53 +35,53 @@ export function RunStepGraph({ events, currentPhase, copy, locale, selectedStep,
       <CardHeader className="items-start">
         <div>
           <CardTitle>{copy.stepGraph}</CardTitle>
-          <span className="text-[12px] leading-4 text-charcoal">{copy.stepGraphSummary}</span>
+          {copy.stepGraphSummary ? <span className="text-[12px] leading-4 text-charcoal">{copy.stepGraphSummary}</span> : null}
         </div>
       </CardHeader>
       <CardContent>
-        <ol className="m-0 grid list-none gap-2 p-0" aria-label={copy.stepGraph}>
-          {steps.map((step, index) => {
-            const selected = selectedStep?.phase === step.phase;
-            return (
-              <li className="relative min-w-0" key={step.phase}>
-                {index < steps.length - 1 ? (
-                  <span
-                    className={`absolute bottom-[-8px] left-[31px] top-12 w-px ${connectorClass(step.status)}`}
-                    aria-hidden="true"
-                  />
-                ) : null}
-                <button
-                  className={`relative grid w-full min-w-0 grid-cols-[40px_minmax(0,1fr)_auto] gap-3 rounded-xl border bg-linen-white px-4 py-3 text-left transition-colors ${
-                    selected ? "border-forest-ink ring-2 ring-forest-ink/10" : "border-hairline-gray hover:border-forest-ink hover:bg-linen"
-                  }`}
-                  type="button"
-                  onClick={() => onSelectStep?.({ phase: step.phase, source: step.sources[0] })}
-                >
-                  <span className={`flex size-8 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold ${nodeClass(step.status)}`}>
-                    {statusGlyph(step.status)}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+        <div className="overflow-x-auto pb-1">
+          <ol className="m-0 grid min-w-[760px] auto-cols-[minmax(116px,1fr)] grid-flow-col list-none p-0" aria-label={copy.stepGraph}>
+            {steps.map((step, index) => {
+              const selected = selectedStep?.phase === step.phase;
+              const sourceText = step.sources.join(", ") || copy.sourceSystem;
+
+              return (
+                <li className="relative min-w-0" key={step.phase}>
+                  {index < steps.length - 1 ? (
+                    <span
+                      className={`absolute left-[calc(50%+18px)] right-[calc(-50%+18px)] top-[18px] h-px ${connectorClass(step.status)}`}
+                      aria-hidden="true"
+                    />
+                  ) : null}
+                  <button
+                    aria-label={`${translateState(step.phase, locale)} ${statusLabel(step.status, copy)}`}
+                    className={`relative flex w-full min-w-0 flex-col items-center gap-2 rounded-lg px-2 pb-1 pt-0 text-center outline-none transition-colors ${
+                      selected ? "text-forest-ink" : "text-charcoal hover:text-forest-ink"
+                    }`}
+                    type="button"
+                    onClick={() => onSelectStep?.({ phase: step.phase, source: step.sources[0] })}
+                  >
+                    <span className={`relative z-10 flex size-9 shrink-0 items-center justify-center rounded-full border ${nodeClass(step.status, selected)}`}>
+                      {statusGlyph(step.status)}
+                    </span>
+                    <span className="grid w-full min-w-0 gap-0.5">
                       <strong className="truncate text-[13px] font-semibold leading-5 text-true-black">
                         {translateState(step.phase, locale)}
                       </strong>
-                      <span className="rounded-full bg-linen px-2 py-0.5 text-[11px] leading-4 text-charcoal">
-                        {statusLabel(step.status, copy)}
+                      <span className="text-[12px] leading-4 text-charcoal">{statusLabel(step.status, copy)}</span>
+                      <span className="truncate font-mono text-[11px] leading-4 text-graphite" title={sourceText}>
+                        {sourceText}
+                      </span>
+                      <span className="text-[11px] leading-4 text-charcoal">
+                        {step.eventCount > 0 ? copy.spanEvents(step.eventCount) : copy.spanNoEvents} · {formatDuration(step.durationMs)}
                       </span>
                     </span>
-                    <span className="mt-1 block text-[12px] leading-4 text-charcoal text-clamp-1" title={step.latestMessage || copy.stepWaitingForSignal}>
-                      {step.latestMessage || copy.stepWaitingForSignal}
-                    </span>
-                  </span>
-                  <span className="grid justify-items-end gap-1 whitespace-nowrap text-[12px] leading-4 text-charcoal">
-                    <span>{step.eventCount > 0 ? copy.spanEvents(step.eventCount) : copy.spanNoEvents}</span>
-                    <span className="font-mono">{formatDuration(step.durationMs)}</span>
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ol>
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
       </CardContent>
     </Card>
   );
@@ -119,7 +119,6 @@ function buildGraphSteps(events: RunEvent[], currentPhase: string | undefined): 
         : index === currentIndex
           ? activeStatus(currentPhase)
           : "pending";
-    const latestMessage = [...phaseEvents].reverse().find((event) => event.message)?.message ?? "";
     const sources = Array.from(new Set(phaseEvents.map((event) => event.source).filter(Boolean) as string[]));
     const durationMs =
       phaseTimes.length > 0
@@ -132,7 +131,6 @@ function buildGraphSteps(events: RunEvent[], currentPhase: string | undefined): 
       phase,
       status,
       eventCount: phaseEvents.length,
-      latestMessage,
       sources,
       durationMs
     };
@@ -161,26 +159,27 @@ function statusLabel(status: StepStatus, copy: AdminCopy): string {
   return copy.spanPending;
 }
 
-function nodeClass(status: StepStatus): string {
-  if (status === "failed") return "bg-forest-ink text-linen-white";
-  if (status === "active") return "bg-sage-wash text-forest-ink";
-  if (status === "complete") return "bg-mint-veil text-forest-ink";
-  if (status === "skipped") return "border border-hairline-gray bg-linen text-graphite";
-  return "border border-hairline-gray bg-linen-white text-graphite";
+function nodeClass(status: StepStatus, selected: boolean): string {
+  if (status === "failed") return "border-forest-ink bg-forest-ink text-linen-white";
+  if (status === "active") return "border-cobalt-surface bg-cobalt-surface text-paper";
+  if (status === "complete") return "border-electric-blue bg-electric-blue text-paper";
+  if (selected) return "border-cobalt-surface text-cobalt-surface";
+  if (status === "skipped") return "border-hairline-gray bg-linen text-graphite";
+  return "border-hairline-gray bg-linen-white text-graphite";
 }
 
 function connectorClass(status: StepStatus): string {
   if (status === "failed") return "bg-forest-ink";
   if (status === "pending" || status === "skipped") return "bg-hairline-gray";
-  return "bg-sage-wash";
+  return "bg-electric-blue";
 }
 
-function statusGlyph(status: StepStatus): string {
-  if (status === "failed") return "!";
-  if (status === "active") return "...";
-  if (status === "complete") return "✓";
-  if (status === "skipped") return "-";
-  return "";
+function statusGlyph(status: StepStatus) {
+  if (status === "failed") return <AlertCircle aria-hidden="true" size={18} strokeWidth={2.4} />;
+  if (status === "active") return <LoaderCircle aria-hidden="true" size={18} strokeWidth={2.4} />;
+  if (status === "complete") return <CheckCircle2 aria-hidden="true" size={18} strokeWidth={2.4} />;
+  if (status === "skipped") return <MinusCircle aria-hidden="true" size={18} strokeWidth={2.2} />;
+  return <CircleDashed aria-hidden="true" size={18} strokeWidth={2.2} />;
 }
 
 function isFailureEvent(event: RunEvent): boolean {

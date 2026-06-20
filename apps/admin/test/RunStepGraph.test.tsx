@@ -43,11 +43,14 @@ describe("RunStepGraph", () => {
 
     const graph = screen.getByRole("list", { name: "처리 단계 그래프" });
 
+    expect(within(graph).getAllByRole("button")).toHaveLength(6);
     expect(within(graph).getAllByText("대기").length).toBeGreaterThan(0);
     expect(within(graph).getByText("건너뜀")).toBeInTheDocument();
     expect(within(graph).getByText("구현")).toBeInTheDocument();
+    expect(within(graph).getByRole("button", { name: "구현 실패 지점" })).toBeInTheDocument();
     expect(within(graph).getByText("실패 지점")).toBeInTheDocument();
-    expect(within(graph).getByText("2 이벤트")).toBeInTheDocument();
-    expect(within(graph).getByText("git authentication failed")).toBeInTheDocument();
+    expect(within(graph).getByText(/2 이벤트/)).toBeInTheDocument();
+    expect(within(graph).getByText("worker")).toBeInTheDocument();
+    expect(within(graph).queryByText("git authentication failed")).not.toBeInTheDocument();
   });
 });

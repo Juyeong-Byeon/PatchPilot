@@ -7,7 +7,7 @@ const badgeVariants = cva("inline-flex max-w-full items-center rounded-full bord
     variant: {
       default: "border-transparent bg-mist-blue text-forest-ink",
       outline: "border-hairline-gray bg-linen-white text-charcoal",
-      warning: "border-transparent bg-linen text-forest-ink",
+      warning: "border-transparent bg-linen text-cobalt-surface",
       dark: "border-transparent bg-forest-ink text-linen-white"
     }
   },

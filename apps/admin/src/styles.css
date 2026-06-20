@@ -1,32 +1,40 @@
 @import "tailwindcss";
 
 @theme {
-  --color-forest-ink: #0f3e17;
-  --color-sage-wash: #b1dbb8;
-  --color-mist-blue: #b6ced5;
-  --color-mint-veil: #cfe7d3;
-  --color-linen: #e1f4df;
-  --color-linen-white: #fffefc;
-  --color-hairline-gray: #e5e7eb;
-  --color-charcoal: #222222;
-  --color-graphite: #333333;
-  --color-true-black: #000000;
+  --color-midnight-ink: #091135;
+  --color-electric-blue: #0f77ff;
+  --color-cobalt-surface: #127ee3;
+  --color-slate: #36394a;
+  --color-frost-border: #e1e9f0;
+  --color-lavender-wash: #f5f3ff;
+  --color-paper: #ffffff;
+
+  --color-forest-ink: #091135;
+  --color-sage-wash: #dbeaff;
+  --color-mist-blue: #edf5ff;
+  --color-mint-veil: #e8f2ff;
+  --color-linen: #f5f3ff;
+  --color-linen-white: #ffffff;
+  --color-hairline-gray: #e1e9f0;
+  --color-charcoal: #36394a;
+  --color-graphite: #5f6882;
+  --color-true-black: #091135;
 
   --font-sans: var(--font-suisse-intl);
   --font-display: var(--font-faire-octave);
   --font-mono: var(--font-space-mono);
 
-  --radius-lg: 7px;
-  --radius-xl: 14px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
   --radius-full: 999px;
 }
 
 :root {
   color-scheme: light;
-  --font-faire-octave: "Cormorant Garamond", "Playfair Display", Georgia, serif;
+  --font-faire-octave: "Inter", "Helvetica Neue", Arial, ui-sans-serif, system-ui, sans-serif;
   --font-suisse-intl: "Inter", "Helvetica Neue", Arial, ui-sans-serif, system-ui, sans-serif;
   --font-space-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  --page-max-width: 1280px;
+  --page-max-width: 1200px;
 }
 
 * {
@@ -37,8 +45,8 @@ html,
 body {
   margin: 0;
   min-width: 0;
-  background: #fffefc;
-  color: #000000;
+  background: #f5f3ff;
+  color: #091135;
   font-family: var(--font-suisse-intl);
   font-weight: 400;
   letter-spacing: 0;
@@ -64,15 +72,15 @@ button:disabled {
 }
 
 a {
-  color: #0f3e17;
+  color: #0f77ff;
   text-decoration: underline;
-  text-decoration-color: #b6ced5;
+  text-decoration-color: #e1e9f0;
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
 }
 
 a:hover {
-  color: #000000;
+  color: #091135;
 }
 
 pre,
@@ -83,7 +91,7 @@ code,
 
 .font-display {
   font-family: var(--font-faire-octave);
-  font-weight: 300;
+  font-weight: 700;
 }
 
 .text-clamp-1,

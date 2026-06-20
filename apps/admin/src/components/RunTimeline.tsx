@@ -52,7 +52,7 @@ export function RunTimeline({ events, copy, locale, selectedSpan, onSelectSpan }
           <div className="mb-4 flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
             <div>
               <h3 className="text-[13px] font-semibold leading-5 text-forest-ink">{copy.traceFlow}</h3>
-              <p className="m-0 text-[12px] leading-4 text-charcoal">{copy.traceFlowSummary}</p>
+              {copy.traceFlowSummary ? <p className="m-0 text-[12px] leading-4 text-charcoal">{copy.traceFlowSummary}</p> : null}
             </div>
             <span className="text-[12px] leading-4 text-charcoal">{formatDuration(totalDuration(spans))}</span>
           </div>
@@ -77,7 +77,7 @@ export function RunTimeline({ events, copy, locale, selectedSpan, onSelectSpan }
                   return (
                     <tr
                       aria-selected={selected}
-                      className={`cursor-pointer border-b border-hairline-gray outline-none last:border-b-0 hover:bg-linen ${selected ? "bg-linen-white ring-1 ring-inset ring-forest-ink" : ""}`}
+                      className={`cursor-pointer border-b border-hairline-gray outline-none last:border-b-0 hover:bg-mist-blue ${selected ? "bg-mist-blue ring-1 ring-inset ring-electric-blue" : ""}`}
                       key={span.phase}
                       onClick={() => onSelectSpan?.({ phase: span.phase, source: span.sources[0] })}
                       onKeyDown={(event) => selectWithKeyboard(event, span, onSelectSpan)}
@@ -195,15 +195,15 @@ function statusLabel(status: PhaseSpan["status"], copy: AdminCopy): string {
 
 function statusClassName(status: PhaseSpan["status"]): string {
   if (status === "failed") return "bg-forest-ink text-linen-white";
-  if (status === "active") return "bg-sage-wash text-forest-ink";
-  if (status === "complete") return "bg-mint-veil text-forest-ink";
+  if (status === "active") return "bg-cobalt-surface text-paper";
+  if (status === "complete") return "bg-mist-blue text-forest-ink";
   return "border border-hairline-gray bg-linen-white text-graphite";
 }
 
 function durationBarClassName(status: PhaseSpan["status"]): string {
   if (status === "failed") return "bg-forest-ink";
   if (status === "pending") return "bg-hairline-gray";
-  return "bg-sage-wash";
+  return "bg-electric-blue";
 }
 
 function durationWidth(durationMs: number, longestDurationMs: number): number {

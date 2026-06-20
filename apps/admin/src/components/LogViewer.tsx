@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Copy, Download, X } from "lucide-react";
 import type { LogLine } from "../api.js";
 import type { AdminCopy } from "../i18n.js";
 import { Button } from "./ui/button.js";
@@ -53,19 +54,19 @@ export function LogViewer({ logs, copy, highlightSource, onClearHighlight }: Log
             placeholder={copy.searchLogsPlaceholder}
             onChange={(event) => setQuery(event.target.value)}
           />
-          <Button type="button" variant="outline" onClick={() => void navigator.clipboard?.writeText(text)}>
-            {copy.copy}
+          <Button type="button" variant="outline" size="icon" aria-label={copy.copy} title={copy.copy} onClick={() => void navigator.clipboard?.writeText(text)}>
+            <Copy aria-hidden="true" size={16} strokeWidth={2.2} />
           </Button>
-          <Button type="button" onClick={() => downloadText(text)}>
-            {copy.download}
+          <Button type="button" size="icon" aria-label={copy.download} title={copy.download} onClick={() => downloadText(text)}>
+            <Download aria-hidden="true" size={16} strokeWidth={2.2} />
           </Button>
         </div>
       </CardHeader>
       {highlightSource ? (
         <div className="flex items-center justify-between gap-3 border-b border-hairline-gray bg-linen px-4 py-2 text-[12px] text-charcoal">
           <span>{copy.correlatedLogs}: {highlightSource}</span>
-          <Button type="button" variant="ghost" size="sm" onClick={onClearHighlight}>
-            {copy.clear}
+          <Button type="button" variant="ghost" size="icon" aria-label={copy.clear} title={copy.clear} onClick={onClearHighlight}>
+            <X aria-hidden="true" size={15} strokeWidth={2.2} />
           </Button>
         </div>
       ) : null}

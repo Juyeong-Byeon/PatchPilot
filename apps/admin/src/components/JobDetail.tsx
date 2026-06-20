@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Ban, ExternalLink, RotateCcw, Undo2 } from "lucide-react";
 import type { Artifact, JobRecord, LogLine, RunEvent } from "../api.js";
 import { translateState, type AdminCopy, type Locale } from "../i18n.js";
 import { LogViewer } from "./LogViewer.js";
@@ -44,11 +45,6 @@ export function JobDetail({
       <Card className="min-h-[176px]">
         <CardHeader className="items-start">
           <CardTitle>{copy.jobDetail}</CardTitle>
-          {onBack ? (
-            <Button type="button" variant="outline" onClick={onBack}>
-              {copy.backToJobs}
-            </Button>
-          ) : null}
         </CardHeader>
         <CardContent>
           <p className="text-[13px] leading-5 text-charcoal">{isLoading ? copy.loadingDetail : copy.selectJob}</p>
@@ -79,31 +75,43 @@ export function JobDetail({
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              {onBack ? (
-                <Button type="button" variant="outline" onClick={onBack}>
-                  {copy.backToJobs}
-                </Button>
-              ) : null}
               {onRefresh ? (
-                <Button type="button" variant="outline" disabled={isLoading} onClick={onRefresh}>
-                  {copy.refresh}
+                <Button type="button" variant="outline" size="icon" aria-label={copy.refresh} title={copy.refresh} disabled={isLoading} onClick={onRefresh}>
+                  <RotateCcw aria-hidden="true" size={16} strokeWidth={2.2} />
                 </Button>
               ) : null}
               {job.pr_url ? (
                 <a
-                  className="inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-hairline-gray bg-linen-white px-3 text-[13px] font-medium text-forest-ink no-underline hover:border-forest-ink hover:bg-linen"
+                  aria-label={copy.openPr}
+                  className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg border border-hairline-gray bg-linen-white text-cobalt-surface no-underline hover:border-electric-blue hover:bg-mist-blue"
                   href={job.pr_url}
                   rel="noreferrer"
+                  title={copy.openPr}
                   target="_blank"
                 >
-                  {copy.openPr}
+                  <ExternalLink aria-hidden="true" size={16} strokeWidth={2.2} />
                 </a>
               ) : null}
-              <Button type="button" disabled={retryDisabled} onClick={onRetry}>
-                {actionState === "retry" ? copy.retrying : copy.retry}
+              <Button
+                type="button"
+                size="icon"
+                aria-label={actionState === "retry" ? copy.retrying : copy.retry}
+                title={actionState === "retry" ? copy.retrying : copy.retry}
+                disabled={retryDisabled}
+                onClick={onRetry}
+              >
+                <Undo2 aria-hidden="true" size={16} strokeWidth={2.2} />
               </Button>
-              <Button type="button" variant="outline" disabled={cancelDisabled} onClick={onCancel}>
-                {actionState === "cancel" ? copy.cancelling : copy.cancel}
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                aria-label={actionState === "cancel" ? copy.cancelling : copy.cancel}
+                title={actionState === "cancel" ? copy.cancelling : copy.cancel}
+                disabled={cancelDisabled}
+                onClick={onCancel}
+              >
+                <Ban aria-hidden="true" size={16} strokeWidth={2.2} />
               </Button>
             </div>
           </div>

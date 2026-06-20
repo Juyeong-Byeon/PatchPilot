@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { ArrowLeft, CheckCircle2, ListChecks } from "lucide-react";
 import {
   cancelJob,
   fetchJob,
@@ -191,103 +192,160 @@ export default function App() {
     void refreshDetail(selectedJobId, token);
   }
 
+  const pageTitle = route.page === "list" ? copy.jobs : copy.jobDetail;
+  const pageSubtitle =
+    route.page === "list"
+      ? ""
+      : selectedJob
+        ? `${String(selectedJob.repository ?? copy.repository)} · ${selectedJob.id}`
+        : copy.loadingDetail;
+
   return (
-    <main className="min-h-screen bg-linen-white px-4 py-4 text-true-black md:px-6">
-      <header className="mx-auto flex max-w-[var(--page-max-width)] flex-col gap-2">
-        <nav className="flex flex-col gap-3 rounded-xl border border-hairline-gray bg-linen-white px-4 py-3 md:flex-row md:items-center md:justify-between">
+    <div className="grid min-h-screen bg-linen text-true-black lg:grid-cols-[236px_minmax(0,1fr)]">
+      <aside className="border-b border-hairline-gray bg-linen-white lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
+        <div className="flex h-full flex-col gap-5 px-4 py-4">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-forest-ink text-sm text-linen-white">✓</span>
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-cobalt-surface text-paper">
+              <CheckCircle2 aria-hidden="true" size={18} strokeWidth={2.4} />
+            </span>
             <div className="min-w-0">
               <p className="text-[12px] leading-4 text-charcoal">{copy.appEyebrow}</p>
-              <h1 className="font-sans text-[24px] font-semibold leading-[1.15] text-forest-ink md:text-[26px]">
-                {copy.appTitle}
-              </h1>
+              <strong className="block truncate text-[17px] font-semibold leading-5 text-forest-ink">{copy.appTitle}</strong>
             </div>
           </div>
-          <div className="flex items-center gap-1 rounded-lg bg-linen p-1">
-            {(["ko", "en"] as Locale[]).map((entry) => (
-              <Button
-                key={entry}
-                type="button"
-                size="sm"
-                variant={locale === entry ? "default" : "ghost"}
-                className="h-8"
-                onClick={() => changeLocale(entry)}
-              >
-                {localeNames[entry]}
-              </Button>
-            ))}
-          </div>
-        </nav>
 
-        <form
-          className="grid gap-3 rounded-xl border border-hairline-gray bg-linen px-4 py-3 md:grid-cols-[120px_minmax(240px,1fr)_auto_auto] md:items-center"
-          onSubmit={(event) => {
-            event.preventDefault();
-            saveToken();
-          }}
-        >
-          <label className="text-[13px] font-medium text-charcoal" htmlFor="admin-token">
-            {copy.tokenLabel}
-          </label>
-          <Input
-            id="admin-token"
-            value={token}
-            type="password"
-            autoComplete="off"
-            placeholder={copy.tokenPlaceholder}
-            onChange={(event) => setToken(event.target.value)}
-          />
-          <Button type="submit">
-            {copy.apply}
-          </Button>
-          <Button type="button" variant="outline" onClick={() => void refreshJobs(token)}>
-            {copy.refresh}
-          </Button>
-        </form>
-        <div className="flex flex-col gap-3 rounded-xl border border-hairline-gray bg-linen-white px-4 py-2.5 md:flex-row md:items-center md:justify-between" aria-live="polite">
-          <div className="flex flex-wrap gap-2">
-            <MetricPill label={copy.totalJobs} value={jobStats.total} />
-            <MetricPill label={copy.runningJobs} value={jobStats.running} />
-            <MetricPill label={copy.failedJobs} value={jobStats.failed} />
-            <MetricPill label={copy.completedJobs} value={jobStats.completed} />
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge>{jobs.length}</Badge>
-            <span className="text-[13px] text-charcoal">{renderStatus(status, copy)}</span>
-            {error ? <strong className="rounded-full bg-forest-ink px-3 py-1 text-xs font-normal text-linen-white">{error}</strong> : null}
+          <nav className="grid gap-1" aria-label={copy.appTitle}>
+            <button
+              className="inline-flex h-9 items-center gap-2 rounded-lg bg-mist-blue px-3 text-left text-[13px] font-medium text-cobalt-surface transition-colors"
+              type="button"
+              onClick={openJobList}
+            >
+              <ListChecks aria-hidden="true" size={16} strokeWidth={2.2} />
+              {copy.jobs}
+            </button>
+          </nav>
+
+          <div className="mt-auto grid gap-4">
+            <section className="rounded-xl border border-hairline-gray bg-linen p-3">
+              <div className="mb-2">
+                <strong className="text-[13px] font-semibold text-forest-ink">{copy.tokenLabel}</strong>
+              </div>
+              <form
+                className="grid gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  saveToken();
+                }}
+              >
+                <label className="sr-only" htmlFor="admin-token">
+                  {copy.tokenLabel}
+                </label>
+                <Input
+                  id="admin-token"
+                  value={token}
+                  type="password"
+                  autoComplete="off"
+                  placeholder={copy.tokenPlaceholder}
+                  onChange={(event) => setToken(event.target.value)}
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <Button type="submit">
+                    {copy.apply}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={() => void refreshJobs(token)}>
+                    {copy.refresh}
+                  </Button>
+                </div>
+              </form>
+              <div className="mt-2" aria-live="polite">
+                <span className="text-[12px] leading-4 text-charcoal">{renderStatus(status, copy)}</span>
+                {error ? <strong className="mt-2 block rounded-lg bg-forest-ink px-2.5 py-1.5 text-xs font-normal leading-4 text-linen-white">{error}</strong> : null}
+              </div>
+            </section>
+
+            <div className="flex items-center gap-1 rounded-lg bg-mist-blue p-1">
+              {(["ko", "en"] as Locale[]).map((entry) => (
+                <Button
+                  key={entry}
+                  type="button"
+                  size="sm"
+                  variant={locale === entry ? "default" : "ghost"}
+                  className="h-8 flex-1"
+                  onClick={() => changeLocale(entry)}
+                >
+                  {localeNames[entry]}
+                </Button>
+              ))}
+            </div>
+            <footer className="border-t border-hairline-gray pt-4 text-[12px] leading-5 text-charcoal">
+              <p className="m-0 font-medium text-forest-ink">{copy.appTitle}</p>
+              <p className="m-0 mt-1">{copy.footerScope}</p>
+            </footer>
           </div>
         </div>
-      </header>
+      </aside>
 
-      <section className="mx-auto mt-3 max-w-[var(--page-max-width)]">
-        {route.page === "list" ? (
-          <JobList
-            jobs={jobs}
-            selectedJobId={selectedJobId}
-            isLoading={isLoadingJobs}
-            copy={copy}
-            locale={locale}
-            onOpenJob={openJob}
-          />
-        ) : (
-          <JobDetail
-            job={selectedJob}
-            events={detail.events}
-            logs={detail.logs}
-            artifacts={detail.artifacts}
-            isLoading={isLoadingDetail}
-            actionState={actionState}
-            copy={copy}
-            locale={locale}
-            onBack={openJobList}
-            onRefresh={refreshCurrentDetail}
-            onCancel={() => void runAction("cancel")}
-            onRetry={() => void runAction("retry")}
-          />
-        )}
-      </section>
-    </main>
+      <div className="flex min-w-0 flex-col">
+        <header className="border-b border-hairline-gray bg-linen-white/90">
+          <section className="mx-auto max-w-[var(--page-max-width)] px-4 py-5 md:px-6">
+            <div className="min-w-0">
+              <div className="flex min-w-0 items-start gap-3">
+                {route.page === "detail" ? (
+                  <Button type="button" variant="outline" size="icon" aria-label={copy.backToJobs} title={copy.backToJobs} onClick={openJobList}>
+                    <ArrowLeft aria-hidden="true" size={16} strokeWidth={2.3} />
+                  </Button>
+                ) : null}
+                <div className="min-w-0">
+                  <p className="text-[12px] font-medium leading-4 text-cobalt-surface">{copy.appEyebrow}</p>
+                  <h1 className="mt-1 truncate text-[28px] font-semibold leading-[1.12] text-forest-ink md:text-[34px]">
+                    {pageTitle}
+                  </h1>
+                </div>
+              </div>
+              {pageSubtitle ? (
+                <p className="mt-2 max-w-3xl truncate text-[13px] leading-5 text-charcoal" title={pageSubtitle}>
+                  {pageSubtitle}
+                </p>
+              ) : null}
+              <div className="mt-4 flex flex-wrap gap-2">
+                <MetricPill label={copy.totalJobs} value={jobStats.total} />
+                <MetricPill label={copy.runningJobs} value={jobStats.running} />
+                <MetricPill label={copy.failedJobs} value={jobStats.failed} />
+                <MetricPill label={copy.completedJobs} value={jobStats.completed} />
+              </div>
+            </div>
+          </section>
+        </header>
+
+        <main className="mx-auto w-full max-w-[var(--page-max-width)] flex-1 px-4 py-5 md:px-6">
+          {route.page === "list" ? (
+            <JobList
+              jobs={jobs}
+              selectedJobId={selectedJobId}
+              isLoading={isLoadingJobs}
+              copy={copy}
+              locale={locale}
+              onOpenJob={openJob}
+            />
+          ) : (
+            <JobDetail
+              job={selectedJob}
+              events={detail.events}
+              logs={detail.logs}
+              artifacts={detail.artifacts}
+              isLoading={isLoadingDetail}
+              actionState={actionState}
+              copy={copy}
+              locale={locale}
+              onBack={openJobList}
+              onRefresh={refreshCurrentDetail}
+              onCancel={() => void runAction("cancel")}
+              onRetry={() => void runAction("retry")}
+            />
+          )}
+        </main>
+      </div>
+    </div>
   );
 }
 
@@ -326,7 +384,7 @@ function renderStatus(status: StatusState, copy: AdminCopy): string {
 
 function MetricPill({ label, value }: { label: string; value: number }) {
   return (
-    <span className="inline-flex items-center gap-2 rounded-full bg-linen px-2.5 py-1 text-[12px] leading-4 text-charcoal">
+    <span className="inline-flex items-center gap-2 rounded-full bg-mist-blue px-2.5 py-1 text-[12px] leading-4 text-charcoal">
       {label}
       <strong className="font-semibold text-forest-ink">{value}</strong>
     </span>
