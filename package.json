@@ -2,6 +2,7 @@
   "name": "ticket-to-pr",
   "private": true,
   "version": "0.1.0",
+  "license": "BUSL-1.1",
   "type": "module",
   "workspaces": [
     "packages/*",

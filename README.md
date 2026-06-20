@@ -366,8 +366,14 @@ See [docs/operations.md](docs/operations.md) for:
 - Workspace retention
 - Security and policy boundaries
 
-## Repository Status
+## License
 
-This project is intended to live in a private GitHub repository because local
-configuration and operational workflows reference private target repositories,
-tokens, and Lark integration setup.
+PatchPilot is source-available under the Business Source License 1.1. See
+[LICENSE](LICENSE).
+
+- Additional production use is allowed for internal and non-competitive usage.
+- Competitive hosted services, managed services, developer tools, agent
+  platforms, or ticket-to-pull-request automation products require a commercial
+  license.
+- Each version converts to the Apache License, Version 2.0 four years after it
+  is first publicly distributed.
