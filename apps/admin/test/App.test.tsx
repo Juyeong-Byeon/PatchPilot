@@ -39,7 +39,7 @@ describe("App", () => {
             ? [{ id: "log_1", source: "gstack", stream: "stdout", sequence: 0, text: "running", created_at: "2026-06-20T00:00:00.000Z" }]
             : url.endsWith("/api/jobs/job_1/artifacts")
               ? []
-              : { id: "job_1", phase: "Implementing", outcome: "Running", repository: "Juyeong-Byeon/test_pr_repo" };
+              : { id: "job_1", phase: "Implementing", outcome: "Running", repository: "example-org/example-repo" };
 
       return {
         ok: true,
@@ -56,7 +56,7 @@ describe("App", () => {
       await Promise.resolve();
     });
 
-    expect(screen.getByText("Juyeong-Byeon/test_pr_repo")).toBeInTheDocument();
+    expect(screen.getByText("example-org/example-repo")).toBeInTheDocument();
     expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/api/jobs/job_1/logs"))).toHaveLength(1);
 
     await act(async () => {

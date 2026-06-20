@@ -6,8 +6,6 @@
 
 Lark Base tickets in, audited GitHub pull requests out.
 
-Canonical repository: `https://github.com/Juyeong-Byeon/ticket-to-pr`
-
 This repository is a Docker Compose MVP for routing approved Lark Base records
 to an agent runner, collecting logs/artifacts, applying repository policy gates,
 and publishing pull requests. It includes an admin console for Korean and
@@ -192,7 +190,7 @@ WORKER_EXECUTOR_MODE=gstack
 WORKER_PUBLISHER_MODE=github
 GITHUB_TOKEN=github_pat_xxx
 GITHUB_WEBHOOK_SECRET=github_webhook_secret_xxx
-REPOSITORY_ALLOWLIST=Juyeong-Byeon/example-repo
+REPOSITORY_ALLOWLIST=owner/example-repo
 ```
 
 The worker service mounts `/var/run/docker.sock` so `EXECUTOR_MODE=gstack` can

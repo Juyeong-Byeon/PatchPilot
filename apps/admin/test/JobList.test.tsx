@@ -9,7 +9,7 @@ describe("JobList", () => {
   it("keeps the list compact and opens the detail page", () => {
     const onOpenJob = vi.fn();
     const longEvent =
-      "git ls-remote --heads https://github.com/Juyeong-Byeon/test_pr_repo.git main failed with code 128: fatal: could not read Username for https://github.com because no device or address was available";
+      "git ls-remote --heads https://github.com/example-org/example-repo.git main failed with code 128: fatal: could not read Username for https://github.com because no device or address was available";
 
     render(
       <JobList
@@ -18,7 +18,7 @@ describe("JobList", () => {
         jobs={[
           {
             id: "job_09774cca-aa0f-4134-9093-6cebc794e385",
-            repository: "Juyeong-Byeon/test_pr_repo",
+            repository: "example-org/example-repo",
             target_branch: "main",
             work_branch: "ticket-to-pr/job_09774cca-aa0f-4134-9093-6cebc794e385",
             phase: "Failed",
@@ -53,21 +53,21 @@ describe("JobList", () => {
         jobs={[
           {
             id: "job_running_11111111-1111-4111-8111-111111111111",
-            repository: "Juyeong-Byeon/test_pr_repo",
+            repository: "example-org/example-repo",
             phase: "Implementing",
             outcome: "Running",
             updated_at: "2026-06-20T00:25:00.000Z"
           },
           {
             id: "job_done_22222222-2222-4222-8222-222222222222",
-            repository: "Juyeong-Byeon/test_pr_repo",
+            repository: "example-org/example-repo",
             phase: "Completed",
             outcome: "NeedsReview",
             updated_at: "2026-06-20T00:26:00.000Z"
           },
           {
             id: "job_failed_33333333-3333-4333-8333-333333333333",
-            repository: "Juyeong-Byeon/test_pr_repo",
+            repository: "example-org/example-repo",
             phase: "Failed",
             outcome: "FailedInternal",
             updated_at: "2026-06-20T00:27:00.000Z"

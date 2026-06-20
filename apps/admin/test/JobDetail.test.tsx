@@ -77,11 +77,11 @@ describe("JobDetail", () => {
     rerender(
       <JobDetail
         {...baseProps}
-        job={{ id: "job_1", phase: "Planning", outcome: "Running", repository: "Juyeong-Byeon/test_pr_repo" }}
+        job={{ id: "job_1", phase: "Planning", outcome: "Running", repository: "example-org/example-repo" }}
       />
     );
 
-    expect(screen.getByText("Juyeong-Byeon/test_pr_repo")).toBeInTheDocument();
+    expect(screen.getByText("example-org/example-repo")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "취소" }).some((button) => !button.hasAttribute("disabled"))).toBe(true);
   });
 
@@ -93,7 +93,7 @@ describe("JobDetail", () => {
           id: "job_1",
           phase: "Completed",
           outcome: "NeedsReview",
-          repository: "Juyeong-Byeon/test_pr_repo",
+          repository: "example-org/example-repo",
           attempt: 2
         }}
         events={[
@@ -191,7 +191,7 @@ describe("JobDetail", () => {
           id: "job_1",
           phase: "Implementing",
           outcome: "Running",
-          repository: "Juyeong-Byeon/test_pr_repo",
+          repository: "example-org/example-repo",
           attempt: 1
         }}
         events={[
