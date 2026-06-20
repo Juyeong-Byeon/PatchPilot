@@ -1,5 +1,9 @@
 # AI Ticket-to-PR Agent Platform
 
+<p align="center">
+  <img src="docs/assets/ticket-to-pr-logo.png" alt="Ticket-to-PR crawfish coding mascot" width="220" />
+</p>
+
 Lark Base tickets in, audited GitHub pull requests out.
 
 Canonical repository: `https://github.com/Juyeong-Byeon/ticket-to-pr`
@@ -34,6 +38,57 @@ Lark Base
   -> Policy gate
   -> GitHub draft pull request
   -> Admin console for observability
+```
+
+## End-to-End Sequence
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor Operator as Lark Operator
+  participant Lark as Lark Base
+  participant API as Fastify API
+  participant DB as Postgres
+  participant Queue as Redis / BullMQ
+  participant Worker as Worker
+  participant Runner as Docker Runner
+  participant Agent as gstack / Codex Agent
+  participant Policy as Policy Gate
+  participant GitHub as GitHub
+  participant Admin as Admin Console
+
+  Operator->>Lark: Approve ticket record
+  Lark->>API: Webhook with shared secret
+  API->>API: Verify x-lark-webhook-secret
+  API->>DB: Upsert job, ticket snapshot, audit event
+  API->>Queue: Enqueue run job
+  Admin->>API: Poll jobs, events, logs, artifacts
+  API->>DB: Read operational state
+  API-->>Admin: Job list and detail payloads
+
+  Queue-->>Worker: Deliver job payload
+  Worker->>DB: Mark phase Queued / Planning
+  Worker->>Runner: Launch isolated workspace container
+  Runner->>GitHub: Clone or fetch target repository
+  Runner->>Agent: Run configured agent command
+  Agent->>Runner: Local commit, draft PR title/body, artifacts
+  Runner-->>Worker: Agent result contract
+  Worker->>DB: Persist logs, artifacts, run events
+
+  Worker->>Policy: Validate result and protected paths
+  Policy-->>Worker: Pass or fail with reason
+  alt Policy passes
+    Worker->>GitHub: Push work branch
+    Worker->>GitHub: Open draft pull request
+    GitHub-->>Worker: PR URL and metadata
+    Worker->>DB: Mark Completed and store PR metadata
+  else Policy fails or runner errors
+    Worker->>DB: Mark Failed, failure category, next action
+  end
+
+  Admin->>API: Refresh detail every 3 seconds
+  API->>DB: Read latest job trace
+  API-->>Admin: Phase graph, timeline, logs, artifacts
 ```
 
 Workspaces:
