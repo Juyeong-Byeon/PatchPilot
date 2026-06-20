@@ -46,6 +46,12 @@ Copy `.env.example` to `.env` and replace secrets before starting the stack.
 | `PUBLISHER_MODE` | `mock` for simulated PR metadata, `github` for real PRs. |
 | `RUNNER_IMAGE` | Fixed runner image name or digest used by workers. |
 
+`gstack` belongs to `EXECUTOR_MODE`. The publisher only supports `mock` and
+`github`; the worker accepts legacy app-wide `PUBLISHER_MODE=gstack` as a
+compatibility alias for `github`, but operators should update `.env` to
+`PUBLISHER_MODE=github` for real PR publishing. Explicit
+`WORKER_PUBLISHER_MODE` values remain strict.
+
 ## GitHub PAT Scopes
 
 Use a fine-grained personal access token, not a classic broad token.
@@ -135,6 +141,18 @@ Use real mode only against a disposable test repository in the allowlist.
 10. Confirm the platform pushes that audited SHA to the work branch and creates
     a PR.
 11. Confirm Admin and Lark show the PR URL.
+
+If worker or runner source changed since the last smoke, rebuild before
+submitting the ticket:
+
+```bash
+docker compose build worker
+docker build -f docker/runner.Dockerfile -t ticket-to-pr-runner:local .
+docker compose up -d --force-recreate worker
+```
+
+This matters for GitHub auth fixes because the runner and worker execute from
+Docker image layers, not directly from the live checkout.
 
 Do not run real mode against production repositories until the allowlist,
 protected path denylist, and PAT scope have been reviewed.

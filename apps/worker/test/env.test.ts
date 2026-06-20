@@ -23,4 +23,24 @@ describe("readWorkerEnv", () => {
     expect(env.workspaceRoot).toBe("/work/jobs");
     expect(env.jobTimeoutSeconds).toBe(120);
   });
+
+  it("treats legacy app-wide PUBLISHER_MODE=gstack as GitHub publishing", () => {
+    const env = readWorkerEnv({
+      EXECUTOR_MODE: "gstack",
+      PUBLISHER_MODE: "gstack",
+      GITHUB_TOKEN: "github_pat_secret"
+    });
+
+    expect(env.executorMode).toBe("gstack");
+    expect(env.publisherMode).toBe("github");
+  });
+
+  it("keeps explicit worker publisher mode strict", () => {
+    expect(() =>
+      readWorkerEnv({
+        WORKER_PUBLISHER_MODE: "gstack",
+        GITHUB_TOKEN: "github_pat_secret"
+      })
+    ).toThrow("Invalid worker mode: gstack");
+  });
 });

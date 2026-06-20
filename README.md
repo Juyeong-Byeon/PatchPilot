@@ -96,6 +96,11 @@ RUNNER_IMAGE=ticket-to-pr-runner:local
 Use `WORKER_EXECUTOR_MODE` and `WORKER_PUBLISHER_MODE` to override worker modes
 without changing app-wide variables.
 
+`gstack` is an executor mode, not a publisher mode. Use `PUBLISHER_MODE=github`
+for real draft PR creation. Older local `.env` files with
+`PUBLISHER_MODE=gstack` are treated as `github` by the worker for compatibility,
+but new configs should use `github` explicitly.
+
 Production-like GitHub publishing requires:
 
 ```env
@@ -128,6 +133,16 @@ docker build \
 ```
 
 In mock mode, no external agent CLI is required.
+
+After changing worker or runner source, rebuild and recreate those containers
+before running an E2E smoke. A stale image can keep old GitHub auth behavior even
+when the checkout has newer code:
+
+```bash
+docker compose build worker
+docker build -f docker/runner.Dockerfile -t ticket-to-pr-runner:local .
+docker compose up -d --force-recreate worker
+```
 
 ## Admin Console
 

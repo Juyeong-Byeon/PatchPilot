@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { Octokit } from "@octokit/rest";
 import { maskSecrets } from "@ticket-to-pr/core";
+import { buildSafeGitArgs } from "./git-safe.js";
 import type { PublishInput, PublishedPullRequest } from "./publisher-mock.js";
 
 interface PullsCreateOctokit {
@@ -65,7 +66,7 @@ export async function publishGitHubPullRequest(
 
 export async function pushBranchToOrigin(repoDir: string, workBranch: string, pushSha: string, token?: string): Promise<void> {
   await new Promise<void>((resolve, reject) => {
-    const child = spawn("git", ["push", "origin", `${pushSha}:refs/heads/${workBranch}`], {
+    const child = spawn("git", buildSafeGitArgs(["push", "origin", `${pushSha}:refs/heads/${workBranch}`], repoDir), {
       cwd: repoDir,
       env: token ? buildGitAuthEnv(process.env, token) : process.env,
       stdio: ["ignore", "pipe", "pipe"]

@@ -16,7 +16,9 @@ export interface WorkerEnv {
 
 export function readWorkerEnv(source: NodeJS.ProcessEnv = process.env): WorkerEnv {
   const executorMode = parseMode(source.WORKER_EXECUTOR_MODE ?? source.EXECUTOR_MODE, ["mock", "gstack"], "mock");
-  const publisherMode = parseMode(source.WORKER_PUBLISHER_MODE ?? source.PUBLISHER_MODE, ["mock", "github"], "mock");
+  const publisherMode = source.WORKER_PUBLISHER_MODE
+    ? parseMode(source.WORKER_PUBLISHER_MODE, ["mock", "github"], "mock")
+    : parseMode(normalizeAppPublisherMode(source.PUBLISHER_MODE), ["mock", "github"], "mock");
   const githubToken = source.GITHUB_TOKEN;
 
   if (publisherMode === "github" && !githubToken) {
@@ -50,6 +52,10 @@ function parseMode<T extends string>(value: string | undefined, allowed: T[], fa
   if (!value) return fallback;
   if (allowed.includes(value as T)) return value as T;
   throw new Error(`Invalid worker mode: ${value}`);
+}
+
+function normalizeAppPublisherMode(value: string | undefined): string | undefined {
+  return value === "gstack" ? "github" : value;
 }
 
 function parsePositiveInteger(value: string | undefined, fallback: number): number {

@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createSecretRedactor, maskSecrets, parseAgentResult, type AgentResult } from "@ticket-to-pr/core";
 import { getWorkspacePaths } from "@ticket-to-pr/runner-contract";
+import { buildSafeGitArgs } from "./git-safe.js";
 import type { ExecutorInput } from "./worker.js";
 
 export interface GstackCommandInput {
@@ -329,7 +330,7 @@ function terminateProcessGroup(child: ReturnType<typeof spawn>, signal: NodeJS.S
 
 function runGit(args: string[], cwd?: string, githubToken?: string): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn("git", args, {
+    const child = spawn("git", buildSafeGitArgs(args, cwd), {
       cwd,
       env: githubToken ? buildGitAuthEnv(process.env, githubToken) : process.env,
       stdio: ["ignore", "pipe", "pipe"]
