@@ -19,9 +19,6 @@ type StepStatus = "pending" | "skipped" | "complete" | "active" | "failed";
 interface GraphStep {
   phase: string;
   status: StepStatus;
-  eventCount: number;
-  sources: string[];
-  durationMs: number;
 }
 
 const standardPhaseFlow = ["Queued", "Planning", "Implementing", "PolicyChecking", "Publishing", "Completed"];
@@ -40,10 +37,9 @@ export function RunStepGraph({ events, currentPhase, copy, locale, selectedStep,
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto pb-1">
-          <ol className="m-0 grid min-w-[760px] auto-cols-[minmax(116px,1fr)] grid-flow-col list-none p-0" aria-label={copy.stepGraph}>
+          <ol className="m-0 grid min-w-[680px] auto-cols-[minmax(104px,1fr)] grid-flow-col list-none p-0" aria-label={copy.stepGraph}>
             {steps.map((step, index) => {
               const selected = selectedStep?.phase === step.phase;
-              const sourceText = step.sources.join(", ") || copy.sourceSystem;
 
               return (
                 <li className="relative min-w-0" key={step.phase}>
@@ -59,7 +55,7 @@ export function RunStepGraph({ events, currentPhase, copy, locale, selectedStep,
                       selected ? "text-forest-ink" : "text-charcoal hover:text-forest-ink"
                     }`}
                     type="button"
-                    onClick={() => onSelectStep?.({ phase: step.phase, source: step.sources[0] })}
+                    onClick={() => onSelectStep?.({ phase: step.phase })}
                   >
                     <span className={`relative z-10 flex size-9 shrink-0 items-center justify-center rounded-full border ${nodeClass(step.status, selected)}`}>
                       {statusGlyph(step.status)}
@@ -69,12 +65,6 @@ export function RunStepGraph({ events, currentPhase, copy, locale, selectedStep,
                         {translateState(step.phase, locale)}
                       </strong>
                       <span className="text-[12px] leading-4 text-charcoal">{statusLabel(step.status, copy)}</span>
-                      <span className="truncate font-mono text-[11px] leading-4 text-graphite" title={sourceText}>
-                        {sourceText}
-                      </span>
-                      <span className="text-[11px] leading-4 text-charcoal">
-                        {step.eventCount > 0 ? copy.spanEvents(step.eventCount) : copy.spanNoEvents} · {formatDuration(step.durationMs)}
-                      </span>
                     </span>
                   </button>
                 </li>
@@ -104,13 +94,9 @@ function buildGraphSteps(events: RunEvent[], currentPhase: string | undefined): 
 
   const currentIndex = resolveCurrentIndex(phaseFlow, events, currentPhase);
   const terminalFailure = isTerminalFailure(currentPhase);
-  const eventTimes = events.map((event) => parseDate(event.created_at)).filter((time): time is number => time !== null);
-  const firstOverall = eventTimes[0] ?? 0;
-  const lastOverall = eventTimes[eventTimes.length - 1] ?? firstOverall;
 
   return phaseFlow.map((phase, index) => {
     const phaseEvents = events.filter((event) => event.phase === phase);
-    const phaseTimes = phaseEvents.map((event) => parseDate(event.created_at)).filter((time): time is number => time !== null);
     const hasFailure = phaseEvents.some(isFailureEvent) || (terminalFailure && index === currentIndex);
     const status = hasFailure
       ? "failed"
@@ -119,20 +105,10 @@ function buildGraphSteps(events: RunEvent[], currentPhase: string | undefined): 
         : index === currentIndex
           ? activeStatus(currentPhase)
           : "pending";
-    const sources = Array.from(new Set(phaseEvents.map((event) => event.source).filter(Boolean) as string[]));
-    const durationMs =
-      phaseTimes.length > 0
-        ? Math.max(0, phaseTimes[phaseTimes.length - 1] - phaseTimes[0])
-        : index < currentIndex
-          ? Math.max(0, lastOverall - firstOverall)
-          : 0;
 
     return {
       phase,
-      status,
-      eventCount: phaseEvents.length,
-      sources,
-      durationMs
+      status
     };
   });
 }
@@ -191,17 +167,4 @@ function isFailureEvent(event: RunEvent): boolean {
 function isTerminalFailure(phase: string | undefined): boolean {
   const normalized = String(phase ?? "").toLowerCase();
   return normalized.includes("fail") || normalized.includes("cancel");
-}
-
-function parseDate(value: string | undefined): number | null {
-  if (!value) return null;
-  const time = Date.parse(value);
-  return Number.isNaN(time) ? null : time;
-}
-
-function formatDuration(milliseconds: number): string {
-  if (milliseconds <= 0) return "0s";
-  const seconds = Math.max(1, Math.round(milliseconds / 1000));
-  if (seconds < 60) return `${seconds}s`;
-  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }

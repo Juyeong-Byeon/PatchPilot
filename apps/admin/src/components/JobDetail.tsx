@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Ban, ExternalLink, RotateCcw, Undo2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Ban, ExternalLink, RotateCcw, Undo2, X } from "lucide-react";
 import type { Artifact, JobRecord, LogLine, RunEvent } from "../api.js";
 import { translateState, type AdminCopy, type Locale } from "../i18n.js";
 import { LogViewer } from "./LogViewer.js";
@@ -55,6 +55,9 @@ export function JobDetail({
   const terminal = isTerminalPhase(job.phase);
   const retryDisabled = Boolean(actionState) || job.phase !== "Failed";
   const cancelDisabled = Boolean(actionState) || terminal;
+  const selectedContext = useMemo(() => buildStepContext(selectedSpan, events, locale), [events, locale, selectedSpan]);
+  const diagnosticLogs = useMemo(() => filterLogsForContext(logs, selectedContext), [logs, selectedContext]);
+  const diagnosticArtifacts = useMemo(() => filterArtifactsForContext(artifacts, selectedContext), [artifacts, selectedContext]);
 
   return (
     <section className="grid gap-4">
@@ -146,34 +149,198 @@ export function JobDetail({
         selectedStep={selectedSpan}
         onSelectStep={setSelectedSpan}
       />
-      <RunTimeline events={events} copy={copy} locale={locale} selectedSpan={selectedSpan} onSelectSpan={setSelectedSpan} />
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <LogViewer logs={logs} copy={copy} highlightSource={selectedSpan?.source} onClearHighlight={() => setSelectedSpan(null)} />
-
-        <Card>
-          <CardHeader>
-            <div>
-              <CardTitle>{copy.artifacts}</CardTitle>
-              <span className="text-xs text-charcoal">{artifacts.length}</span>
-            </div>
-          </CardHeader>
-          <CardContent className="grid max-h-[360px] gap-3 overflow-auto">
-            {artifacts.map((artifact, index) => (
-              <article className="rounded-xl border border-hairline-gray bg-linen p-4" key={String(artifact.id ?? `${artifact.kind}-${index}`)}>
-                <header className="flex justify-between gap-3 text-xs">
-                  <strong className="font-medium text-forest-ink">{artifact.kind ?? "artifact"}</strong>
-                  <span className="text-charcoal">{formatDate(artifact.created_at, locale, copy)}</span>
-                </header>
-                <p className="my-2 truncate font-mono text-[12px] leading-4 text-graphite" title={artifact.path ?? copy.inlineContent}>{artifact.path ?? copy.inlineContent}</p>
-                {artifact.content ? <pre className="max-h-[180px] overflow-auto rounded-lg bg-forest-ink p-3 text-xs leading-normal text-linen-white">{formatJson(artifact.content)}</pre> : null}
-              </article>
-            ))}
-            {artifacts.length === 0 ? <p className="px-2 py-4 text-[13px] text-charcoal">{copy.noArtifacts}</p> : null}
-          </CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardHeader>
+          <div>
+            <CardTitle>{copy.runDiagnostics}</CardTitle>
+            <span className="text-xs text-charcoal">{selectedContext?.label ?? copy.allSteps}</span>
+          </div>
+          {selectedContext ? (
+            <Button type="button" variant="ghost" size="icon" aria-label={copy.clear} title={copy.clear} onClick={() => setSelectedSpan(null)}>
+              <X aria-hidden="true" size={15} strokeWidth={2.2} />
+            </Button>
+          ) : null}
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <RunTimeline
+            events={events}
+            copy={copy}
+            locale={locale}
+            selectedSpan={selectedSpan}
+            onSelectSpan={setSelectedSpan}
+            variant="embedded"
+          />
+          <LogViewer
+            logs={diagnosticLogs}
+            totalCount={logs.length}
+            copy={copy}
+            variant="embedded"
+          />
+          <ArtifactPanel
+            artifacts={diagnosticArtifacts}
+            totalCount={artifacts.length}
+            copy={copy}
+            locale={locale}
+            variant="embedded"
+          />
+        </CardContent>
+      </Card>
     </section>
   );
+}
+
+function ArtifactPanel({
+  artifacts,
+  totalCount,
+  copy,
+  locale,
+  variant = "card"
+}: {
+  artifacts: Artifact[];
+  totalCount?: number;
+  copy: AdminCopy;
+  locale: Locale;
+  variant?: "card" | "embedded";
+}) {
+  const content = (
+    <>
+      <div className="flex items-center justify-between gap-3 border-b border-hairline-gray p-4">
+        <div>
+          <CardTitle>{copy.artifacts}</CardTitle>
+          <span className="text-xs text-charcoal">{artifacts.length}/{totalCount ?? artifacts.length}</span>
+        </div>
+      </div>
+      <div className="grid gap-3 p-4">
+        {artifacts.map((artifact, index) => (
+          <article className="overflow-hidden rounded-xl border border-hairline-gray bg-linen-white" key={String(artifact.id ?? `${artifact.kind}-${index}`)}>
+            <header className="grid gap-2 border-b border-hairline-gray bg-linen px-4 py-3 text-[12px] leading-4 md:grid-cols-[160px_minmax(0,1fr)_150px]">
+              <strong className="font-medium text-forest-ink">{artifact.kind ?? "artifact"}</strong>
+              <span className="min-w-0 break-all font-mono text-graphite" title={artifact.path ?? copy.inlineContent}>
+                {artifact.path ?? copy.inlineContent}
+              </span>
+              <time className="text-charcoal md:text-right">{formatDate(artifact.created_at, locale, copy)}</time>
+            </header>
+            {artifact.content ? (
+              <pre className="m-0 max-h-[280px] overflow-auto bg-linen-white p-4 text-[12px] leading-5 whitespace-pre-wrap break-all text-true-black">
+                {formatJson(artifact.content)}
+              </pre>
+            ) : null}
+          </article>
+        ))}
+        {artifacts.length === 0 ? <p className="px-1 py-4 text-[13px] text-charcoal">{copy.noArtifacts}</p> : null}
+      </div>
+    </>
+  );
+
+  if (variant === "embedded") {
+    return (
+      <section className="rounded-xl border border-hairline-gray bg-linen-white" aria-label={copy.artifacts}>
+        {content}
+      </section>
+    );
+  }
+
+  return (
+    <Card>
+      {content}
+    </Card>
+  );
+}
+
+interface StepContext {
+  phase: string;
+  source?: string;
+  sources: string[];
+  startMs: number | null;
+  endMs: number | null;
+  label: string;
+}
+
+function buildStepContext(selection: SpanSelection | null, events: RunEvent[], locale: Locale): StepContext | null {
+  if (!selection) return null;
+  const orderedEvents = [...events].sort((left, right) => {
+    const leftTime = parseTime(left.created_at);
+    const rightTime = parseTime(right.created_at);
+    return (leftTime ?? 0) - (rightTime ?? 0);
+  });
+  const phaseEvents = orderedEvents.filter((event) => event.phase === selection.phase);
+  const sources = Array.from(new Set(phaseEvents.map((event) => event.source).filter(Boolean) as string[]));
+  const phaseTimes = phaseEvents.map((event) => parseTime(event.created_at)).filter((time): time is number => time !== null);
+  const startMs = phaseTimes[0] ?? null;
+  const lastPhaseMs = phaseTimes[phaseTimes.length - 1] ?? startMs;
+  const nextEvent = lastPhaseMs === null
+    ? undefined
+    : orderedEvents.find((event) => {
+        const time = parseTime(event.created_at);
+        return time !== null && time > lastPhaseMs && event.phase !== selection.phase;
+      });
+  const endMs = nextEvent ? parseTime(nextEvent.created_at) : null;
+  const label = selection.source
+    ? `${translateState(selection.phase, locale)} · ${selection.source}`
+    : translateState(selection.phase, locale);
+
+  return {
+    phase: selection.phase,
+    source: selection.source,
+    sources,
+    startMs,
+    endMs,
+    label
+  };
+}
+
+function filterLogsForContext(logs: LogLine[], context: StepContext | null): LogLine[] {
+  if (!context) return logs;
+  const direct = context.source ? logs.filter((line) => line.source === context.source) : [];
+  if (direct.length > 0) return direct;
+
+  const timed = logs.filter((line) => isWithinContext(line.created_at, context));
+  if (timed.length > 0) return timed;
+
+  return context.sources.length > 0
+    ? logs.filter((line) => Boolean(line.source && context.sources.includes(line.source)))
+    : [];
+}
+
+function filterArtifactsForContext(artifacts: Artifact[], context: StepContext | null): Artifact[] {
+  if (!context) return artifacts;
+  const mapped = artifacts.filter((artifact) => artifactMatchesPhase(artifact, context.phase));
+  if (mapped.length > 0) return mapped;
+  return artifacts.filter((artifact) => !hasKnownArtifactPhase(artifact) && isWithinContext(artifact.created_at, context));
+}
+
+function artifactMatchesPhase(artifact: Artifact, phase: string): boolean {
+  const kind = String(artifact.kind ?? "").toLowerCase();
+  if (!kind) return false;
+  if (kind.includes("policy")) return phase === "PolicyChecking";
+  if (kind.includes("agent-result") || kind.includes("result")) return phase === "Completed";
+  if (kind.includes("pr") || kind.includes("publish")) return phase === "Publishing";
+  if (kind.includes("ticket") || kind.includes("context") || kind.includes("input")) return phase === "Queued" || phase === "Planning";
+  if (kind.includes("runner") || kind.includes("gstack")) return phase === "Implementing";
+  return false;
+}
+
+function hasKnownArtifactPhase(artifact: Artifact): boolean {
+  const kind = String(artifact.kind ?? "").toLowerCase();
+  return Boolean(
+    kind.includes("policy") ||
+    kind.includes("agent-result") ||
+    kind.includes("result") ||
+    kind.includes("pr") ||
+    kind.includes("publish") ||
+    kind.includes("ticket") ||
+    kind.includes("context") ||
+    kind.includes("input") ||
+    kind.includes("runner") ||
+    kind.includes("gstack")
+  );
+}
+
+function isWithinContext(value: string | undefined, context: StepContext): boolean {
+  const time = parseTime(value);
+  if (time === null || context.startMs === null) return false;
+  if (time < context.startMs) return false;
+  return context.endMs === null ? true : time <= context.endMs;
 }
 
 function Fact({ label, value, tone }: { label: string; value: string; tone?: "danger" }) {
@@ -185,6 +352,12 @@ function Fact({ label, value, tone }: { label: string; value: string; tone?: "da
       </dd>
     </div>
   );
+}
+
+function parseTime(value: string | undefined): number | null {
+  if (!value) return null;
+  const time = Date.parse(value);
+  return Number.isNaN(time) ? null : time;
 }
 
 function stringValue(value: unknown, copy: AdminCopy): string {

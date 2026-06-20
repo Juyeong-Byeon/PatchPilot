@@ -3,18 +3,20 @@ import { Copy, Download, X } from "lucide-react";
 import type { LogLine } from "../api.js";
 import type { AdminCopy } from "../i18n.js";
 import { Button } from "./ui/button.js";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
+import { Card, CardTitle } from "./ui/card.js";
 import { Input } from "./ui/input.js";
 import { Select } from "./ui/select.js";
 
 interface LogViewerProps {
   logs: LogLine[];
+  totalCount?: number;
   copy: AdminCopy;
-  highlightSource?: string;
-  onClearHighlight?(): void;
+  contextLabel?: string;
+  onClearContext?(): void;
+  variant?: "card" | "embedded";
 }
 
-export function LogViewer({ logs, copy, highlightSource, onClearHighlight }: LogViewerProps) {
+export function LogViewer({ logs, totalCount, copy, contextLabel, onClearContext, variant = "card" }: LogViewerProps) {
   const [source, setSource] = useState("all");
   const [query, setQuery] = useState("");
   const sources = useMemo(
@@ -25,19 +27,19 @@ export function LogViewer({ logs, copy, highlightSource, onClearHighlight }: Log
     const needle = query.trim().toLowerCase();
     return logs.filter((line) => {
       const sourceMatches = source === "all" || line.source === source;
-      const highlightMatches = !highlightSource || line.source === highlightSource;
       const queryMatches = !needle || (line.text ?? "").toLowerCase().includes(needle);
-      return sourceMatches && highlightMatches && queryMatches;
+      return sourceMatches && queryMatches;
     });
-  }, [highlightSource, logs, query, source]);
+  }, [logs, query, source]);
   const text = filteredLogs.map((line) => formatLine(line, copy)).join("\n");
+  const shellClassName = variant === "embedded" ? "rounded-xl border border-hairline-gray bg-linen-white" : "";
 
-  return (
-    <Card>
-      <CardHeader className="flex-col items-stretch xl:flex-row xl:items-center">
+  const content = (
+    <>
+      <div className="flex flex-col items-stretch justify-between gap-3 border-b border-hairline-gray p-4 xl:flex-row xl:items-center">
         <div>
           <CardTitle>{copy.logs}</CardTitle>
-          <span className="text-[12px] leading-4 text-charcoal">{filteredLogs.length}/{logs.length}</span>
+          <span className="text-[12px] leading-4 text-charcoal">{filteredLogs.length}/{totalCount ?? logs.length}</span>
         </div>
         <div className="grid gap-2 md:grid-cols-[150px_minmax(180px,1fr)_auto_auto]">
           <Select aria-label={copy.filterLogsLabel} value={source} onChange={(event) => setSource(event.target.value)}>
@@ -61,18 +63,32 @@ export function LogViewer({ logs, copy, highlightSource, onClearHighlight }: Log
             <Download aria-hidden="true" size={16} strokeWidth={2.2} />
           </Button>
         </div>
-      </CardHeader>
-      {highlightSource ? (
+      </div>
+      {contextLabel ? (
         <div className="flex items-center justify-between gap-3 border-b border-hairline-gray bg-linen px-4 py-2 text-[12px] text-charcoal">
-          <span>{copy.correlatedLogs}: {highlightSource}</span>
-          <Button type="button" variant="ghost" size="icon" aria-label={copy.clear} title={copy.clear} onClick={onClearHighlight}>
+          <span>{copy.correlatedLogs}: {contextLabel}</span>
+          <Button type="button" variant="ghost" size="icon" aria-label={copy.clear} title={copy.clear} onClick={onClearContext}>
             <X aria-hidden="true" size={15} strokeWidth={2.2} />
           </Button>
         </div>
       ) : null}
-      <CardContent className="p-0">
-        <pre className="m-0 max-h-[320px] min-h-[180px] overflow-auto border-t border-hairline-gray bg-linen p-4 text-[12px] leading-5 whitespace-pre-wrap text-true-black">{text || copy.noLogs}</pre>
-      </CardContent>
+      <div>
+        <pre className="m-0 max-h-[320px] min-h-[180px] overflow-auto bg-linen p-4 text-[12px] leading-5 whitespace-pre-wrap text-true-black">{text || copy.noLogs}</pre>
+      </div>
+    </>
+  );
+
+  if (variant === "embedded") {
+    return (
+      <section className={shellClassName} aria-label={copy.logs}>
+        {content}
+      </section>
+    );
+  }
+
+  return (
+    <Card>
+      {content}
     </Card>
   );
 }

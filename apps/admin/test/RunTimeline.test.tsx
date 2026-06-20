@@ -51,8 +51,9 @@ describe("RunTimeline", () => {
     expect(within(table).getAllByText("대기").length).toBeGreaterThan(0);
     expect(within(table).getByText("구현")).toBeInTheDocument();
     expect(within(table).getByText("실패 지점")).toBeInTheDocument();
-    expect(within(table).getByText("2 이벤트")).toBeInTheDocument();
+    expect(within(table).queryByText("이벤트")).not.toBeInTheDocument();
+    expect(within(table).queryByText("2 이벤트")).not.toBeInTheDocument();
     expect(within(flow).queryByText("git authentication failed")).not.toBeInTheDocument();
-    expect(screen.getByText("git authentication failed")).toBeInTheDocument();
+    expect(screen.queryByText("git authentication failed")).not.toBeInTheDocument();
   });
 });

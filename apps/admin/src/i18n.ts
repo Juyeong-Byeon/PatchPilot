@@ -73,23 +73,20 @@ export const adminCopy = {
     stepWaitingForSignal: "아직 기록된 신호가 없습니다.",
     stepSkipped: "건너뜀",
     runTimeline: "실행 타임라인",
+    runDiagnostics: "실행 진단",
+    allSteps: "전체 단계",
     traceFlow: "실행 흐름",
     traceFlowSummary: "",
     traceColumnIndex: "#",
     traceColumnStage: "단계",
     traceColumnStatus: "상태",
     traceColumnService: "서비스",
-    traceColumnEvents: "이벤트",
     traceColumnDuration: "시간",
     service: "서비스",
-    eventLog: "이벤트 로그",
     spanFailurePoint: "실패 지점",
     spanActive: "진행 중",
     spanComplete: "완료",
     spanPending: "대기",
-    spanEvents: (count: number) => `${count} 이벤트`,
-    spanNoEvents: "이벤트 없음",
-    noEvents: "기록된 이벤트가 없습니다.",
     sourceSystem: "시스템",
     logs: "로그",
     correlatedLogs: "연결된 로그",
@@ -173,23 +170,20 @@ export const adminCopy = {
     stepWaitingForSignal: "No signal recorded yet.",
     stepSkipped: "Skipped",
     runTimeline: "Run Timeline",
+    runDiagnostics: "Run Diagnostics",
+    allSteps: "All steps",
     traceFlow: "Trace Flow",
     traceFlowSummary: "",
     traceColumnIndex: "#",
     traceColumnStage: "Stage",
     traceColumnStatus: "Status",
     traceColumnService: "Service",
-    traceColumnEvents: "Events",
     traceColumnDuration: "Duration",
     service: "Service",
-    eventLog: "Event Log",
     spanFailurePoint: "Failure point",
     spanActive: "Running",
     spanComplete: "Complete",
     spanPending: "Waiting",
-    spanEvents: (count: number) => `${count} event${count === 1 ? "" : "s"}`,
-    spanNoEvents: "No events",
-    noEvents: "No events recorded.",
     sourceSystem: "system",
     logs: "Logs",
     correlatedLogs: "Correlated Logs",
@@ -251,24 +245,4 @@ export function translateState(value: unknown, locale: Locale): string {
   if (value === null || value === undefined || value === "") return adminCopy[locale].empty;
   const text = String(value);
   return stateLabels[locale][text] ?? text;
-}
-
-const eventTypeLabels: Record<Locale, Record<string, string>> = {
-  ko: {
-    "job.enqueued": "작업 대기열 등록",
-    "worker.started": "작업자 시작",
-    "worker.completed": "작업자 완료",
-    "worker.failed": "작업자 실패",
-    "worker.error": "작업자 오류",
-    "worker.cancelled": "작업자 취소",
-    "policy.blocked": "정책 차단",
-    "job.retry_enqueue_failed": "재시도 대기열 실패"
-  },
-  en: {}
-};
-
-export function translateEventType(value: unknown, locale: Locale): string {
-  if (value === null || value === undefined || value === "") return "event";
-  const text = String(value);
-  return eventTypeLabels[locale][text] ?? text;
 }

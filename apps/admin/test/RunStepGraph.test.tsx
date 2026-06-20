@@ -49,8 +49,8 @@ describe("RunStepGraph", () => {
     expect(within(graph).getByText("구현")).toBeInTheDocument();
     expect(within(graph).getByRole("button", { name: "구현 실패 지점" })).toBeInTheDocument();
     expect(within(graph).getByText("실패 지점")).toBeInTheDocument();
-    expect(within(graph).getByText(/2 이벤트/)).toBeInTheDocument();
-    expect(within(graph).getByText("worker")).toBeInTheDocument();
+    expect(within(graph).queryByText(/2 이벤트/)).not.toBeInTheDocument();
+    expect(within(graph).queryByText("worker")).not.toBeInTheDocument();
     expect(within(graph).queryByText("git authentication failed")).not.toBeInTheDocument();
   });
 });
