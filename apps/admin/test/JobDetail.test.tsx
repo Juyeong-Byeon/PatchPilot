@@ -15,7 +15,7 @@ const baseProps = {
   copy: adminCopy.ko,
   locale: "ko" as const,
   onRetry: vi.fn(),
-  onCancel: vi.fn()
+  onCancel: vi.fn(),
 };
 
 describe("JobDetail", () => {
@@ -23,31 +23,18 @@ describe("JobDetail", () => {
 
   it("only enables retry for failed terminal jobs", () => {
     const { rerender } = render(
-      <JobDetail
-        {...baseProps}
-        job={{ id: "job_1", phase: "Completed", outcome: "NeedsReview" }}
-      />
+      <JobDetail {...baseProps} job={{ id: "job_1", phase: "Completed", outcome: "NeedsReview" }} />,
     );
 
     expect(screen.getByRole("button", { name: "재시도" })).toBeDisabled();
 
-    rerender(
-      <JobDetail
-        {...baseProps}
-        job={{ id: "job_1", phase: "Failed", outcome: "FailedInternal" }}
-      />
-    );
+    rerender(<JobDetail {...baseProps} job={{ id: "job_1", phase: "Failed", outcome: "FailedInternal" }} />);
 
     expect(screen.getByRole("button", { name: "재시도" })).toBeEnabled();
 
     // Policy-blocked (FailedActionable) jobs are not retryable by the backend, so
     // the button must stay disabled instead of triggering a 409.
-    rerender(
-      <JobDetail
-        {...baseProps}
-        job={{ id: "job_1", phase: "Failed", outcome: "FailedActionable" }}
-      />
-    );
+    rerender(<JobDetail {...baseProps} job={{ id: "job_1", phase: "Failed", outcome: "FailedActionable" }} />);
 
     expect(screen.getByRole("button", { name: "재시도" })).toBeDisabled();
   });
@@ -58,7 +45,7 @@ describe("JobDetail", () => {
         {...baseProps}
         job={{ id: "job_1", phase: "Implementing", outcome: "Running" }}
         error="작업 상세를 불러오지 못했습니다."
-      />
+      />,
     );
 
     expect(screen.getByRole("alert")).toHaveTextContent("작업 상세를 불러오지 못했습니다.");
@@ -72,9 +59,9 @@ describe("JobDetail", () => {
           id: "job_1",
           phase: "Failed",
           outcome: "FailedInternal",
-          failure_category: "github_auth"
+          failure_category: "github_auth",
         }}
-      />
+      />,
     );
 
     const outcome = screen.getByText("내부 실패");
@@ -87,13 +74,7 @@ describe("JobDetail", () => {
   });
 
   it("can render an empty detail state and then hydrate the job after refresh", () => {
-    const { rerender } = render(
-      <JobDetail
-        {...baseProps}
-        isLoading
-        job={null}
-      />
-    );
+    const { rerender } = render(<JobDetail {...baseProps} isLoading job={null} />);
 
     expect(screen.getByText("작업 상세를 불러오는 중입니다.")).toBeInTheDocument();
 
@@ -101,11 +82,13 @@ describe("JobDetail", () => {
       <JobDetail
         {...baseProps}
         job={{ id: "job_1", phase: "Planning", outcome: "Running", repository: "example-org/example-repo" }}
-      />
+      />,
     );
 
     expect(screen.getByText("example-org/example-repo")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "취소" }).some((button) => !button.hasAttribute("disabled"))).toBe(true);
+    expect(screen.getAllByRole("button", { name: "취소" }).some((button) => !button.hasAttribute("disabled"))).toBe(
+      true,
+    );
   });
 
   it("shows the latest retry attempt as current when an earlier attempt failed", () => {
@@ -117,7 +100,7 @@ describe("JobDetail", () => {
           phase: "Completed",
           outcome: "NeedsReview",
           repository: "example-org/example-repo",
-          attempt: 2
+          attempt: 2,
         }}
         events={[
           {
@@ -126,7 +109,7 @@ describe("JobDetail", () => {
             event_type: "job.enqueued",
             source: "api",
             message: "Queued",
-            created_at: "2026-06-20T00:00:00.000Z"
+            created_at: "2026-06-20T00:00:00.000Z",
           },
           {
             id: "event_2",
@@ -136,7 +119,7 @@ describe("JobDetail", () => {
             event_type: "worker.error",
             source: "worker",
             message: "old runner failure",
-            created_at: "2026-06-20T00:00:10.000Z"
+            created_at: "2026-06-20T00:00:10.000Z",
           },
           {
             id: "event_3",
@@ -146,7 +129,7 @@ describe("JobDetail", () => {
             event_type: "worker.started",
             source: "worker",
             message: "retry started",
-            created_at: "2026-06-20T00:01:00.000Z"
+            created_at: "2026-06-20T00:01:00.000Z",
           },
           {
             id: "event_4",
@@ -156,8 +139,8 @@ describe("JobDetail", () => {
             event_type: "worker.completed",
             source: "worker",
             message: "retry completed",
-            created_at: "2026-06-20T00:01:05.000Z"
-          }
+            created_at: "2026-06-20T00:01:05.000Z",
+          },
         ]}
         logs={[
           {
@@ -167,7 +150,7 @@ describe("JobDetail", () => {
             stream: "stderr",
             sequence: 0,
             text: "gstack failed with exit code 1",
-            created_at: "2026-06-20T00:00:10.000Z"
+            created_at: "2026-06-20T00:00:10.000Z",
           },
           {
             id: "log_2",
@@ -176,8 +159,8 @@ describe("JobDetail", () => {
             stream: "stdout",
             sequence: 0,
             text: "Runner completed successfully",
-            created_at: "2026-06-20T00:01:05.000Z"
-          }
+            created_at: "2026-06-20T00:01:05.000Z",
+          },
         ]}
         artifacts={[
           {
@@ -185,17 +168,17 @@ describe("JobDetail", () => {
             run_id: "run_1",
             kind: "agent-result",
             content: { failure: "old failed attempt" },
-            created_at: "2026-06-20T00:00:10.000Z"
+            created_at: "2026-06-20T00:00:10.000Z",
           },
           {
             id: "artifact_2",
             run_id: "run_2",
             kind: "policy-gate",
             content: { status: "passed" },
-            created_at: "2026-06-20T00:01:05.000Z"
-          }
+            created_at: "2026-06-20T00:01:05.000Z",
+          },
         ]}
-      />
+      />,
     );
 
     expect(screen.queryByText("실패 지점")).not.toBeInTheDocument();
@@ -215,7 +198,7 @@ describe("JobDetail", () => {
           phase: "Implementing",
           outcome: "Running",
           repository: "example-org/example-repo",
-          attempt: 1
+          attempt: 1,
         }}
         events={[
           {
@@ -224,7 +207,7 @@ describe("JobDetail", () => {
             event_type: "job.enqueued",
             source: "api",
             message: "Queued",
-            created_at: "2026-06-20T00:00:00.000Z"
+            created_at: "2026-06-20T00:00:00.000Z",
           },
           {
             id: "event_2",
@@ -234,10 +217,10 @@ describe("JobDetail", () => {
             event_type: "worker.started",
             source: "worker",
             message: "Worker picked up job",
-            created_at: "2026-06-20T00:00:05.000Z"
-          }
+            created_at: "2026-06-20T00:00:05.000Z",
+          },
         ]}
-      />
+      />,
     );
 
     await waitFor(() => {

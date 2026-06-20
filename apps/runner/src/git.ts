@@ -11,7 +11,7 @@ export function runGit(args: string[], cwd?: string): Promise<GitResult> {
     const child = spawn("git", args, {
       cwd,
       env: process.env.GITHUB_TOKEN ? buildGitAuthEnv(process.env, process.env.GITHUB_TOKEN) : process.env,
-      stdio: ["ignore", "pipe", "pipe"]
+      stdio: ["ignore", "pipe", "pipe"],
     });
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
@@ -38,7 +38,11 @@ export async function cloneRepository(repositoryUrl: string, repoDir: string): P
   await runGit(["clone", repositoryUrl, repoDir]);
 }
 
-export async function checkoutBaseAndCreateBranch(repoDir: string, targetBranch: string, workBranch: string): Promise<void> {
+export async function checkoutBaseAndCreateBranch(
+  repoDir: string,
+  targetBranch: string,
+  workBranch: string,
+): Promise<void> {
   await runGit(["fetch", "origin", targetBranch], repoDir);
   await runGit(["checkout", "-B", workBranch, `origin/${targetBranch}`], repoDir);
 }
@@ -67,6 +71,6 @@ function buildGitAuthEnv(source: NodeJS.ProcessEnv, token: string): NodeJS.Proce
     ...source,
     GIT_CONFIG_COUNT: "1",
     GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
-    GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${encoded}`
+    GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${encoded}`,
   };
 }

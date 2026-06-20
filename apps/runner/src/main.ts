@@ -2,13 +2,7 @@ import { access } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { readJsonArtifact, readTextArtifact } from "@ticket-to-pr/runner-contract";
-import {
-  checkoutBaseAndCreateBranch,
-  cloneRepository,
-  getChangedFiles,
-  getHeadSha,
-  hasLocalCommit
-} from "./git.js";
+import { checkoutBaseAndCreateBranch, cloneRepository, getChangedFiles, getHeadSha, hasLocalCommit } from "./git.js";
 import { runGstack } from "./gstack.js";
 import { prepareWorkspace } from "./workspace.js";
 
@@ -64,7 +58,7 @@ function readConfig(env: NodeJS.ProcessEnv): RunnerConfig {
     repositoryUrl: readRequiredEnv(env, "REPOSITORY_URL"),
     targetBranch: readRequiredEnv(env, "TARGET_BRANCH"),
     workBranch: readRequiredEnv(env, "WORK_BRANCH"),
-    timeoutSeconds
+    timeoutSeconds,
   };
 }
 

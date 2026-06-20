@@ -21,7 +21,7 @@ describe("RunStepGraph", () => {
             event_type: "job.enqueued",
             source: "api",
             message: "accepted",
-            created_at: "2026-06-20T00:00:00.000Z"
+            created_at: "2026-06-20T00:00:00.000Z",
           },
           {
             id: "2",
@@ -29,7 +29,7 @@ describe("RunStepGraph", () => {
             event_type: "worker.started",
             source: "worker",
             message: "clone started",
-            created_at: "2026-06-20T00:00:05.000Z"
+            created_at: "2026-06-20T00:00:05.000Z",
           },
           {
             id: "3",
@@ -37,10 +37,10 @@ describe("RunStepGraph", () => {
             event_type: "worker.failed",
             source: "worker",
             message: "git authentication failed",
-            created_at: "2026-06-20T00:00:12.000Z"
-          }
+            created_at: "2026-06-20T00:00:12.000Z",
+          },
         ]}
-      />
+      />,
     );
 
     const graph = screen.getByRole("list", { name: "처리 단계 그래프" });
@@ -69,7 +69,7 @@ describe("RunStepGraph", () => {
             event_type: "job.enqueued",
             source: "api",
             message: "accepted",
-            created_at: "2026-06-20T00:00:00.000Z"
+            created_at: "2026-06-20T00:00:00.000Z",
           },
           {
             id: "2",
@@ -77,10 +77,10 @@ describe("RunStepGraph", () => {
             event_type: "worker.started",
             source: "worker",
             message: "clone started",
-            created_at: "2026-06-20T00:00:05.000Z"
-          }
+            created_at: "2026-06-20T00:00:05.000Z",
+          },
         ]}
-      />
+      />,
     );
 
     expect(screen.getByRole("button", { name: "구현 진행 중" })).toBeInTheDocument();
@@ -100,7 +100,7 @@ describe("RunStepGraph", () => {
             event_type: "job.enqueued",
             source: "api",
             message: "accepted",
-            created_at: "2026-06-20T00:00:00.000Z"
+            created_at: "2026-06-20T00:00:00.000Z",
           },
           {
             id: "2",
@@ -108,7 +108,7 @@ describe("RunStepGraph", () => {
             event_type: "worker.started",
             source: "worker",
             message: "runner started",
-            created_at: "2026-06-20T00:00:05.000Z"
+            created_at: "2026-06-20T00:00:05.000Z",
           },
           {
             id: "3",
@@ -116,10 +116,10 @@ describe("RunStepGraph", () => {
             event_type: "worker.error",
             source: "worker",
             message: "gstack runner exited with code 1",
-            created_at: "2026-06-20T00:00:12.000Z"
-          }
+            created_at: "2026-06-20T00:00:12.000Z",
+          },
         ]}
-      />
+      />,
     );
 
     const graph = screen.getByRole("list", { name: "처리 단계 그래프" });
@@ -143,7 +143,7 @@ describe("RunStepGraph", () => {
             event_type: "job.enqueued",
             source: "api",
             message: "accepted",
-            created_at: "2026-06-20T00:00:00.000Z"
+            created_at: "2026-06-20T00:00:00.000Z",
           },
           {
             id: "2",
@@ -151,7 +151,7 @@ describe("RunStepGraph", () => {
             event_type: "worker.started",
             source: "worker",
             message: "runner started",
-            created_at: "2026-06-20T00:00:01.000Z"
+            created_at: "2026-06-20T00:00:01.000Z",
           },
           {
             id: "3",
@@ -159,10 +159,10 @@ describe("RunStepGraph", () => {
             event_type: "worker.error",
             source: "worker",
             message: "gstack runner exited with code 125",
-            created_at: "2026-06-20T00:00:02.000Z"
-          }
+            created_at: "2026-06-20T00:00:02.000Z",
+          },
         ]}
-      />
+      />,
     );
 
     const graph = screen.getByRole("list", { name: "처리 단계 그래프" });
@@ -186,7 +186,7 @@ describe("RunStepGraph", () => {
             event_type: "job.enqueued",
             source: "api",
             message: "accepted",
-            created_at: "2026-06-20T00:00:00.000Z"
+            created_at: "2026-06-20T00:00:00.000Z",
           },
           {
             id: "2",
@@ -194,10 +194,10 @@ describe("RunStepGraph", () => {
             event_type: "worker.error",
             source: "worker",
             message: "gstack runner exited with code 125",
-            created_at: "2026-06-20T00:00:02.000Z"
-          }
+            created_at: "2026-06-20T00:00:02.000Z",
+          },
         ]}
-      />
+      />,
     );
 
     expect(container.querySelector("[data-step-graph-scroll]")).toHaveClass("py-5");
@@ -217,7 +217,7 @@ describe("RunStepGraph", () => {
             event_type: "job.enqueued",
             source: "api",
             message: "accepted",
-            created_at: "2026-06-20T00:00:00.000Z"
+            created_at: "2026-06-20T00:00:00.000Z",
           },
           {
             id: "2",
@@ -225,7 +225,7 @@ describe("RunStepGraph", () => {
             event_type: "worker.started",
             source: "worker",
             message: "runner started",
-            created_at: "2026-06-20T00:00:05.000Z"
+            created_at: "2026-06-20T00:00:05.000Z",
           },
           {
             id: "3",
@@ -233,10 +233,10 @@ describe("RunStepGraph", () => {
             event_type: "worker.completed",
             source: "worker",
             message: "pull request opened",
-            created_at: "2026-06-20T00:00:30.000Z"
-          }
+            created_at: "2026-06-20T00:00:30.000Z",
+          },
         ]}
-      />
+      />,
     );
 
     const graph = screen.getByRole("list", { name: "처리 단계 그래프" });

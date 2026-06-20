@@ -20,7 +20,15 @@ interface JobListProps {
 
 const rowColumns = "grid-cols-[136px_300px_minmax(220px,1fr)_154px_56px]";
 
-export function JobList({ jobs, selectedJobId, isLoading, copy, locale, statusFilter = "all", onOpenJob }: JobListProps) {
+export function JobList({
+  jobs,
+  selectedJobId,
+  isLoading,
+  copy,
+  locale,
+  statusFilter = "all",
+  onOpenJob,
+}: JobListProps) {
   const [query, setQuery] = useState("");
   const filteredJobs = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -45,7 +53,10 @@ export function JobList({ jobs, selectedJobId, isLoading, copy, locale, statusFi
           </span>
         </div>
         <div className="relative w-full md:w-[280px]">
-          <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-graphite" />
+          <Search
+            aria-hidden="true"
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-graphite"
+          />
           <Input
             className="w-full pl-9"
             aria-label={copy.filterJobsLabel}
@@ -58,7 +69,12 @@ export function JobList({ jobs, selectedJobId, isLoading, copy, locale, statusFi
 
       <div className="overflow-x-auto">
         <div className="min-w-[1020px]">
-          <div className={cn("sticky top-0 z-10 grid border-b border-hairline-gray bg-linen-white/95 px-4 py-2 text-[12px] font-medium leading-4 text-charcoal backdrop-blur", rowColumns)}>
+          <div
+            className={cn(
+              "sticky top-0 z-10 grid border-b border-hairline-gray bg-linen-white/95 px-4 py-2 text-[12px] font-medium leading-4 text-charcoal backdrop-blur",
+              rowColumns,
+            )}
+          >
             <span>{copy.tableUpdated}</span>
             <span>{copy.tableJob}</span>
             <span>{copy.tableRepo}</span>
@@ -86,7 +102,7 @@ export function JobList({ jobs, selectedJobId, isLoading, copy, locale, statusFi
                         ? "border-l-cobalt-surface bg-mist-blue text-true-black shadow-inner"
                         : running
                           ? "border-l-cobalt-surface bg-mint-veil text-true-black shadow-[inset_4px_0_0_rgba(18,126,227,0.18),0_8px_24px_rgba(18,126,227,0.10)]"
-                        : "border-l-transparent bg-linen-white text-true-black hover:border-l-electric-blue hover:bg-mist-blue"
+                          : "border-l-transparent bg-linen-white text-true-black hover:border-l-electric-blue hover:bg-mist-blue",
                     )}
                     type="button"
                     onClick={() => onOpenJob(job.id)}
@@ -96,7 +112,10 @@ export function JobList({ jobs, selectedJobId, isLoading, copy, locale, statusFi
                       {formatDate(getValue(job, "updated_at", "created_at"), locale, copy)}
                     </span>
                     <span className="min-w-0 pr-4">
-                      <span className="block truncate font-mono text-[12px] leading-5 text-cobalt-surface" title={job.id}>
+                      <span
+                        className="block truncate font-mono text-[12px] leading-5 text-cobalt-surface"
+                        title={job.id}
+                      >
                         {jobUuid}
                       </span>
                     </span>
@@ -168,7 +187,12 @@ function isRunningJob(job: JobRecord): boolean {
   return isRunningPhase(job.phase);
 }
 
-function getPrimaryStatus(job: JobRecord, locale: Locale, copy: AdminCopy, running: boolean): { value: string; label: string } {
+function getPrimaryStatus(
+  job: JobRecord,
+  locale: Locale,
+  copy: AdminCopy,
+  running: boolean,
+): { value: string; label: string } {
   if (running) {
     return { value: "Running", label: formatRunningPhase(job, locale, copy) };
   }
@@ -234,6 +258,6 @@ function formatDate(value: string | undefined, locale: Locale, copy: AdminCopy):
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
-    minute: "2-digit"
+    minute: "2-digit",
   }).format(time);
 }

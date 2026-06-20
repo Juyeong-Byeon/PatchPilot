@@ -28,7 +28,16 @@ interface PhaseSpan {
   durationMs: number;
 }
 
-export function RunTimeline({ events, copy, locale, selectedSpan, onSelectSpan, variant = "card", currentPhase, nowMs }: RunTimelineProps) {
+export function RunTimeline({
+  events,
+  copy,
+  locale,
+  selectedSpan,
+  onSelectSpan,
+  variant = "card",
+  currentPhase,
+  nowMs,
+}: RunTimelineProps) {
   const orderedEvents = useMemo(
     () =>
       [...events].sort((left, right) => {
@@ -36,10 +45,13 @@ export function RunTimeline({ events, copy, locale, selectedSpan, onSelectSpan, 
         const rightTime = Date.parse(right.created_at ?? "");
         return (Number.isNaN(leftTime) ? 0 : leftTime) - (Number.isNaN(rightTime) ? 0 : rightTime);
       }),
-    [events]
+    [events],
   );
   const effectiveNowMs = nowMs ?? Date.now();
-  const spans = useMemo(() => buildPhaseSpans(orderedEvents, currentPhase, effectiveNowMs), [currentPhase, effectiveNowMs, orderedEvents]);
+  const spans = useMemo(
+    () => buildPhaseSpans(orderedEvents, currentPhase, effectiveNowMs),
+    [currentPhase, effectiveNowMs, orderedEvents],
+  );
   const totalRunDuration = Math.max(1, totalDuration(spans));
 
   const content = (
@@ -47,13 +59,18 @@ export function RunTimeline({ events, copy, locale, selectedSpan, onSelectSpan, 
       <div className="mb-4 flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
         <div>
           <h3 className="text-[13px] font-semibold leading-5 text-forest-ink">{copy.traceFlow}</h3>
-          {copy.traceFlowSummary ? <p className="m-0 text-[12px] leading-4 text-charcoal">{copy.traceFlowSummary}</p> : null}
+          {copy.traceFlowSummary ? (
+            <p className="m-0 text-[12px] leading-4 text-charcoal">{copy.traceFlowSummary}</p>
+          ) : null}
         </div>
         <span className="text-[12px] leading-4 text-charcoal">{formatDuration(totalDuration(spans))}</span>
       </div>
 
       <div className="surface-card-soft overflow-x-auto rounded-lg border border-hairline-gray">
-        <table className="w-full min-w-[720px] table-fixed border-collapse text-left text-[13px]" aria-label={copy.traceFlow}>
+        <table
+          className="w-full min-w-[720px] table-fixed border-collapse text-left text-[13px]"
+          aria-label={copy.traceFlow}
+        >
           <thead className="bg-linen-white/95 text-[12px] font-medium leading-4 text-charcoal">
             <tr className="border-b border-hairline-gray">
               <th className="w-[44px] px-3 py-2">{copy.traceColumnIndex}</th>
@@ -65,7 +82,9 @@ export function RunTimeline({ events, copy, locale, selectedSpan, onSelectSpan, 
           </thead>
           <tbody>
             {spans.map((span, index) => {
-              const selected = selectedSpan?.phase === span.phase && (!selectedSpan.source || span.sources.includes(selectedSpan.source));
+              const selected =
+                selectedSpan?.phase === span.phase &&
+                (!selectedSpan.source || span.sources.includes(selectedSpan.source));
               const source = span.sources.join(", ") || copy.sourceSystem;
 
               return (
@@ -81,15 +100,21 @@ export function RunTimeline({ events, copy, locale, selectedSpan, onSelectSpan, 
                 >
                   <td className="px-3 py-2 font-mono text-[12px] text-charcoal">{index}</td>
                   <td className="min-w-0 px-3 py-2">
-                    <span className="block truncate font-medium text-true-black">{translateState(span.phase, locale)}</span>
+                    <span className="block truncate font-medium text-true-black">
+                      {translateState(span.phase, locale)}
+                    </span>
                   </td>
                   <td className="px-3 py-2">
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[12px] leading-4 shadow-sm ${statusClassName(span.status)}`}>
+                    <span
+                      className={`inline-flex rounded-full px-2 py-0.5 text-[12px] leading-4 shadow-sm ${statusClassName(span.status)}`}
+                    >
                       {statusLabel(span.status, copy)}
                     </span>
                   </td>
                   <td className="px-3 py-2">
-                    <span className="block truncate text-forest-ink" title={source}>{source}</span>
+                    <span className="block truncate text-forest-ink" title={source}>
+                      {source}
+                    </span>
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex items-center justify-end gap-3">
@@ -123,9 +148,7 @@ export function RunTimeline({ events, copy, locale, selectedSpan, onSelectSpan, 
           <CardTitle>{copy.runTimeline}</CardTitle>
         </div>
       </CardHeader>
-      <CardContent className="p-0">
-        {content}
-      </CardContent>
+      <CardContent className="p-0">{content}</CardContent>
     </Card>
   );
 }
@@ -147,7 +170,7 @@ function buildPhaseSpans(events: RunEvent[], currentPhase: string | undefined, n
   const firstOverall = eventTimes[0] ?? 0;
   const lastObservedIndex = Math.max(
     -1,
-    ...phaseFlow.map((phase, index) => (events.some((event) => event.phase === phase) ? index : -1))
+    ...phaseFlow.map((phase, index) => (events.some((event) => event.phase === phase) ? index : -1)),
   );
   const currentIndex =
     failedPhase && phaseFlow.includes(failedPhase)
@@ -159,9 +182,12 @@ function buildPhaseSpans(events: RunEvent[], currentPhase: string | undefined, n
 
   return phaseFlow.map((phase, index) => {
     const phaseEvents = events.filter((event) => event.phase === phase);
-    const phaseTimes = phaseEvents.map((event) => parseDate(event.created_at)).filter((time): time is number => time !== null);
+    const phaseTimes = phaseEvents
+      .map((event) => parseDate(event.created_at))
+      .filter((time): time is number => time !== null);
     const isCurrentActive = !terminalPhase && index === currentIndex;
-    const firstTime = phaseTimes[0] ?? (isCurrentActive ? inferActiveStartTime(events, phaseFlow, index, firstOverall) : firstOverall);
+    const firstTime =
+      phaseTimes[0] ?? (isCurrentActive ? inferActiveStartTime(events, phaseFlow, index, firstOverall) : firstOverall);
     const lastTime = phaseTimes[phaseTimes.length - 1] ?? firstTime;
     const nextPhaseTime = events
       .map((event) => ({ phase: event.phase, time: parseDate(event.created_at) }))
@@ -176,14 +202,15 @@ function buildPhaseSpans(events: RunEvent[], currentPhase: string | undefined, n
           : index < currentIndex || terminalPhase || phase === "Completed"
             ? "complete"
             : "pending";
-    const endTime = status === "active" ? nowMs : nextPhaseTime ?? lastTime;
+    const endTime = status === "active" ? nowMs : (nextPhaseTime ?? lastTime);
     const sources = Array.from(new Set(phaseEvents.map((event) => event.source).filter(Boolean) as string[]));
-    const inferredSources = sources.length > 0 ? sources : isCurrentActive ? inferActiveSources(events, phaseFlow, index) : [];
+    const inferredSources =
+      sources.length > 0 ? sources : isCurrentActive ? inferActiveSources(events, phaseFlow, index) : [];
     return {
       phase,
       status,
       sources: inferredSources,
-      durationMs: phaseEvents.length > 0 || status === "active" ? Math.max(0, endTime - firstTime) : 0
+      durationMs: phaseEvents.length > 0 || status === "active" ? Math.max(0, endTime - firstTime) : 0,
     };
   });
 }
@@ -192,9 +219,12 @@ function inferActiveStartTime(events: RunEvent[], phaseFlow: string[], currentIn
   const precedingEvents = events
     .map((event) => ({
       phaseIndex: phaseFlow.indexOf(String(event.phase ?? "")),
-      time: parseDate(event.created_at)
+      time: parseDate(event.created_at),
     }))
-    .filter((event): event is { phaseIndex: number; time: number } => event.time !== null && event.phaseIndex >= 0 && event.phaseIndex < currentIndex);
+    .filter(
+      (event): event is { phaseIndex: number; time: number } =>
+        event.time !== null && event.phaseIndex >= 0 && event.phaseIndex < currentIndex,
+    );
   if (precedingEvents.length > 0) return precedingEvents[precedingEvents.length - 1]?.time ?? fallback;
 
   const latestEventTime = [...events]
@@ -215,7 +245,7 @@ function inferActiveSources(events: RunEvent[], phaseFlow: string[], currentInde
 function selectWithKeyboard(
   event: KeyboardEvent<HTMLTableRowElement>,
   span: PhaseSpan,
-  onSelectSpan: RunTimelineProps["onSelectSpan"]
+  onSelectSpan: RunTimelineProps["onSelectSpan"],
 ) {
   if (event.key !== "Enter" && event.key !== " ") return;
   event.preventDefault();
@@ -254,7 +284,14 @@ function totalDuration(spans: PhaseSpan[]): number {
 function isFailureEvent(event: RunEvent): boolean {
   const phase = String(event.phase ?? "").toLowerCase();
   const type = String(event.event_type ?? event.eventType ?? "").toLowerCase();
-  return phase.includes("fail") || phase.includes("cancel") || type.includes("failed") || type.includes("error") || type.includes("blocked") || type.includes("cancel");
+  return (
+    phase.includes("fail") ||
+    phase.includes("cancel") ||
+    type.includes("failed") ||
+    type.includes("error") ||
+    type.includes("blocked") ||
+    type.includes("cancel")
+  );
 }
 
 function resolveFailedPhase(events: RunEvent[], currentPhase: string | undefined): string | undefined {

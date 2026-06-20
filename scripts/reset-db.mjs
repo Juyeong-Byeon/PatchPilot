@@ -14,7 +14,10 @@ function run(command, args, options = {}) {
 }
 
 const env = parseEnvFile(`${rootDir}.env`);
-const hostDbUrl = (env.DATABASE_URL ?? "postgres://ticket_to_pr:ticket_to_pr@localhost:5432/ticket_to_pr").replace(/@postgres:/, "@localhost:");
+const hostDbUrl = (env.DATABASE_URL ?? "postgres://ticket_to_pr:ticket_to_pr@localhost:5432/ticket_to_pr").replace(
+  /@postgres:/,
+  "@localhost:",
+);
 
 console.log("Resetting local database (this wipes all local job data)...\n");
 run("docker", ["compose", "down", "-v"]);

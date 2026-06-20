@@ -40,8 +40,8 @@ export function evaluatePreExecutionPolicy(input: PolicyGateInput): PolicyGateRe
       repositoryAllowed,
       changedFiles: [],
       deniedFiles: [],
-      reasons
-    }
+      reasons,
+    },
   };
 }
 
@@ -58,7 +58,9 @@ export function evaluatePolicyGate(result: AgentResult, input: PolicyGateInput):
     reasons.push(`Protected files changed: ${deniedFiles.join(", ")}`);
   }
   if (input.expectedTargetBranch && result.targetBranch !== input.expectedTargetBranch) {
-    reasons.push(`Target branch mismatch: expected ${input.expectedTargetBranch}, got ${result.targetBranch ?? "unknown"}`);
+    reasons.push(
+      `Target branch mismatch: expected ${input.expectedTargetBranch}, got ${result.targetBranch ?? "unknown"}`,
+    );
   }
   if (result.commits.length === 0) {
     reasons.push("No local commit evidence was produced");
@@ -80,7 +82,7 @@ export function evaluatePolicyGate(result: AgentResult, input: PolicyGateInput):
       repositoryAllowed,
       changedFiles,
       deniedFiles,
-      reasons
-    }
+      reasons,
+    },
   };
 }

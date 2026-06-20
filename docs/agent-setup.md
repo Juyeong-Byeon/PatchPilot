@@ -44,13 +44,13 @@ Use the printed `Admin token` to log into the console.
 
 ### If `npm run setup` fails
 
-| Symptom | Cause | Fix |
-| --- | --- | --- |
-| `Docker daemon is not reachable` | Docker not running | Start Docker, re-run |
+| Symptom                                                 | Cause                                      | Fix                                                                                                                   |
+| ------------------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `Docker daemon is not reachable`                        | Docker not running                         | Start Docker, re-run                                                                                                  |
 | Preflight fails on `PUBLISHER_MODE=github requires ...` | `.env` is in real mode without credentials | Set `EXECUTOR_MODE=mock` and `PUBLISHER_MODE=mock` in `.env`, or provide real `GITHUB_TOKEN` + `REPOSITORY_ALLOWLIST` |
-| Migration error / wedged DB | stale/corrupt Postgres volume | `npm run reset:db` |
-| API never becomes ready | api container crash-looping | `npm run logs`, read the error, fix `.env`, re-run setup |
-| Port already in use (5432/6379/3000) | another process/stack bound the port | stop it, or change `HOST_API_PORT` in `.env` for the API |
+| Migration error / wedged DB                             | stale/corrupt Postgres volume              | `npm run reset:db`                                                                                                    |
+| API never becomes ready                                 | api container crash-looping                | `npm run logs`, read the error, fix `.env`, re-run setup                                                              |
+| Port already in use (5432/6379/3000)                    | another process/stack bound the port       | stop it, or change `HOST_API_PORT` in `.env` for the API                                                              |
 
 ## 2. Verify the stack
 

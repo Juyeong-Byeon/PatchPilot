@@ -34,9 +34,14 @@ interface FetchResponse {
   json(): Promise<unknown>;
 }
 
-type FetchLike = (input: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) => Promise<FetchResponse>;
+type FetchLike = (
+  input: string,
+  init?: { method?: string; headers?: Record<string, string>; body?: string },
+) => Promise<FetchResponse>;
 
-export function readLarkRecordUpdaterConfig(source: Record<string, string | undefined>): LarkRecordUpdaterConfig | undefined {
+export function readLarkRecordUpdaterConfig(
+  source: Record<string, string | undefined>,
+): LarkRecordUpdaterConfig | undefined {
   const appId = clean(source.LARK_APP_ID);
   const appSecret = clean(source.LARK_APP_SECRET);
   const baseAppToken = clean(source.LARK_BASE_APP_TOKEN);
@@ -48,7 +53,7 @@ export function readLarkRecordUpdaterConfig(source: Record<string, string | unde
     ["LARK_APP_ID", appId],
     ["LARK_APP_SECRET", appSecret],
     ["LARK_BASE_APP_TOKEN", baseAppToken],
-    ["LARK_BASE_TABLE_ID", tableId]
+    ["LARK_BASE_TABLE_ID", tableId],
   ]
     .filter(([, value]) => !value)
     .map(([name]) => name);
@@ -66,12 +71,15 @@ export function readLarkRecordUpdaterConfig(source: Record<string, string | unde
       prUrlField: clean(source.LARK_PR_URL_FIELD) ?? "PR URL",
       prNumberField: clean(source.LARK_PR_NUMBER_FIELD) ?? "PR Number",
       failureReasonField: clean(source.LARK_FAILURE_FIELD) ?? "PatchPilot Failure",
-      updatedAtField: clean(source.LARK_UPDATED_AT_FIELD) ?? "PatchPilot Updated At"
-    }
+      updatedAtField: clean(source.LARK_UPDATED_AT_FIELD) ?? "PatchPilot Updated At",
+    },
   };
 }
 
-export function createLarkRecordUpdater(config: LarkRecordUpdaterConfig, fetchImpl: FetchLike = defaultFetch): LarkStatusUpdater {
+export function createLarkRecordUpdater(
+  config: LarkRecordUpdaterConfig,
+  fetchImpl: FetchLike = defaultFetch,
+): LarkStatusUpdater {
   let cachedToken: { value: string; expiresAtMs: number } | null = null;
 
   return async (update) => {
@@ -84,10 +92,10 @@ export function createLarkRecordUpdater(config: LarkRecordUpdaterConfig, fetchIm
         method: "PATCH",
         headers: {
           authorization: `Bearer ${token.value}`,
-          "content-type": "application/json; charset=utf-8"
+          "content-type": "application/json; charset=utf-8",
         },
-        body: JSON.stringify({ fields })
-      }
+        body: JSON.stringify({ fields }),
+      },
     );
     if (!response.ok) {
       throw new Error(`Lark record update failed with status ${response.status}: ${await response.text()}`);
@@ -99,9 +107,12 @@ export function createLarkRecordUpdater(config: LarkRecordUpdaterConfig, fetchIm
   };
 }
 
-export function buildLarkRecordFields(update: LarkStatusUpdate, mapping: LarkStatusFieldMapping): Record<string, unknown> {
+export function buildLarkRecordFields(
+  update: LarkStatusUpdate,
+  mapping: LarkStatusFieldMapping,
+): Record<string, unknown> {
   const fields: Record<string, unknown> = {
-    [mapping.statusField]: update.status
+    [mapping.statusField]: update.status,
   };
   if (mapping.jobIdField && update.jobId) fields[mapping.jobIdField] = update.jobId;
   if (mapping.prUrlField && update.prUrl) fields[mapping.prUrlField] = update.prUrl;
@@ -114,26 +125,35 @@ export function buildLarkRecordFields(update: LarkStatusUpdate, mapping: LarkSta
 async function getTenantAccessToken(
   config: LarkRecordUpdaterConfig,
   fetchImpl: FetchLike,
-  cachedToken: { value: string; expiresAtMs: number } | null
+  cachedToken: { value: string; expiresAtMs: number } | null,
 ): Promise<{ value: string; expiresAtMs: number }> {
   if (cachedToken && cachedToken.expiresAtMs > Date.now() + 60_000) return cachedToken;
 
-  const response = await fetchImpl(`${trimTrailingSlash(config.apiBaseUrl)}/open-apis/auth/v3/tenant_access_token/internal`, {
-    method: "POST",
-    headers: { "content-type": "application/json; charset=utf-8" },
-    body: JSON.stringify({
-      app_id: config.appId,
-      app_secret: config.appSecret
-    })
-  });
-  if (!response.ok) throw new Error(`Lark tenant token request failed with status ${response.status}: ${await response.text()}`);
-  const body = (await response.json()) as { code?: number; msg?: string; tenant_access_token?: string; expire?: number };
+  const response = await fetchImpl(
+    `${trimTrailingSlash(config.apiBaseUrl)}/open-apis/auth/v3/tenant_access_token/internal`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json; charset=utf-8" },
+      body: JSON.stringify({
+        app_id: config.appId,
+        app_secret: config.appSecret,
+      }),
+    },
+  );
+  if (!response.ok)
+    throw new Error(`Lark tenant token request failed with status ${response.status}: ${await response.text()}`);
+  const body = (await response.json()) as {
+    code?: number;
+    msg?: string;
+    tenant_access_token?: string;
+    expire?: number;
+  };
   if (body.code !== 0 || !body.tenant_access_token) {
     throw new Error(`Lark tenant token request failed: ${body.msg ?? `code ${body.code ?? "unknown"}`}`);
   }
   return {
     value: body.tenant_access_token,
-    expiresAtMs: Date.now() + Math.max(60, body.expire ?? 7200) * 1000
+    expiresAtMs: Date.now() + Math.max(60, body.expire ?? 7200) * 1000,
   };
 }
 

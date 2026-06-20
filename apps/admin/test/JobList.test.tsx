@@ -27,13 +27,13 @@ describe("JobList", () => {
             outcome: "FailedInternal",
             attempt: 1,
             updated_at: "2026-06-20T00:25:00.000Z",
-            last_event: longEvent
-          }
+            last_event: longEvent,
+          },
         ]}
         locale="ko"
         selectedJobId=""
         onOpenJob={onOpenJob}
-      />
+      />,
     );
 
     const row = screen.getByRole("button", { name: /09774cca-aa0f-4134-9093-6cebc794e385/ });
@@ -49,18 +49,52 @@ describe("JobList", () => {
 
   it("applies the status filter to the visible rows", () => {
     const jobs = [
-      { id: "job_run_11111111-1111-4111-8111-111111111111", repository: "acme/web", phase: "Implementing", outcome: "Running", updated_at: "2026-06-20T00:25:00.000Z" },
-      { id: "job_fail_22222222-2222-4222-8222-222222222222", repository: "acme/web", phase: "Failed", outcome: "FailedInternal", updated_at: "2026-06-20T00:26:00.000Z" },
-      { id: "job_done_33333333-3333-4333-8333-333333333333", repository: "acme/web", phase: "Completed", outcome: "Completed", updated_at: "2026-06-20T00:27:00.000Z" }
+      {
+        id: "job_run_11111111-1111-4111-8111-111111111111",
+        repository: "acme/web",
+        phase: "Implementing",
+        outcome: "Running",
+        updated_at: "2026-06-20T00:25:00.000Z",
+      },
+      {
+        id: "job_fail_22222222-2222-4222-8222-222222222222",
+        repository: "acme/web",
+        phase: "Failed",
+        outcome: "FailedInternal",
+        updated_at: "2026-06-20T00:26:00.000Z",
+      },
+      {
+        id: "job_done_33333333-3333-4333-8333-333333333333",
+        repository: "acme/web",
+        phase: "Completed",
+        outcome: "Completed",
+        updated_at: "2026-06-20T00:27:00.000Z",
+      },
     ];
 
     const { rerender } = render(
-      <JobList copy={adminCopy.ko} isLoading={false} jobs={jobs} locale="ko" selectedJobId="" statusFilter="all" onOpenJob={vi.fn()} />
+      <JobList
+        copy={adminCopy.ko}
+        isLoading={false}
+        jobs={jobs}
+        locale="ko"
+        selectedJobId=""
+        statusFilter="all"
+        onOpenJob={vi.fn()}
+      />,
     );
     expect(screen.getAllByTestId("job-status-pill")).toHaveLength(3);
 
     rerender(
-      <JobList copy={adminCopy.ko} isLoading={false} jobs={jobs} locale="ko" selectedJobId="" statusFilter="failed" onOpenJob={vi.fn()} />
+      <JobList
+        copy={adminCopy.ko}
+        isLoading={false}
+        jobs={jobs}
+        locale="ko"
+        selectedJobId=""
+        statusFilter="failed"
+        onOpenJob={vi.fn()}
+      />,
     );
     expect(screen.getByRole("button", { name: /22222222-2222-4222-8222-222222222222/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /11111111-1111-4111-8111-111111111111/ })).not.toBeInTheDocument();
@@ -78,27 +112,27 @@ describe("JobList", () => {
             repository: "example-org/example-repo",
             phase: "Implementing",
             outcome: "Running",
-            updated_at: "2026-06-20T00:25:00.000Z"
+            updated_at: "2026-06-20T00:25:00.000Z",
           },
           {
             id: "job_done_22222222-2222-4222-8222-222222222222",
             repository: "example-org/example-repo",
             phase: "Completed",
             outcome: "NeedsReview",
-            updated_at: "2026-06-20T00:26:00.000Z"
+            updated_at: "2026-06-20T00:26:00.000Z",
           },
           {
             id: "job_failed_33333333-3333-4333-8333-333333333333",
             repository: "example-org/example-repo",
             phase: "Failed",
             outcome: "FailedInternal",
-            updated_at: "2026-06-20T00:27:00.000Z"
-          }
+            updated_at: "2026-06-20T00:27:00.000Z",
+          },
         ]}
         locale="ko"
         selectedJobId=""
         onOpenJob={vi.fn()}
-      />
+      />,
     );
 
     const runningRow = screen.getByRole("button", { name: /11111111-1111-4111-8111-111111111111/ });

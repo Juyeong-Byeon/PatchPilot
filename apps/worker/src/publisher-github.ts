@@ -31,7 +31,7 @@ export async function publishGitHubPullRequest(
   input: PublishInput,
   octokit: PullsCreateOctokit,
   pushBranch: PushBranch = pushBranchToOrigin,
-  githubToken?: string
+  githubToken?: string,
 ): Promise<PublishedPullRequest> {
   const [owner, repo] = input.repository.split("/");
   if (!owner || !repo) throw new Error(`Invalid GitHub repository: ${input.repository}`);
@@ -46,7 +46,7 @@ export async function publishGitHubPullRequest(
     body: input.body,
     head: input.workBranch,
     base: input.targetBranch,
-    draft: false
+    draft: false,
   });
 
   return {
@@ -60,16 +60,21 @@ export async function publishGitHubPullRequest(
     prUrl: response.data.html_url,
     prNumber: response.data.number,
     prTitle: input.title,
-    prBody: input.body
+    prBody: input.body,
   };
 }
 
-export async function pushBranchToOrigin(repoDir: string, workBranch: string, pushSha: string, token?: string): Promise<void> {
+export async function pushBranchToOrigin(
+  repoDir: string,
+  workBranch: string,
+  pushSha: string,
+  token?: string,
+): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const child = spawn("git", buildSafeGitArgs(["push", "origin", `${pushSha}:refs/heads/${workBranch}`], repoDir), {
       cwd: repoDir,
       env: token ? buildGitAuthEnv(process.env, token) : process.env,
-      stdio: ["ignore", "pipe", "pipe"]
+      stdio: ["ignore", "pipe", "pipe"],
     });
     let stderr = "";
     child.stderr.on("data", (chunk: Buffer) => {
@@ -92,6 +97,6 @@ function buildGitAuthEnv(source: NodeJS.ProcessEnv, token: string): NodeJS.Proce
     ...source,
     GIT_CONFIG_COUNT: "1",
     GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
-    GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${encoded}`
+    GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${encoded}`,
   };
 }

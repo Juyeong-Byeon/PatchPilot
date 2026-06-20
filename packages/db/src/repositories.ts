@@ -13,7 +13,7 @@ import type {
   RunRecord,
   SaveArtifactInput,
   SavePullRequestInput,
-  WorkerJobRecord
+  WorkerJobRecord,
 } from "./types.js";
 
 export type { AppendEventInput, CreateJobResult } from "./types.js";
@@ -23,7 +23,7 @@ export class Repositories {
 
   async createJobFromTicket(
     input: TicketSnapshotInput,
-    ids: { ticketSnapshotId: string; jobId: string }
+    ids: { ticketSnapshotId: string; jobId: string },
   ): Promise<CreateJobResult> {
     const client = await this.pool.connect();
     try {
@@ -44,15 +44,15 @@ export class Repositories {
           input.repository,
           input.targetBranch,
           input.priority,
-          JSON.stringify(input.rawFields)
-        ]
+          JSON.stringify(input.rawFields),
+        ],
       );
       const ticketSnapshotId =
         ticketInsert.rows[0]?.id ??
         (
           await client.query<{ id: string }>(
             `select id from ticket_snapshots where lark_record_id=$1 and trigger_version=$2`,
-            [input.larkRecordId, input.triggerVersion]
+            [input.larkRecordId, input.triggerVersion],
           )
         ).rows[0]?.id;
       if (!ticketSnapshotId) throw new Error("Unable to resolve ticket snapshot id");
@@ -68,8 +68,8 @@ export class Repositories {
           input.larkRecordId,
           input.triggerVersion,
           `${input.larkRecordId}:${input.triggerVersion}`,
-          input.priority
-        ]
+          input.priority,
+        ],
       );
       await client.query("commit");
       return { jobId: ids.jobId, ticketSnapshotId, created: result.rowCount === 1 };
@@ -86,13 +86,13 @@ export class Repositories {
     phase: InternalPhase,
     outcome: UserOutcome,
     reason?: string,
-    failure?: { category?: string | null; nextAction?: string | null }
+    failure?: { category?: string | null; nextAction?: string | null },
   ): Promise<void> {
     await this.pool.query(
       `update jobs
        set phase=$2, outcome=$3, failure_reason=$4, failure_category=$5, next_action=$6, updated_at=now()
        where id=$1`,
-      [jobId, phase, outcome, reason ?? null, failure?.category ?? null, failure?.nextAction ?? null]
+      [jobId, phase, outcome, reason ?? null, failure?.category ?? null, failure?.nextAction ?? null],
     );
   }
 
@@ -108,8 +108,8 @@ export class Repositories {
         input.eventType,
         input.source,
         input.message,
-        JSON.stringify(input.metadata ?? {})
-      ]
+        JSON.stringify(input.metadata ?? {}),
+      ],
     );
   }
 
@@ -146,7 +146,7 @@ export class Repositories {
        from jobs j
        join ticket_snapshots ts on ts.id = j.ticket_snapshot_id
        where j.id = $1`,
-      [jobId]
+      [jobId],
     );
     const row = result.rows[0];
     if (!row) return null;
@@ -164,7 +164,7 @@ export class Repositories {
       priority: row.priority,
       phase: row.phase,
       outcome: row.outcome,
-      rawFields: row.raw_fields
+      rawFields: row.raw_fields,
     };
   }
 
@@ -186,8 +186,8 @@ export class Repositories {
         input.runnerImageDigest ?? null,
         input.workspacePath ?? "",
         input.baseSha ?? null,
-        input.workBranch ?? ""
-      ]
+        input.workBranch ?? "",
+      ],
     );
     return mapRun(result.rows[0]);
   }
@@ -203,8 +203,8 @@ export class Repositories {
         input.stream,
         input.sequence,
         input.redactionApplied ?? false,
-        input.text
-      ]
+        input.text,
+      ],
     );
   }
 
@@ -218,8 +218,8 @@ export class Repositories {
         input.runId ?? null,
         input.kind,
         input.path ?? null,
-        input.content === undefined ? null : JSON.stringify(input.content)
-      ]
+        input.content === undefined ? null : JSON.stringify(input.content),
+      ],
     );
   }
 
@@ -241,8 +241,8 @@ export class Repositories {
         input.prUrl,
         input.prNumber,
         input.prTitle,
-        input.prBody
-      ]
+        input.prBody,
+      ],
     );
   }
 
@@ -263,7 +263,7 @@ export class Repositories {
          where pr.repository=$1 and pr.pr_number=$2
          order by pr.created_at desc
          limit 1`,
-        [input.repository, input.prNumber]
+        [input.repository, input.prNumber],
       );
       const row = result.rows[0];
       if (!row) {
@@ -275,7 +275,7 @@ export class Repositories {
         `update jobs
          set phase='Completed', outcome='Completed', failure_reason=null, updated_at=now()
          where id=$1`,
-        [row.job_id]
+        [row.job_id],
       );
       await client.query(
         `insert into run_events(job_id, run_id, phase, event_type, source, message, metadata)
@@ -284,13 +284,25 @@ export class Repositories {
           row.job_id,
           row.run_id,
           `Pull request #${row.pr_number} was merged`,
-          JSON.stringify({ prUrl: input.prUrl ?? row.pr_url, prNumber: row.pr_number, mergedAt: input.mergedAt ?? null })
-        ]
+          JSON.stringify({
+            prUrl: input.prUrl ?? row.pr_url,
+            prNumber: row.pr_number,
+            mergedAt: input.mergedAt ?? null,
+          }),
+        ],
       );
       await client.query(
         `insert into audit_events(actor, action, job_id, run_id, metadata)
          values ('github','pull_request.merged',$1,$2,$3)`,
-        [row.job_id, row.run_id, JSON.stringify({ prUrl: input.prUrl ?? row.pr_url, prNumber: row.pr_number, mergedAt: input.mergedAt ?? null })]
+        [
+          row.job_id,
+          row.run_id,
+          JSON.stringify({
+            prUrl: input.prUrl ?? row.pr_url,
+            prNumber: row.pr_number,
+            mergedAt: input.mergedAt ?? null,
+          }),
+        ],
       );
       await client.query("commit");
       return {
@@ -299,7 +311,7 @@ export class Repositories {
         runId: row.run_id,
         larkRecordId: row.lark_record_id,
         prUrl: input.prUrl ?? row.pr_url,
-        prNumber: row.pr_number
+        prNumber: row.pr_number,
       };
     } catch (error) {
       await client.query("rollback");
@@ -351,7 +363,7 @@ export class Repositories {
          limit 1
        ) last_event on true
        order by j.created_at desc
-       limit 100`
+       limit 100`,
     );
     return result.rows;
   }
@@ -388,7 +400,7 @@ export class Repositories {
          limit 1
        ) last_run on true
        where j.id=$1`,
-      [jobId]
+      [jobId],
     );
     return result.rows[0] ?? null;
   }
@@ -399,7 +411,7 @@ export class Repositories {
        from run_events
        where job_id=$1
        order by created_at asc, id asc`,
-      [jobId]
+      [jobId],
     );
     return result.rows;
   }
@@ -410,7 +422,7 @@ export class Repositories {
        from job_logs
        where job_id=$1
        order by created_at asc, sequence asc, id asc`,
-      [jobId]
+      [jobId],
     );
     return result.rows;
   }
@@ -421,7 +433,7 @@ export class Repositories {
        from artifacts
        where job_id=$1
        order by created_at asc, kind asc`,
-      [jobId]
+      [jobId],
     );
     return result.rows;
   }
@@ -439,14 +451,14 @@ export class Repositories {
        set phase='CancelRequested', outcome='Running', failure_reason=$2, updated_at=now()
        where id=$1 and phase not in ('Completed', 'Failed', 'Cancelled', 'CancelFailed')
        returning id`,
-      [jobId, reason ?? null]
+      [jobId, reason ?? null],
     );
     if (result.rowCount === 1) {
       await this.appendAuditEvent({
         actor,
         action: "job.cancel_requested",
         jobId,
-        metadata: { reason: reason ?? null }
+        metadata: { reason: reason ?? null },
       });
       return { status: "requested" };
     }
@@ -457,23 +469,22 @@ export class Repositories {
   async createRetryAttempt(input: Omit<CreateRunInput, "attempt">): Promise<RunRecord>;
   async createRetryAttempt(
     inputOrJobId: string | Omit<CreateRunInput, "attempt">,
-    actor = "system"
+    actor = "system",
   ): Promise<RunRecord | { runId: string; attempt: number }> {
     if (typeof inputOrJobId === "string") {
       return this.createRetryAttemptForJob(inputOrJobId, actor);
     }
 
-    const input =
-      inputOrJobId;
+    const input = inputOrJobId;
     const attemptResult = await this.pool.query<{ attempt: number | null }>(
       `select max(attempt) as attempt from runs where job_id=$1`,
-      [input.jobId]
+      [input.jobId],
     );
     const attempt = (attemptResult.rows[0]?.attempt ?? 0) + 1;
     const run = await this.createRun({
       ...input,
       attempt,
-      workBranch: input.workBranch || createAttemptWorkBranch(input.jobId, attempt)
+      workBranch: input.workBranch || createAttemptWorkBranch(input.jobId, attempt),
     });
     return run;
   }
@@ -487,7 +498,7 @@ export class Repositories {
          from jobs
          where id=$1
          for update`,
-        [jobId]
+        [jobId],
       );
       const job = jobResult.rows[0];
       if (!job) throw createHttpError(404, "Job not found");
@@ -497,7 +508,7 @@ export class Repositories {
 
       const attemptResult = await client.query<{ attempt: number | null }>(
         `select max(attempt) as attempt from runs where job_id=$1`,
-        [jobId]
+        [jobId],
       );
       const attempt = (attemptResult.rows[0]?.attempt ?? 0) + 1;
       const runId = createRunId();
@@ -507,7 +518,7 @@ export class Repositories {
          (id, job_id, attempt, workspace_path, work_branch, started_at, heartbeat_at)
          values ($1,$2,$3,$4,$5,now(),now())
          returning id, job_id, attempt, container_id, runner_image_digest, workspace_path, base_sha, work_branch, head_sha, exit_code`,
-        [runId, jobId, attempt, "", workBranch]
+        [runId, jobId, attempt, "", workBranch],
       );
       const run = mapRun(runResult.rows[0]);
 
@@ -515,12 +526,12 @@ export class Repositories {
         `update jobs
          set phase='Queued', outcome='Queued', failure_reason=null, failure_category=null, next_action=null, updated_at=now()
          where id=$1`,
-        [jobId]
+        [jobId],
       );
       await client.query(
         `insert into audit_events(actor, action, job_id, run_id, metadata)
          values ($1,$2,$3,$4,$5)`,
-        [actor, "job.retry_requested", jobId, run.runId, JSON.stringify({ attempt })]
+        [actor, "job.retry_requested", jobId, run.runId, JSON.stringify({ attempt })],
       );
       await client.query("commit");
       return { runId: run.runId, attempt: run.attempt };
@@ -536,7 +547,7 @@ export class Repositories {
     await this.pool.query(
       `insert into audit_events(actor, action, job_id, run_id, metadata)
        values ($1,$2,$3,$4,$5)`,
-      [input.actor, input.action, input.jobId ?? null, input.runId ?? null, JSON.stringify(input.metadata ?? {})]
+      [input.actor, input.action, input.jobId ?? null, input.runId ?? null, JSON.stringify(input.metadata ?? {})],
     );
   }
 
@@ -558,7 +569,7 @@ export class Repositories {
        left join runs r on r.job_id = j.id
        where j.id=$1
        group by j.id, j.phase, j.outcome`,
-      [jobId]
+      [jobId],
     );
     const row = result.rows[0];
     if (!row) return null;
@@ -567,7 +578,7 @@ export class Repositories {
       phase: row.phase,
       outcome: row.outcome,
       lastAttempt: row.last_attempt,
-      retryable: row.retryable
+      retryable: row.retryable,
     };
   }
 }
@@ -604,6 +615,6 @@ function mapRun(row: RunRow): RunRecord {
     baseSha: row.base_sha,
     workBranch: row.work_branch,
     headSha: row.head_sha,
-    exitCode: row.exit_code
+    exitCode: row.exit_code,
   };
 }

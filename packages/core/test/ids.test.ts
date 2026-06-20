@@ -1,11 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  createArtifactId,
-  createJobId,
-  createPrefixedId,
-  createRunId,
-  createTicketSnapshotId
-} from "../src/ids.js";
+import { createArtifactId, createJobId, createPrefixedId, createRunId, createTicketSnapshotId } from "../src/ids.js";
 
 function expectPrefixedId(id: string, prefix: string): void {
   const expectedPrefix = `${prefix}_`;

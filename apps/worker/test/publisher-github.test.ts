@@ -7,10 +7,10 @@ describe("publishGitHubPullRequest", () => {
       rest: {
         pulls: {
           create: vi.fn().mockResolvedValue({
-            data: { html_url: "https://github.com/acme/web/pull/42", number: 42 }
-          })
-        }
-      }
+            data: { html_url: "https://github.com/acme/web/pull/42", number: 42 },
+          }),
+        },
+      },
     };
 
     const pushBranch = vi.fn().mockResolvedValue(undefined);
@@ -27,18 +27,18 @@ describe("publishGitHubPullRequest", () => {
         pushSha: "abcdefabcdefabcdefabcdefabcdefabcdefabcd",
         commitShas: ["abc"],
         title: "Fix login",
-        body: "Summary"
+        body: "Summary",
       },
       octokit,
       pushBranch,
-      "github_pat_secret"
+      "github_pat_secret",
     );
 
     expect(pushBranch).toHaveBeenCalledWith(
       "/work/jobs/job_1/repo",
       "ticket-to-pr/job_1",
       "abcdefabcdefabcdefabcdefabcdefabcdefabcd",
-      "github_pat_secret"
+      "github_pat_secret",
     );
     expect(octokit.rest.pulls.create).toHaveBeenCalledWith({
       owner: "acme",
@@ -47,12 +47,12 @@ describe("publishGitHubPullRequest", () => {
       body: "Summary",
       head: "ticket-to-pr/job_1",
       base: "main",
-      draft: false
+      draft: false,
     });
     expect(published).toMatchObject({
       prUrl: "https://github.com/acme/web/pull/42",
       prNumber: 42,
-      prTitle: "Fix login"
+      prTitle: "Fix login",
     });
   });
 });

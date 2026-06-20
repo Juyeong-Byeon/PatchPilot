@@ -116,8 +116,8 @@ export function buildGstackDockerCommand(input: GstackCommandInput): CommandSpec
       ...codexSkillsArgs,
       ...gstackSkillSourceArgs,
       ...authArgs,
-      input.runnerImage
-    ]
+      input.runnerImage,
+    ],
   };
 }
 
@@ -127,7 +127,7 @@ export async function executeGstack(input: ExecutorInput, options: GstackExecuto
   const workspaceMountSource = mapWorkspacePathForDockerMount(
     input.run.workspacePath,
     options.workspaceRoot,
-    options.workspaceHostRoot
+    options.workspaceHostRoot,
   );
   const command = buildGstackDockerCommand({
     runnerImage: options.runnerImage,
@@ -142,14 +142,14 @@ export async function executeGstack(input: ExecutorInput, options: GstackExecuto
     job: input.job,
     run: input.run,
     timeoutSeconds: options.timeoutSeconds,
-    githubToken: options.githubToken
+    githubToken: options.githubToken,
   });
 
   await writeRunnerInputArtifacts({
     workspacePath: input.run.workspacePath,
     job: input.job,
     run: input.run,
-    policy: options.policy ?? { repositoryAllowlist: [], protectedPathDenylist: [] }
+    policy: options.policy ?? { repositoryAllowlist: [], protectedPathDenylist: [] },
   });
   await runCommand(command, input, ((options.timeoutSeconds ?? 3600) + 30) * 1000);
 
@@ -160,7 +160,7 @@ export async function executeGstack(input: ExecutorInput, options: GstackExecuto
   const trustedEvidence = await collectTrustedGitEvidence(
     getWorkspacePaths(input.run.workspacePath).repoDir,
     input.job.targetBranch,
-    trustedBaseSha
+    trustedBaseSha,
   );
   return applyTrustedGitEvidence(result, trustedEvidence);
 }
@@ -168,7 +168,7 @@ export async function executeGstack(input: ExecutorInput, options: GstackExecuto
 export function mapWorkspacePathForDockerMount(
   workspacePath: string,
   workspaceRoot?: string,
-  workspaceHostRoot?: string
+  workspaceHostRoot?: string,
 ): string {
   if (!workspaceHostRoot) return workspacePath;
   const resolvedWorkspaceRoot = resolve(workspaceRoot ?? "/tmp/ticket-to-pr-worker");
@@ -191,11 +191,15 @@ export function applyTrustedGitEvidence(result: AgentResult, evidence: TrustedGi
     headSha: evidence.headSha,
     pushSha: evidence.pushSha,
     changedFiles: evidence.changedFiles,
-    commits: evidence.commits
+    commits: evidence.commits,
   });
 }
 
-export async function resolveRemoteTargetSha(repositoryUrl: string, targetBranch: string, githubToken?: string): Promise<string> {
+export async function resolveRemoteTargetSha(
+  repositoryUrl: string,
+  targetBranch: string,
+  githubToken?: string,
+): Promise<string> {
   const stdout = (await runGit(["ls-remote", "--heads", repositoryUrl, targetBranch], undefined, githubToken)).stdout;
   const [sha] = stdout.trim().split(/\s+/);
   if (!sha) throw new Error(`Unable to resolve remote target branch ${targetBranch}`);
@@ -205,7 +209,7 @@ export async function resolveRemoteTargetSha(repositoryUrl: string, targetBranch
 export async function collectTrustedGitEvidence(
   repoDir: string,
   targetBranch: string,
-  baseSha: string
+  baseSha: string,
 ): Promise<TrustedGitEvidence> {
   const pushSha = (await runGit(["rev-parse", "--verify", "HEAD^{commit}"], repoDir)).stdout.trim();
   const headSha = pushSha;
@@ -261,11 +265,11 @@ export async function writeRunnerInputArtifacts(input: {
         triggerVersion: input.job.triggerVersion,
         runId: input.run.runId,
         attempt: input.run.attempt,
-        workBranch: input.run.workBranch
+        workBranch: input.run.workBranch,
       },
       null,
-      2
-    )}\n`
+      2,
+    )}\n`,
   );
   await writeFile(paths.policyJson, `${JSON.stringify(input.policy, null, 2)}\n`);
 }
@@ -296,7 +300,7 @@ function renderTicketMarkdown(job: {
     "",
     "## Target Branch",
     job.targetBranch,
-    ""
+    "",
   ].join("\n");
 }
 
@@ -305,7 +309,12 @@ function toRepositoryUrl(repository: string): string {
   return `https://github.com/${repository}.git`;
 }
 
-export async function runCommand(command: CommandSpec, input: ExecutorInput, timeoutMs = 3_630_000, killGraceMs = 2000): Promise<void> {
+export async function runCommand(
+  command: CommandSpec,
+  input: ExecutorInput,
+  timeoutMs = 3_630_000,
+  killGraceMs = 2000,
+): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const child = spawn(command.file, command.args, { detached: true, stdio: ["ignore", "pipe", "pipe"] });
     let stdoutSequence = 0;
@@ -398,7 +407,7 @@ function runGit(args: string[], cwd?: string, githubToken?: string): Promise<{ s
     const child = spawn("git", buildSafeGitArgs(args, cwd), {
       cwd,
       env: githubToken ? buildGitAuthEnv(process.env, githubToken) : process.env,
-      stdio: ["ignore", "pipe", "pipe"]
+      stdio: ["ignore", "pipe", "pipe"],
     });
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
@@ -413,7 +422,9 @@ function runGit(args: string[], cwd?: string, githubToken?: string): Promise<{ s
         resolve({ stdout, stderr });
         return;
       }
-      reject(new Error(`git ${args.join(" ")} failed with code ${code ?? "unknown"}: ${maskSecrets(stderr || stdout)}`));
+      reject(
+        new Error(`git ${args.join(" ")} failed with code ${code ?? "unknown"}: ${maskSecrets(stderr || stdout)}`),
+      );
     });
   });
 }
@@ -424,6 +435,6 @@ function buildGitAuthEnv(source: NodeJS.ProcessEnv, token: string): NodeJS.Proce
     ...source,
     GIT_CONFIG_COUNT: "1",
     GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
-    GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${encoded}`
+    GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${encoded}`,
   };
 }

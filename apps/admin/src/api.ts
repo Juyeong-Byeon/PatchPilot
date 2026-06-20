@@ -108,21 +108,18 @@ export async function fetchJobArtifacts(jobId: string, token = getStoredAdminTok
 export async function cancelJob(jobId: string, token = getStoredAdminToken()): Promise<{ ok: boolean; phase: string }> {
   return adminRequest<{ ok: boolean; phase: string }>(`/api/jobs/${encodeURIComponent(jobId)}/cancel`, {
     method: "POST",
-    token
+    token,
   });
 }
 
 export async function retryJob(jobId: string, token = getStoredAdminToken()): Promise<RetryResponse> {
   return adminRequest<RetryResponse>(`/api/jobs/${encodeURIComponent(jobId)}/retry`, {
     method: "POST",
-    token
+    token,
   });
 }
 
-async function adminRequest<T>(
-  path: string,
-  options: { method?: "GET" | "POST"; token?: string } = {}
-): Promise<T> {
+async function adminRequest<T>(path: string, options: { method?: "GET" | "POST"; token?: string } = {}): Promise<T> {
   const token = options.token?.trim();
   if (!token) throw new Error("admin_access_key_required");
 
@@ -130,8 +127,8 @@ async function adminRequest<T>(
     method: options.method ?? "GET",
     headers: {
       Authorization: `Bearer ${token}`,
-      Accept: "application/json"
-    }
+      Accept: "application/json",
+    },
   });
 
   if (!response.ok) {

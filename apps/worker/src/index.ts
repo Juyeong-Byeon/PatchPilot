@@ -33,8 +33,8 @@ export function createWorker(env: WorkerEnv = readWorkerEnv()): BullWorker<Agent
             gstackSkillSourceDir: env.gstackSkillSourceDir,
             policy: {
               repositoryAllowlist: env.repositoryAllowlist,
-              protectedPathDenylist: env.protectedPathDenylist
-            }
+              protectedPathDenylist: env.protectedPathDenylist,
+            },
           });
   const publisher: Publisher =
     env.publisherMode === "mock" ? publishMockPullRequest : createGitHubPublisher(env.githubToken ?? "");
@@ -50,12 +50,12 @@ export function createWorker(env: WorkerEnv = readWorkerEnv()): BullWorker<Agent
         larkUpdater,
         policyConfig: {
           repositoryAllowlist: env.repositoryAllowlist,
-          protectedPathDenylist: env.protectedPathDenylist
+          protectedPathDenylist: env.protectedPathDenylist,
         },
-        workspaceRoot: env.workspaceRoot
+        workspaceRoot: env.workspaceRoot,
       });
     },
-    { connection: { url: env.redisUrl } }
+    { connection: { url: env.redisUrl } },
   );
 }
 

@@ -38,22 +38,33 @@ export function JobDetail({
   copy,
   locale,
   error,
-  onBack,
   onRefresh,
   onRetry,
-  onCancel
+  onCancel,
 }: JobDetailProps) {
   const [selectedSpan, setSelectedSpan] = useState<SpanSelection | null>(null);
   const lastAutoFocusedKey = useRef<string>("");
   const currentAttempt = useMemo(() => resolveCurrentAttempt(job, events), [events, job]);
   const currentRunId = useMemo(() => resolveCurrentRunId(events, currentAttempt), [currentAttempt, events]);
-  const currentEvents = useMemo(() => filterEventsForCurrentRun(events, currentAttempt, currentRunId), [currentAttempt, currentRunId, events]);
+  const currentEvents = useMemo(
+    () => filterEventsForCurrentRun(events, currentAttempt, currentRunId),
+    [currentAttempt, currentRunId, events],
+  );
   const currentLogs = useMemo(() => filterRunScopedRecords(logs, currentRunId), [currentRunId, logs]);
   const currentArtifacts = useMemo(() => filterRunScopedRecords(artifacts, currentRunId), [artifacts, currentRunId]);
   const runningPhase = useMemo(() => resolveRunningPhase(job), [job]);
-  const selectedContext = useMemo(() => buildStepContext(selectedSpan, currentEvents, locale), [currentEvents, locale, selectedSpan]);
-  const diagnosticLogs = useMemo(() => filterLogsForContext(currentLogs, selectedContext), [currentLogs, selectedContext]);
-  const diagnosticArtifacts = useMemo(() => filterArtifactsForContext(currentArtifacts, selectedContext), [currentArtifacts, selectedContext]);
+  const selectedContext = useMemo(
+    () => buildStepContext(selectedSpan, currentEvents, locale),
+    [currentEvents, locale, selectedSpan],
+  );
+  const diagnosticLogs = useMemo(
+    () => filterLogsForContext(currentLogs, selectedContext),
+    [currentLogs, selectedContext],
+  );
+  const diagnosticArtifacts = useMemo(
+    () => filterArtifactsForContext(currentArtifacts, selectedContext),
+    [currentArtifacts, selectedContext],
+  );
 
   useEffect(() => {
     if (!job || !runningPhase) return;
@@ -92,7 +103,9 @@ export function JobDetail({
           <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
             <div className="min-w-0">
               <div className="flex min-w-0 items-center gap-1">
-                <p className="truncate font-mono text-[12px] leading-4 text-graphite" title={job.id}>{job.id}</p>
+                <p className="truncate font-mono text-[12px] leading-4 text-graphite" title={job.id}>
+                  {job.id}
+                </p>
                 <CopyButton value={job.id} copy={copy} />
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -103,13 +116,27 @@ export function JobDetail({
                 {stringValue(job.repository, copy)}
               </h2>
               <p className="mt-1 text-[13px] leading-5 text-charcoal">
-                {stringValue(job.target_branch ?? job.targetBranch, copy)} · {stringValue(job.work_branch ?? job.workBranch, copy)}
+                {stringValue(job.target_branch ?? job.targetBranch, copy)} ·{" "}
+                {stringValue(job.work_branch ?? job.workBranch, copy)}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
               {onRefresh ? (
-                <Button type="button" variant="outline" size="icon" aria-label={copy.refresh} title={copy.refresh} disabled={isLoading} onClick={onRefresh}>
-                  <RotateCcw data-icon aria-hidden="true" className={isLoading ? "animate-spin" : ""} strokeWidth={2.2} />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  aria-label={copy.refresh}
+                  title={copy.refresh}
+                  disabled={isLoading}
+                  onClick={onRefresh}
+                >
+                  <RotateCcw
+                    data-icon
+                    aria-hidden="true"
+                    className={isLoading ? "animate-spin" : ""}
+                    strokeWidth={2.2}
+                  />
                 </Button>
               ) : null}
               {job.pr_url ? <CopyButton value={job.pr_url} copy={copy} label={copy.openPr} /> : null}
@@ -155,10 +182,12 @@ export function JobDetail({
             </p>
           ) : null}
 
-          {(job.failure_reason || job.next_action) ? (
+          {job.failure_reason || job.next_action ? (
             <section className="status-glow-failed rounded-xl border border-danger bg-danger-wash px-4 py-3">
               <p className="text-[12px] leading-4 text-charcoal">{copy.failureSummary}</p>
-              {job.failure_reason ? <p className="mt-2 break-words text-[13px] leading-5 text-danger">{job.failure_reason}</p> : null}
+              {job.failure_reason ? (
+                <p className="mt-2 break-words text-[13px] leading-5 text-danger">{job.failure_reason}</p>
+              ) : null}
               {job.next_action ? (
                 <p className="mt-2 break-words text-[13px] leading-5 text-true-black">
                   <span className="text-charcoal">{copy.nextAction}: </span>
@@ -189,7 +218,14 @@ export function JobDetail({
         <CardHeader>
           <CardTitle>{copy.runDiagnostics}</CardTitle>
           {selectedContext ? (
-            <Button type="button" variant="ghost" size="icon" aria-label={copy.clear} title={copy.clear} onClick={() => setSelectedSpan(null)}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={copy.clear}
+              title={copy.clear}
+              onClick={() => setSelectedSpan(null)}
+            >
               <X data-icon aria-hidden="true" strokeWidth={2.2} />
             </Button>
           ) : null}
@@ -230,7 +266,7 @@ function ArtifactPanel({
   totalCount,
   copy,
   locale,
-  variant = "card"
+  variant = "card",
 }: {
   artifacts: Artifact[];
   totalCount?: number;
@@ -243,12 +279,17 @@ function ArtifactPanel({
       <div className="flex items-center justify-between gap-3 border-b border-hairline-gray p-4">
         <div>
           <CardTitle>{copy.artifacts}</CardTitle>
-          <span className="text-xs text-charcoal">{artifacts.length}/{totalCount ?? artifacts.length}</span>
+          <span className="text-xs text-charcoal">
+            {artifacts.length}/{totalCount ?? artifacts.length}
+          </span>
         </div>
       </div>
       <div className="grid gap-3 p-4">
         {artifacts.map((artifact, index) => (
-          <article className="overflow-hidden rounded-xl border border-hairline-gray bg-linen-white" key={String(artifact.id ?? `${artifact.kind}-${index}`)}>
+          <article
+            className="overflow-hidden rounded-xl border border-hairline-gray bg-linen-white"
+            key={String(artifact.id ?? `${artifact.kind}-${index}`)}
+          >
             <header className="grid gap-2 border-b border-hairline-gray bg-linen px-4 py-3 text-[12px] leading-4 md:grid-cols-[160px_minmax(0,1fr)_150px]">
               <strong className="font-medium text-forest-ink">{artifact.kind ?? "artifact"}</strong>
               <span className="min-w-0 break-all font-mono text-graphite" title={artifact.path ?? copy.inlineContent}>
@@ -270,17 +311,16 @@ function ArtifactPanel({
 
   if (variant === "embedded") {
     return (
-      <section className="surface-card-soft rounded-xl border border-hairline-gray bg-linen-white" aria-label={copy.artifacts}>
+      <section
+        className="surface-card-soft rounded-xl border border-hairline-gray bg-linen-white"
+        aria-label={copy.artifacts}
+      >
         {content}
       </section>
     );
   }
 
-  return (
-    <Card>
-      {content}
-    </Card>
-  );
+  return <Card>{content}</Card>;
 }
 
 interface StepContext {
@@ -296,7 +336,9 @@ function resolveCurrentAttempt(job: JobRecord | null, events: RunEvent[]): numbe
   const jobAttempt = parseAttempt(job?.attempt);
   if (jobAttempt !== null) return jobAttempt;
 
-  const attempts = events.map((event) => parseAttempt(event.attempt)).filter((attempt): attempt is number => attempt !== null);
+  const attempts = events
+    .map((event) => parseAttempt(event.attempt))
+    .filter((attempt): attempt is number => attempt !== null);
   return attempts.length > 0 ? Math.max(...attempts) : null;
 }
 
@@ -315,7 +357,11 @@ function resolveCurrentRunId(events: RunEvent[], currentAttempt: number | null):
   return stringOrNull(currentRunEvent?.run_id);
 }
 
-function filterEventsForCurrentRun(events: RunEvent[], currentAttempt: number | null, currentRunId: string | null): RunEvent[] {
+function filterEventsForCurrentRun(
+  events: RunEvent[],
+  currentAttempt: number | null,
+  currentRunId: string | null,
+): RunEvent[] {
   if (currentAttempt === null && !currentRunId) return events;
 
   const filtered = events.filter((event) => {
@@ -372,15 +418,18 @@ function buildStepContext(selection: SpanSelection | null, events: RunEvent[], l
   });
   const phaseEvents = orderedEvents.filter((event) => event.phase === selection.phase);
   const sources = Array.from(new Set(phaseEvents.map((event) => event.source).filter(Boolean) as string[]));
-  const phaseTimes = phaseEvents.map((event) => parseTime(event.created_at)).filter((time): time is number => time !== null);
+  const phaseTimes = phaseEvents
+    .map((event) => parseTime(event.created_at))
+    .filter((time): time is number => time !== null);
   const startMs = phaseTimes[0] ?? null;
   const lastPhaseMs = phaseTimes[phaseTimes.length - 1] ?? startMs;
-  const nextEvent = lastPhaseMs === null
-    ? undefined
-    : orderedEvents.find((event) => {
-        const time = parseTime(event.created_at);
-        return time !== null && time > lastPhaseMs && event.phase !== selection.phase;
-      });
+  const nextEvent =
+    lastPhaseMs === null
+      ? undefined
+      : orderedEvents.find((event) => {
+          const time = parseTime(event.created_at);
+          return time !== null && time > lastPhaseMs && event.phase !== selection.phase;
+        });
   const endMs = nextEvent ? parseTime(nextEvent.created_at) : null;
   const label = selection.source
     ? `${translateState(selection.phase, locale)} · ${selection.source}`
@@ -392,7 +441,7 @@ function buildStepContext(selection: SpanSelection | null, events: RunEvent[], l
     sources,
     startMs,
     endMs,
-    label
+    label,
   };
 }
 
@@ -413,7 +462,9 @@ function filterArtifactsForContext(artifacts: Artifact[], context: StepContext |
   if (!context) return artifacts;
   const mapped = artifacts.filter((artifact) => artifactMatchesPhase(artifact, context.phase));
   if (mapped.length > 0) return mapped;
-  return artifacts.filter((artifact) => !hasKnownArtifactPhase(artifact) && isWithinContext(artifact.created_at, context));
+  return artifacts.filter(
+    (artifact) => !hasKnownArtifactPhase(artifact) && isWithinContext(artifact.created_at, context),
+  );
 }
 
 function artifactMatchesPhase(artifact: Artifact, phase: string): boolean {
@@ -422,7 +473,8 @@ function artifactMatchesPhase(artifact: Artifact, phase: string): boolean {
   if (kind.includes("policy")) return phase === "PolicyChecking";
   if (kind.includes("agent-result") || kind.includes("result")) return phase === "Completed";
   if (kind.includes("pr") || kind.includes("publish")) return phase === "Publishing";
-  if (kind.includes("ticket") || kind.includes("context") || kind.includes("input")) return phase === "Queued" || phase === "Planning";
+  if (kind.includes("ticket") || kind.includes("context") || kind.includes("input"))
+    return phase === "Queued" || phase === "Planning";
   if (kind.includes("runner") || kind.includes("gstack")) return phase === "Implementing";
   return false;
 }
@@ -439,7 +491,7 @@ function hasKnownArtifactPhase(artifact: Artifact): boolean {
     kind.includes("context") ||
     kind.includes("input") ||
     kind.includes("runner") ||
-    kind.includes("gstack")
+    kind.includes("gstack"),
   );
 }
 
@@ -467,7 +519,7 @@ function CopyButton({ value, copy, label }: { value: string; copy: AdminCopy; la
             setCopied(true);
             window.setTimeout(() => setCopied(false), 1200);
           },
-          () => undefined
+          () => undefined,
         );
       }}
     >
@@ -514,7 +566,7 @@ function formatDate(value: string | undefined, locale: Locale, copy: AdminCopy):
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
-    minute: "2-digit"
+    minute: "2-digit",
   }).format(time);
 }
 

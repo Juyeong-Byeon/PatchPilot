@@ -35,7 +35,7 @@ export async function runCodexAgentRunner(input: CodexAgentRunnerInput): Promise
     codexHome: input.codexHome ?? path.join(tmpdir(), `ticket-to-pr-codex-${context.runId}`),
     codexAuthFile: input.codexAuthFile ?? process.env.CODEX_AUTH_FILE,
     codexConfigFile: input.codexConfigFile ?? process.env.CODEX_CONFIG_FILE,
-    codexSkillsDir: input.codexSkillsDir ?? process.env.CODEX_SKILLS_DIR
+    codexSkillsDir: input.codexSkillsDir ?? process.env.CODEX_SKILLS_DIR,
   });
 
   await ensureGitIdentity(input.repoDir);
@@ -50,8 +50,8 @@ export async function runCodexAgentRunner(input: CodexAgentRunnerInput): Promise
       ticketPath: paths.ticketMd,
       contextPath: paths.contextJson,
       policyPath: paths.policyJson,
-      outputDir: paths.outputDir
-    })
+      outputDir: paths.outputDir,
+    }),
   });
 
   await commitDirtyWorktreeIfNeeded(input.repoDir, baseSha);
@@ -60,7 +60,7 @@ export async function runCodexAgentRunner(input: CodexAgentRunnerInput): Promise
     repoDir: input.repoDir,
     targetBranch: input.targetBranch,
     baseSha,
-    context
+    context,
   });
 }
 
@@ -82,23 +82,14 @@ export async function prepareCodexHome(input: {
       recursive: true,
       dereference: true,
       force: true,
-      verbatimSymlinks: false
+      verbatimSymlinks: false,
     });
   }
   return input.codexHome;
 }
 
 function defaultCodexArgs(repoDir: string): string[] {
-  return [
-    "exec",
-    "--ephemeral",
-    "--sandbox",
-    "danger-full-access",
-    "--skip-git-repo-check",
-    "--cd",
-    repoDir,
-    "-"
-  ];
+  return ["exec", "--ephemeral", "--sandbox", "danger-full-access", "--skip-git-repo-check", "--cd", repoDir, "-"];
 }
 
 async function buildCodexPrompt(input: {
@@ -133,7 +124,7 @@ async function buildCodexPrompt(input: {
     `Output directory: ${input.outputDir}`,
     "",
     "Ticket:",
-    ticket
+    ticket,
   ].join("\n");
 }
 
@@ -148,7 +139,7 @@ function runCodexCommand(input: {
     const child = spawn(input.command, input.args, {
       cwd: input.repoDir,
       env: { ...process.env, CODEX_HOME: input.codexHome },
-      stdio: ["pipe", "inherit", "inherit"]
+      stdio: ["pipe", "inherit", "inherit"],
     });
     child.stdin.end(input.prompt);
     child.on("error", reject);
@@ -223,20 +214,20 @@ async function writeResultArtifacts(input: {
       {
         command: "git diff --name-only",
         status: "passed",
-        summary: changedFiles.join(", ")
-      }
+        summary: changedFiles.join(", "),
+      },
     ],
     review: {
       summary: "Codex CLI completed the requested ticket change in an isolated runner workspace.",
       risks: [],
-      knownLimitations: ["The runner adapter generated PR metadata from trusted git evidence after Codex exited."]
+      knownLimitations: ["The runner adapter generated PR metadata from trusted git evidence after Codex exited."],
     },
     pullRequestDraft: {
       title,
-      bodyPath: "output/pr-body.md"
+      bodyPath: "output/pr-body.md",
     },
     failure: null,
-    retryable: false
+    retryable: false,
   });
 
   await writeTextArtifact(paths.prTitle, `${title}\n`);
@@ -248,8 +239,8 @@ async function writeResultArtifacts(input: {
       `- Changed files: ${changedFiles.join(", ")}`,
       "",
       "## Verification",
-      "- git diff --name-only"
-    ].join("\n")
+      "- git diff --name-only",
+    ].join("\n"),
   );
   await writeJsonArtifact(paths.resultJson, result);
 }
@@ -283,7 +274,7 @@ if (mainPath === fileURLToPath(import.meta.url)) {
   runCodexAgentRunner({
     workspaceRoot: readRequiredEnv("WORKSPACE_ROOT"),
     repoDir: getWorkspacePaths(readRequiredEnv("WORKSPACE_ROOT")).repoDir,
-    targetBranch: readRequiredEnv("TARGET_BRANCH")
+    targetBranch: readRequiredEnv("TARGET_BRANCH"),
   }).catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     console.error(message);

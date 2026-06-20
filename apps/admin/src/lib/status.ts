@@ -32,10 +32,7 @@ export function statusBadgeVariant(value: unknown): StatusBadgeVariant {
 
 export type StatusFilter = "all" | "running" | "failed" | "completed";
 
-export function matchesStatusFilter(
-  job: { phase?: unknown; outcome?: unknown },
-  filter: StatusFilter
-): boolean {
+export function matchesStatusFilter(job: { phase?: unknown; outcome?: unknown }, filter: StatusFilter): boolean {
   switch (filter) {
     case "running":
       return isRunningPhase(job.phase);

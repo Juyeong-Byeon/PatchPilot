@@ -7,16 +7,16 @@ running agent work, and publishing reviewable GitHub pull requests.
 
 The Lark webhook payload must include:
 
-| Field | Type | Required value |
-| --- | --- | --- |
-| `Title` | text | Non-empty task title. |
-| `Description` | text | Non-empty implementation context. |
-| `Definition of Done` | text | Acceptance criteria for the agent. |
-| `Repository` | text | Repository in the `owner/repo` format. |
-| `Target Branch` | text | Base branch for the PR. |
-| `Priority` | single select | `Low`, `Normal`, or `High`. |
-| `Status` | single select/text | Must be `Progress` to enqueue work. |
-| `Agent Run Requested` | checkbox | Must be `true` to enqueue work. |
+| Field                 | Type               | Required value                         |
+| --------------------- | ------------------ | -------------------------------------- |
+| `Title`               | text               | Non-empty task title.                  |
+| `Description`         | text               | Non-empty implementation context.      |
+| `Definition of Done`  | text               | Acceptance criteria for the agent.     |
+| `Repository`          | text               | Repository in the `owner/repo` format. |
+| `Target Branch`       | text               | Base branch for the PR.                |
+| `Priority`            | single select      | `Low`, `Normal`, or `High`.            |
+| `Status`              | single select/text | Must be `Progress` to enqueue work.    |
+| `Agent Run Requested` | checkbox           | Must be `true` to enqueue work.        |
 
 `recordId` and `triggerVersion` are required envelope fields. Together they form
 the idempotency key, so replays of the same trigger version do not create a
@@ -26,34 +26,34 @@ second active job.
 
 Copy `.env.example` to `.env` and replace secrets before starting the stack.
 
-| Variable | Purpose |
-| --- | --- |
-| `NODE_ENV` | Runtime mode. Use `development` locally. |
-| `PUBLIC_BASE_URL` | Public API/Admin base URL used in callbacks and links. |
-| `ADMIN_TOKEN` | Bearer token required for `/api/jobs*` and the Admin UI. |
-| `DATABASE_URL` | Postgres connection string. |
-| `REDIS_URL` | Redis/BullMQ connection string. |
-| `LARK_APP_ID` | Lark app id. |
-| `LARK_APP_SECRET` | Lark app secret. |
-| `LARK_WEBHOOK_SECRET` | Shared secret for validating webhook origin. |
-| `LARK_BASE_APP_TOKEN` | Lark Base app token for source-record write-back. |
-| `LARK_BASE_TABLE_ID` | Lark Base table id for source-record write-back. |
-| `LARK_STATUS_FIELD` | Lark field that receives `Queued`, `Running`, `NeedsReview`, `Completed`, failed states, or `Cancelled`. |
-| `LARK_JOB_ID_FIELD` | Lark field that receives the PatchPilot job id. |
-| `LARK_PR_URL_FIELD` | Lark field that receives the published PR URL. |
-| `LARK_PR_NUMBER_FIELD` | Lark field that receives the published PR number. |
-| `LARK_FAILURE_FIELD` | Lark field that receives the latest failure summary. |
-| `LARK_UPDATED_AT_FIELD` | Lark field that receives the latest write-back timestamp. |
-| `GITHUB_TOKEN` | GitHub fine-grained PAT used by the platform publisher. |
-| `GITHUB_WEBHOOK_SECRET` | Shared secret for GitHub pull request merge webhooks. |
-| `REPOSITORY_ALLOWLIST` | Comma-separated `owner/repo` allowlist. |
-| `PROTECTED_PATH_DENYLIST` | Comma-separated protected paths/globs that block publish. |
-| `JOB_WORKSPACE_ROOT` | Host/container path where job workspaces are created. |
-| `JOB_TIMEOUT_SECONDS` | Per-job execution timeout. |
-| `FAILED_WORKSPACE_RETENTION_DAYS` | Days to retain failed workspaces for inspection. |
-| `EXECUTOR_MODE` | `mock` for local smoke, `gstack` for real executor runs. |
-| `PUBLISHER_MODE` | `mock` for simulated PR metadata, `github` for real PRs. |
-| `RUNNER_IMAGE` | Fixed runner image name or digest used by workers. |
+| Variable                          | Purpose                                                                                                  |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `NODE_ENV`                        | Runtime mode. Use `development` locally.                                                                 |
+| `PUBLIC_BASE_URL`                 | Public API/Admin base URL used in callbacks and links.                                                   |
+| `ADMIN_TOKEN`                     | Bearer token required for `/api/jobs*` and the Admin UI.                                                 |
+| `DATABASE_URL`                    | Postgres connection string.                                                                              |
+| `REDIS_URL`                       | Redis/BullMQ connection string.                                                                          |
+| `LARK_APP_ID`                     | Lark app id.                                                                                             |
+| `LARK_APP_SECRET`                 | Lark app secret.                                                                                         |
+| `LARK_WEBHOOK_SECRET`             | Shared secret for validating webhook origin.                                                             |
+| `LARK_BASE_APP_TOKEN`             | Lark Base app token for source-record write-back.                                                        |
+| `LARK_BASE_TABLE_ID`              | Lark Base table id for source-record write-back.                                                         |
+| `LARK_STATUS_FIELD`               | Lark field that receives `Queued`, `Running`, `NeedsReview`, `Completed`, failed states, or `Cancelled`. |
+| `LARK_JOB_ID_FIELD`               | Lark field that receives the PatchPilot job id.                                                          |
+| `LARK_PR_URL_FIELD`               | Lark field that receives the published PR URL.                                                           |
+| `LARK_PR_NUMBER_FIELD`            | Lark field that receives the published PR number.                                                        |
+| `LARK_FAILURE_FIELD`              | Lark field that receives the latest failure summary.                                                     |
+| `LARK_UPDATED_AT_FIELD`           | Lark field that receives the latest write-back timestamp.                                                |
+| `GITHUB_TOKEN`                    | GitHub fine-grained PAT used by the platform publisher.                                                  |
+| `GITHUB_WEBHOOK_SECRET`           | Shared secret for GitHub pull request merge webhooks.                                                    |
+| `REPOSITORY_ALLOWLIST`            | Comma-separated `owner/repo` allowlist.                                                                  |
+| `PROTECTED_PATH_DENYLIST`         | Comma-separated protected paths/globs that block publish.                                                |
+| `JOB_WORKSPACE_ROOT`              | Host/container path where job workspaces are created.                                                    |
+| `JOB_TIMEOUT_SECONDS`             | Per-job execution timeout.                                                                               |
+| `FAILED_WORKSPACE_RETENTION_DAYS` | Days to retain failed workspaces for inspection.                                                         |
+| `EXECUTOR_MODE`                   | `mock` for local smoke, `gstack` for real executor runs.                                                 |
+| `PUBLISHER_MODE`                  | `mock` for simulated PR metadata, `github` for real PRs.                                                 |
+| `RUNNER_IMAGE`                    | Fixed runner image name or digest used by workers.                                                       |
 
 `gstack` belongs to `EXECUTOR_MODE`. The publisher only supports `mock` and
 `github`; the worker accepts legacy app-wide `PUBLISHER_MODE=gstack` as a
@@ -158,8 +158,9 @@ Use real mode only against a disposable test repository in the allowlist.
    container as read-only seed inputs. `GSTACK_SKILL_SOURCE_DIR` should point at
    the gstack checkout root so Codex skill symlinks can resolve helper binaries.
    Do not use `EXECUTOR_MODE=gstack` until `docker run --rm
-   ticket-to-pr-runner:local sh -lc 'command -v codex'` succeeds, or until
+ticket-to-pr-runner:local sh -lc 'command -v codex'` succeeds, or until
    `GSTACK_COMMAND` points at another compatible executable in the image.
+
 2. Set `EXECUTOR_MODE=gstack` and `PUBLISHER_MODE=github`.
 3. Set `GITHUB_TOKEN` to a fine-grained PAT scoped to the test repository.
 4. Set `REPOSITORY_ALLOWLIST` to that test repository only.

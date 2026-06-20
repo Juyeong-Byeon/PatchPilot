@@ -14,7 +14,7 @@ function requiredString(fields: Record<string, unknown>, name: string): string {
 export function parseLarkTicket(
   larkRecordId: string,
   triggerVersion: string,
-  fields: Record<string, unknown>
+  fields: Record<string, unknown>,
 ): TicketSnapshotInput {
   return {
     larkRecordId,
@@ -27,7 +27,7 @@ export function parseLarkTicket(
     priority: prioritySchema.parse(fields.Priority),
     status: requiredString(fields, "Status"),
     agentRunRequested: fields["Agent Run Requested"] === true,
-    rawFields: fields
+    rawFields: fields,
   };
 }
 

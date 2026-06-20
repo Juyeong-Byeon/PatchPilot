@@ -12,7 +12,7 @@ export async function executeMock(input: ExecutorInput): Promise<AgentResult> {
     `## Checklist`,
     `- [x] Mock executor completed`,
     `- [x] PR body artifact written`,
-    ``
+    ``,
   ].join("\n");
 
   await mkdir(input.run.workspacePath, { recursive: true });
@@ -35,13 +35,13 @@ export async function executeMock(input: ExecutorInput): Promise<AgentResult> {
     review: {
       summary: `Mock implementation for ${title}`,
       risks: [],
-      knownLimitations: ["Mock executor did not modify a real checkout"]
+      knownLimitations: ["Mock executor did not modify a real checkout"],
     },
     pullRequestDraft: {
       title: title.startsWith("Mock:") ? title : `Mock: ${title}`,
-      bodyPath: "PR_BODY.md"
+      bodyPath: "PR_BODY.md",
     },
     failure: null,
-    retryable: false
+    retryable: false,
   };
 }

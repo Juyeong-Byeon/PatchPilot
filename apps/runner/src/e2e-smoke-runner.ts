@@ -47,8 +47,8 @@ export async function runE2eSmokeRunner(input: E2eSmokeRunnerInput): Promise<voi
       "",
       "## Verification",
       "- README.md only",
-      "- E2E compatible runner completed"
-    ].join("\n")
+      "- E2E compatible runner completed",
+    ].join("\n"),
   );
   await writeFile(
     paths.resultJson,
@@ -70,24 +70,24 @@ export async function runE2eSmokeRunner(input: E2eSmokeRunnerInput): Promise<voi
           {
             command: "git diff --name-only",
             status: "passed",
-            summary: changedFiles.join(", ") || "No changed files"
-          }
+            summary: changedFiles.join(", ") || "No changed files",
+          },
         ],
         review: {
           summary: "README-only Lark automation smoke change generated for Ticket-to-PR E2E validation.",
           risks: [],
-          knownLimitations: ["This runner is a deterministic E2E smoke runner, not an AI code implementation agent."]
+          knownLimitations: ["This runner is a deterministic E2E smoke runner, not an AI code implementation agent."],
         },
         pullRequestDraft: {
           title: "docs: add Lark automation smoke note",
-          bodyPath: "output/pr-body.md"
+          bodyPath: "output/pr-body.md",
         },
         failure: null,
-        retryable: false
+        retryable: false,
       }),
       null,
-      2
-    )}\n`
+      2,
+    )}\n`,
   );
 }
 
@@ -105,7 +105,7 @@ async function appendSmokeNote(repoDir: string, jobId: string): Promise<void> {
     "## Lark automation smoke test",
     "",
     `Ticket-to-PR created this README-only smoke change from Lark Base job ${jobId}.`,
-    ""
+    "",
   ].join("\n");
   await writeFile(readmePath, `${readme.trimEnd()}${note}`);
 }
@@ -141,7 +141,7 @@ if (mainPath === fileURLToPath(import.meta.url)) {
     runE2eSmokeRunner({
       workspaceRoot,
       repoDir: getWorkspacePaths(workspaceRoot).repoDir,
-      targetBranch
+      targetBranch,
     }).catch((error: unknown) => {
       console.error(error instanceof Error ? error.message : String(error));
       process.exitCode = 1;

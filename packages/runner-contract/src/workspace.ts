@@ -29,6 +29,6 @@ export function getWorkspacePaths(root: string): WorkspacePaths {
     policyJson: path.join(inputDir, "policy.json"),
     resultJson: path.join(outputDir, "result.json"),
     prTitle: path.join(outputDir, "pr-title.txt"),
-    prBody: path.join(outputDir, "pr-body.md")
+    prBody: path.join(outputDir, "pr-body.md"),
   };
 }

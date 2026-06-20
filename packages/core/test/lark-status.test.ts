@@ -9,8 +9,8 @@ describe("Lark status write-back", () => {
       readLarkRecordUpdaterConfig({
         LARK_APP_ID: "cli_app",
         LARK_APP_SECRET: "secret",
-        LARK_BASE_APP_TOKEN: "base_token"
-      })
+        LARK_BASE_APP_TOKEN: "base_token",
+      }),
     ).toThrow("Incomplete Lark status update config: LARK_BASE_TABLE_ID");
 
     expect(
@@ -18,8 +18,8 @@ describe("Lark status write-back", () => {
         LARK_APP_ID: "cli_app",
         LARK_APP_SECRET: "secret",
         LARK_BASE_APP_TOKEN: "base_token",
-        LARK_BASE_TABLE_ID: "table_id"
-      })
+        LARK_BASE_TABLE_ID: "table_id",
+      }),
     ).toMatchObject({
       appId: "cli_app",
       appSecret: "secret",
@@ -32,8 +32,8 @@ describe("Lark status write-back", () => {
         prUrlField: "PR URL",
         prNumberField: "PR Number",
         failureReasonField: "PatchPilot Failure",
-        updatedAtField: "PatchPilot Updated At"
-      }
+        updatedAtField: "PatchPilot Updated At",
+      },
     });
   });
 
@@ -45,7 +45,7 @@ describe("Lark status write-back", () => {
         jobId: "job_1",
         prUrl: "https://github.com/acme/web/pull/42",
         prNumber: 42,
-        failureReason: "policy blocked"
+        failureReason: "policy blocked",
       },
       {
         statusField: "Status",
@@ -53,8 +53,8 @@ describe("Lark status write-back", () => {
         prUrlField: "PR",
         prNumberField: "PR Number",
         failureReasonField: "Failure",
-        updatedAtField: "Updated"
-      }
+        updatedAtField: "Updated",
+      },
     );
 
     expect(fields).toEqual({
@@ -63,7 +63,7 @@ describe("Lark status write-back", () => {
       PR: "https://github.com/acme/web/pull/42",
       "PR Number": 42,
       Failure: "policy blocked",
-      Updated: expect.any(String)
+      Updated: expect.any(String),
     });
   });
 
@@ -74,13 +74,13 @@ describe("Lark status write-back", () => {
         ok: true,
         status: 200,
         json: async () => ({ code: 0, tenant_access_token: "tenant-token", expire: 7200 }),
-        text: async () => ""
+        text: async () => "",
       })
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
         json: async () => ({ code: 0 }),
-        text: async () => ""
+        text: async () => "",
       });
 
     const updater = createLarkRecordUpdater(
@@ -95,10 +95,10 @@ describe("Lark status write-back", () => {
           jobIdField: "Job",
           prUrlField: "PR",
           prNumberField: "PR Number",
-          updatedAtField: "Updated"
-        }
+          updatedAtField: "Updated",
+        },
       },
-      fetchImpl
+      fetchImpl,
     );
 
     await updater({
@@ -106,7 +106,7 @@ describe("Lark status write-back", () => {
       status: "Completed",
       jobId: "job_1",
       prUrl: "https://github.com/acme/web/pull/42",
-      prNumber: 42
+      prNumber: 42,
     });
 
     expect(fetchImpl).toHaveBeenNthCalledWith(
@@ -114,16 +114,16 @@ describe("Lark status write-back", () => {
       "https://lark.example/open-apis/auth/v3/tenant_access_token/internal",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ app_id: "cli_app", app_secret: "secret" })
-      })
+        body: JSON.stringify({ app_id: "cli_app", app_secret: "secret" }),
+      }),
     );
     expect(fetchImpl).toHaveBeenNthCalledWith(
       2,
       "https://lark.example/open-apis/bitable/v1/apps/base_token/tables/table_id/records/rec_1",
       expect.objectContaining({
         method: "PATCH",
-        headers: expect.objectContaining({ authorization: "Bearer tenant-token" })
-      })
+        headers: expect.objectContaining({ authorization: "Bearer tenant-token" }),
+      }),
     );
     const patchBody = JSON.parse(fetchImpl.mock.calls[1]?.[1]?.body as string) as { fields: Record<string, unknown> };
     expect(patchBody.fields).toMatchObject({
@@ -131,7 +131,7 @@ describe("Lark status write-back", () => {
       Job: "job_1",
       PR: "https://github.com/acme/web/pull/42",
       "PR Number": 42,
-      Updated: expect.any(String)
+      Updated: expect.any(String),
     });
   });
 });

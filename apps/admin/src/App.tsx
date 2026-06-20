@@ -14,11 +14,10 @@ import {
   type Artifact,
   type JobRecord,
   type LogLine,
-  type RunEvent
+  type RunEvent,
 } from "./api.js";
 import { JobDetail } from "./components/JobDetail.js";
 import { JobList } from "./components/JobList.js";
-import { Badge } from "./components/ui/badge.js";
 import { Button } from "./components/ui/button.js";
 import { Input } from "./components/ui/input.js";
 import { cn } from "./lib/utils.js";
@@ -35,9 +34,7 @@ interface DetailState {
   artifacts: Artifact[];
 }
 
-type AdminRoute =
-  | { page: "list" }
-  | { page: "detail"; jobId: string };
+type AdminRoute = { page: "list" } | { page: "detail"; jobId: string };
 
 type StatusState =
   | { kind: "ready" }
@@ -51,7 +48,7 @@ const emptyDetail: DetailState = {
   job: null,
   events: [],
   logs: [],
-  artifacts: []
+  artifacts: [],
 };
 
 export default function App() {
@@ -72,8 +69,8 @@ export default function App() {
   const selectedJobId = route.page === "detail" ? route.jobId : "";
 
   const selectedJob = useMemo(
-    () => route.page === "detail" ? detail.job ?? jobs.find((job) => job.id === route.jobId) ?? null : null,
-    [detail.job, jobs, route]
+    () => (route.page === "detail" ? (detail.job ?? jobs.find((job) => job.id === route.jobId) ?? null) : null),
+    [detail.job, jobs, route],
   );
   const detailRefreshMs = isRunningPhase(selectedJob?.phase) ? 1000 : 3000;
   const jobStats = useMemo(
@@ -81,9 +78,9 @@ export default function App() {
       total: jobs.length,
       running: jobs.filter((job) => isRunningPhase(job.phase)).length,
       failed: jobs.filter((job) => isFailedJob(job.phase, job.outcome)).length,
-      completed: jobs.filter((job) => isCompletedJob(job.phase, job.outcome)).length
+      completed: jobs.filter((job) => isCompletedJob(job.phase, job.outcome)).length,
     }),
-    [jobs]
+    [jobs],
   );
   // Poll the list faster while any job is in flight so status + rows feel live.
   const listRefreshMs = jobStats.running > 0 ? LIST_REFRESH_RUNNING_MS : LIST_REFRESH_IDLE_MS;
@@ -183,7 +180,7 @@ export default function App() {
         fetchJob(jobId, activeToken),
         fetchJobEvents(jobId, activeToken),
         fetchJobLogs(jobId, activeToken),
-        fetchJobArtifacts(jobId, activeToken)
+        fetchJobArtifacts(jobId, activeToken),
       ]);
       setDetail({ job, events, logs, artifacts });
     } catch (caught) {
@@ -252,7 +249,9 @@ export default function App() {
             />
             <div className="min-w-0">
               <p className="text-[12px] leading-4 text-charcoal">{copy.appEyebrow}</p>
-              <strong className="block truncate text-[17px] font-semibold leading-5 text-forest-ink">{copy.appTitle}</strong>
+              <strong className="block truncate text-[17px] font-semibold leading-5 text-forest-ink">
+                {copy.appTitle}
+              </strong>
             </div>
           </div>
 
@@ -291,17 +290,24 @@ export default function App() {
                   onChange={(event) => setToken(event.target.value)}
                 />
                 <div className="grid grid-cols-2 gap-2">
-                  <Button type="submit">
-                    {copy.apply}
-                  </Button>
+                  <Button type="submit">{copy.apply}</Button>
                   <Button type="button" variant="outline" onClick={() => void refreshJobs(token)}>
                     {copy.refresh}
                   </Button>
                 </div>
               </form>
               <div className="mt-2">
-                <span className="block text-[12px] leading-4 text-charcoal" aria-live="polite">{renderStatus(status, copy)}</span>
-                {listError ? <strong role="alert" className="mt-2 block rounded-lg bg-danger px-2.5 py-1.5 text-xs font-normal leading-4 text-white">{listError}</strong> : null}
+                <span className="block text-[12px] leading-4 text-charcoal" aria-live="polite">
+                  {renderStatus(status, copy)}
+                </span>
+                {listError ? (
+                  <strong
+                    role="alert"
+                    className="mt-2 block rounded-lg bg-danger px-2.5 py-1.5 text-xs font-normal leading-4 text-white"
+                  >
+                    {listError}
+                  </strong>
+                ) : null}
               </div>
             </section>
 
@@ -333,7 +339,14 @@ export default function App() {
             <div className="min-w-0">
               <div className="flex min-w-0 items-start gap-3">
                 {route.page === "detail" ? (
-                  <Button type="button" variant="ghost" size="icon" aria-label={copy.backToJobs} title={copy.backToJobs} onClick={openJobList}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label={copy.backToJobs}
+                    title={copy.backToJobs}
+                    onClick={openJobList}
+                  >
                     <ChevronLeft data-icon aria-hidden="true" strokeWidth={2.3} />
                   </Button>
                 ) : null}
@@ -346,10 +359,30 @@ export default function App() {
               </div>
               {route.page === "list" ? (
                 <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label={copy.filterJobsLabel}>
-                  <MetricPill label={copy.totalJobs} value={jobStats.total} active={statusFilter === "all"} onClick={() => setStatusFilter("all")} />
-                  <MetricPill label={copy.runningJobs} value={jobStats.running} active={statusFilter === "running"} onClick={() => setStatusFilter("running")} />
-                  <MetricPill label={copy.failedJobs} value={jobStats.failed} active={statusFilter === "failed"} onClick={() => setStatusFilter("failed")} />
-                  <MetricPill label={copy.completedJobs} value={jobStats.completed} active={statusFilter === "completed"} onClick={() => setStatusFilter("completed")} />
+                  <MetricPill
+                    label={copy.totalJobs}
+                    value={jobStats.total}
+                    active={statusFilter === "all"}
+                    onClick={() => setStatusFilter("all")}
+                  />
+                  <MetricPill
+                    label={copy.runningJobs}
+                    value={jobStats.running}
+                    active={statusFilter === "running"}
+                    onClick={() => setStatusFilter("running")}
+                  />
+                  <MetricPill
+                    label={copy.failedJobs}
+                    value={jobStats.failed}
+                    active={statusFilter === "failed"}
+                    onClick={() => setStatusFilter("failed")}
+                  />
+                  <MetricPill
+                    label={copy.completedJobs}
+                    value={jobStats.completed}
+                    active={statusFilter === "completed"}
+                    onClick={() => setStatusFilter("completed")}
+                  />
                 </div>
               ) : null}
             </div>
@@ -424,7 +457,17 @@ function renderStatus(status: StatusState, copy: AdminCopy): string {
   return copy.cancelRequested(status.phase);
 }
 
-function MetricPill({ label, value, active, onClick }: { label: string; value: number; active: boolean; onClick(): void }) {
+function MetricPill({
+  label,
+  value,
+  active,
+  onClick,
+}: {
+  label: string;
+  value: number;
+  active: boolean;
+  onClick(): void;
+}) {
   return (
     <button
       type="button"
@@ -434,7 +477,7 @@ function MetricPill({ label, value, active, onClick }: { label: string; value: n
         "interactive-card inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[12px] leading-4 shadow-sm transition-colors",
         active
           ? "border-cobalt-surface bg-mist-blue text-cobalt-surface shadow-electric-blue/10"
-          : "border-hairline-gray bg-linen-white text-charcoal shadow-midnight-ink/5 hover:border-electric-blue/40 hover:bg-mist-blue"
+          : "border-hairline-gray bg-linen-white text-charcoal shadow-midnight-ink/5 hover:border-electric-blue/40 hover:bg-mist-blue",
       )}
     >
       {label}

@@ -12,17 +12,17 @@ const webhookBody = {
     "Target Branch": "main",
     Priority: "Normal",
     Status: "Progress",
-    "Agent Run Requested": true
-  }
+    "Agent Run Requested": true,
+  },
 };
 
 function makeDeps() {
   return {
     repos: {
       createJobFromTicket: vi.fn().mockResolvedValue({ jobId: "job_1", ticketSnapshotId: "ts_1", created: true }),
-      appendEvent: vi.fn().mockResolvedValue(undefined)
+      appendEvent: vi.fn().mockResolvedValue(undefined),
     },
-    queue: { add: vi.fn().mockResolvedValue({ id: "bull_1" }) }
+    queue: { add: vi.fn().mockResolvedValue({ id: "bull_1" }) },
   };
 }
 
@@ -45,7 +45,7 @@ describe("lark webhook route", () => {
       method: "POST",
       url: "/webhooks/lark",
       headers: { "x-lark-webhook-secret": "wrong" },
-      payload: webhookBody
+      payload: webhookBody,
     });
 
     expect(missing.statusCode).toBe(401);
@@ -62,7 +62,7 @@ describe("lark webhook route", () => {
       method: "POST",
       url: "/webhooks/lark",
       headers: { "x-lark-webhook-secret": "secret" },
-      payload: webhookBody
+      payload: webhookBody,
     });
 
     expect(response.statusCode).toBe(202);

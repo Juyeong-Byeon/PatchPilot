@@ -21,7 +21,7 @@ describe("RunTimeline", () => {
             source: "api",
             message: "accepted",
             attempt: 1,
-            created_at: "2026-06-20T00:00:00.000Z"
+            created_at: "2026-06-20T00:00:00.000Z",
           },
           {
             id: "2",
@@ -30,7 +30,7 @@ describe("RunTimeline", () => {
             source: "worker",
             message: "clone started",
             attempt: 1,
-            created_at: "2026-06-20T00:00:05.000Z"
+            created_at: "2026-06-20T00:00:05.000Z",
           },
           {
             id: "3",
@@ -39,10 +39,10 @@ describe("RunTimeline", () => {
             source: "worker",
             message: "git authentication failed",
             attempt: 1,
-            created_at: "2026-06-20T00:00:12.000Z"
-          }
+            created_at: "2026-06-20T00:00:12.000Z",
+          },
         ]}
-      />
+      />,
     );
 
     const flow = screen.getByRole("region", { name: "실행 흐름" });
@@ -73,7 +73,7 @@ describe("RunTimeline", () => {
             event_type: "job.enqueued",
             source: "api",
             message: "accepted",
-            created_at: "2026-06-20T00:00:00.000Z"
+            created_at: "2026-06-20T00:00:00.000Z",
           },
           {
             id: "2",
@@ -81,13 +81,15 @@ describe("RunTimeline", () => {
             event_type: "worker.started",
             source: "worker",
             message: "clone started",
-            created_at: "2026-06-20T00:00:05.000Z"
-          }
+            created_at: "2026-06-20T00:00:05.000Z",
+          },
         ]}
-      />
+      />,
     );
 
-    const firstWidth = container.querySelector('[data-phase="Implementing"] [data-duration-bar]')?.getAttribute("style");
+    const firstWidth = container
+      .querySelector('[data-phase="Implementing"] [data-duration-bar]')
+      ?.getAttribute("style");
     expect(screen.getByText("10s")).toBeInTheDocument();
 
     rerender(
@@ -103,7 +105,7 @@ describe("RunTimeline", () => {
             event_type: "job.enqueued",
             source: "api",
             message: "accepted",
-            created_at: "2026-06-20T00:00:00.000Z"
+            created_at: "2026-06-20T00:00:00.000Z",
           },
           {
             id: "2",
@@ -111,13 +113,15 @@ describe("RunTimeline", () => {
             event_type: "worker.started",
             source: "worker",
             message: "clone started",
-            created_at: "2026-06-20T00:00:05.000Z"
-          }
+            created_at: "2026-06-20T00:00:05.000Z",
+          },
         ]}
-      />
+      />,
     );
 
-    const secondWidth = container.querySelector('[data-phase="Implementing"] [data-duration-bar]')?.getAttribute("style");
+    const secondWidth = container
+      .querySelector('[data-phase="Implementing"] [data-duration-bar]')
+      ?.getAttribute("style");
     expect(screen.getByText("20s")).toBeInTheDocument();
     expect(secondWidth).not.toEqual(firstWidth);
   });
@@ -136,7 +140,7 @@ describe("RunTimeline", () => {
             event_type: "job.enqueued",
             source: "api",
             message: "accepted",
-            created_at: "2026-06-20T00:00:00.000Z"
+            created_at: "2026-06-20T00:00:00.000Z",
           },
           {
             id: "2",
@@ -144,10 +148,10 @@ describe("RunTimeline", () => {
             event_type: "worker.started",
             source: "worker",
             message: "worker started",
-            created_at: "2026-06-20T00:00:05.000Z"
-          }
+            created_at: "2026-06-20T00:00:05.000Z",
+          },
         ]}
-      />
+      />,
     );
 
     const activeRow = container.querySelector('[data-phase="Implementing"]');
@@ -168,7 +172,7 @@ describe("RunTimeline", () => {
             event_type: "job.enqueued",
             source: "api",
             message: "accepted",
-            created_at: "2026-06-20T00:00:00.000Z"
+            created_at: "2026-06-20T00:00:00.000Z",
           },
           {
             id: "2",
@@ -176,13 +180,15 @@ describe("RunTimeline", () => {
             event_type: "worker.started",
             source: "worker",
             message: "worker started",
-            created_at: "2026-06-20T00:00:05.000Z"
-          }
+            created_at: "2026-06-20T00:00:05.000Z",
+          },
         ]}
-      />
+      />,
     );
 
-    expect(within(container.querySelector('[data-phase="Implementing"]') as HTMLElement).getByText("20s")).toBeInTheDocument();
+    expect(
+      within(container.querySelector('[data-phase="Implementing"]') as HTMLElement).getByText("20s"),
+    ).toBeInTheDocument();
   });
 
   it("shows terminal failure on the last running phase instead of a final Failed row", () => {
@@ -198,7 +204,7 @@ describe("RunTimeline", () => {
             event_type: "job.enqueued",
             source: "api",
             message: "accepted",
-            created_at: "2026-06-20T00:00:00.000Z"
+            created_at: "2026-06-20T00:00:00.000Z",
           },
           {
             id: "2",
@@ -206,7 +212,7 @@ describe("RunTimeline", () => {
             event_type: "worker.started",
             source: "worker",
             message: "runner started",
-            created_at: "2026-06-20T00:00:05.000Z"
+            created_at: "2026-06-20T00:00:05.000Z",
           },
           {
             id: "3",
@@ -214,10 +220,10 @@ describe("RunTimeline", () => {
             event_type: "worker.error",
             source: "worker",
             message: "gstack runner exited with code 1",
-            created_at: "2026-06-20T00:00:12.000Z"
-          }
+            created_at: "2026-06-20T00:00:12.000Z",
+          },
         ]}
-      />
+      />,
     );
 
     const failedImplementing = container.querySelector('[data-phase="Implementing"][data-status="failed"]');

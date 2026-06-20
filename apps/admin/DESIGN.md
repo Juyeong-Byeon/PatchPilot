@@ -10,27 +10,27 @@ Source reference: https://styles.refero.design/style/6221ba67-26e7-4657-91b7-efd
 
 ## Tokens
 
-| Name | Value | Use |
-| --- | --- | --- |
-| Midnight Ink | `#091135` | Primary text, headings, failure/dark badges |
-| Electric Blue | `#0f77ff` | Links, active progress, focus rings |
-| Cobalt Surface | `#127ee3` | Primary buttons and selected action icons |
-| Slate | `#36394a` | Secondary text |
-| Frost Border | `#e1e9f0` | Card, table, and input borders |
-| Lavender Wash | `#f5f3ff` | Page background and low-emphasis surfaces |
-| Paper | `#ffffff` | Cards, tables, inputs, nav |
+| Name           | Value     | Use                                         |
+| -------------- | --------- | ------------------------------------------- |
+| Midnight Ink   | `#091135` | Primary text, headings, failure/dark badges |
+| Electric Blue  | `#0f77ff` | Links, active progress, focus rings         |
+| Cobalt Surface | `#127ee3` | Primary buttons and selected action icons   |
+| Slate          | `#36394a` | Secondary text                              |
+| Frost Border   | `#e1e9f0` | Card, table, and input borders              |
+| Lavender Wash  | `#f5f3ff` | Page background and low-emphasis surfaces   |
+| Paper          | `#ffffff` | Cards, tables, inputs, nav                  |
 
 ## Typography
 
 Use Inter for every UI surface. Avoid display-serif or decorative type in the admin panel. Typical sizes:
 
-| Role | Size | Weight |
-| --- | --- | --- |
-| Page title | 24-26px | 600 |
-| Section title | 18px | 600 |
-| Table body | 13px | 400-500 |
-| Metadata | 11-12px | 400-500 |
-| Monospace IDs | 11-12px | 400 |
+| Role          | Size    | Weight  |
+| ------------- | ------- | ------- |
+| Page title    | 24-26px | 600     |
+| Section title | 18px    | 600     |
+| Table body    | 13px    | 400-500 |
+| Metadata      | 11-12px | 400-500 |
+| Monospace IDs | 11-12px | 400     |
 
 ## Components
 

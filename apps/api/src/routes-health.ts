@@ -19,7 +19,7 @@ export async function registerHealthRoutes(app: FastifyInstance, probes: HealthP
   app.get("/api/ready", async (_request, reply) => {
     const checks: Record<string, DependencyStatus> = {
       database: await runProbe(probes.checkDatabase),
-      redis: await runProbe(probes.checkRedis)
+      redis: await runProbe(probes.checkRedis),
     };
     const ok = Object.values(checks).every((status) => status !== "down");
     if (!ok) return reply.code(503).send({ ok: false, checks });

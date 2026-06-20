@@ -23,7 +23,7 @@ describe("readWorkerEnv", () => {
       LARK_APP_ID: "cli_app",
       LARK_APP_SECRET: "lark_secret",
       LARK_BASE_APP_TOKEN: "base_token",
-      LARK_BASE_TABLE_ID: "table_id"
+      LARK_BASE_TABLE_ID: "table_id",
     });
 
     expect(env.executorMode).toBe("gstack");
@@ -43,7 +43,7 @@ describe("readWorkerEnv", () => {
     expect(env.larkRecordUpdaterConfig).toMatchObject({
       appId: "cli_app",
       baseAppToken: "base_token",
-      tableId: "table_id"
+      tableId: "table_id",
     });
   });
 
@@ -51,7 +51,7 @@ describe("readWorkerEnv", () => {
     const env = readWorkerEnv({
       EXECUTOR_MODE: "gstack",
       PUBLISHER_MODE: "gstack",
-      GITHUB_TOKEN: "github_pat_secret"
+      GITHUB_TOKEN: "github_pat_secret",
     });
 
     expect(env.executorMode).toBe("gstack");
@@ -62,8 +62,8 @@ describe("readWorkerEnv", () => {
     expect(() =>
       readWorkerEnv({
         WORKER_PUBLISHER_MODE: "gstack",
-        GITHUB_TOKEN: "github_pat_secret"
-      })
+        GITHUB_TOKEN: "github_pat_secret",
+      }),
     ).toThrow("Invalid worker mode: gstack");
   });
 });

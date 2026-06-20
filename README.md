@@ -138,14 +138,14 @@ On success it prints the admin console URL (`http://localhost:3000`) and the
 
 ### Stack management
 
-| Command | What it does |
-| --- | --- |
-| `npm run setup` | One-command bootstrap: preflight → up → migrate → wait for ready |
-| `npm run doctor` | Re-run preflight checks (Docker + `.env`) without touching the stack |
-| `npm run status` | Container status plus the `/api/ready` readiness probe |
-| `npm run logs` | Tail `api` and `worker` logs |
-| `npm run down` | Stop the stack |
-| `npm run reset:db` | Wipe the Postgres volume and re-migrate (destructive) |
+| Command            | What it does                                                         |
+| ------------------ | -------------------------------------------------------------------- |
+| `npm run setup`    | One-command bootstrap: preflight → up → migrate → wait for ready     |
+| `npm run doctor`   | Re-run preflight checks (Docker + `.env`) without touching the stack |
+| `npm run status`   | Container status plus the `/api/ready` readiness probe               |
+| `npm run logs`     | Tail `api` and `worker` logs                                         |
+| `npm run down`     | Stop the stack                                                       |
+| `npm run reset:db` | Wipe the Postgres volume and re-migrate (destructive)                |
 
 ### Manual setup
 
@@ -354,7 +354,7 @@ The admin UI supports:
 - Job detail with failure summary, failure category, and next action first.
 - Copy-to-clipboard for job id and PR URL.
 - Datadog-style phase spans for `Queued -> Planning -> Implementing ->
-  PolicyChecking -> Publishing -> Completed`.
+PolicyChecking -> Publishing -> Completed`.
 - Span-to-log correlation by source for faster debugging.
 - Artifacts, raw logs, retry, and cancel actions. Retry is enabled only for
   internally-failed jobs, matching the backend retry preflight.

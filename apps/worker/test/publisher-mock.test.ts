@@ -14,7 +14,7 @@ describe("publishMockPullRequest", () => {
       pushSha: "0123456789abcdef0123456789abcdef01234567",
       commitShas: ["abc"],
       title: "Fix login",
-      body: "Summary"
+      body: "Summary",
     });
 
     expect(published).toEqual({
@@ -28,7 +28,7 @@ describe("publishMockPullRequest", () => {
       prUrl: "https://github.local/acme/web/pull/mock-job_1",
       prNumber: 1,
       prTitle: "Fix login",
-      prBody: "Summary"
+      prBody: "Summary",
     });
   });
 });

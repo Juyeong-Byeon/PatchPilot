@@ -7,7 +7,7 @@ import {
   buildGstackDockerCommand,
   maskExecutorOutput,
   runCommand,
-  writeRunnerInputArtifacts
+  writeRunnerInputArtifacts,
 } from "../src/executor-gstack.js";
 
 const tempDirs: string[] = [];
@@ -33,9 +33,9 @@ describe("buildGstackDockerCommand", () => {
         larkRecordId: "rec_1",
         triggerVersion: "v1",
         repository: "acme/web",
-        targetBranch: "main"
+        targetBranch: "main",
       },
-      run: { runId: "run_1", attempt: 2, workBranch: "ticket-to-pr/job_1" }
+      run: { runId: "run_1", attempt: 2, workBranch: "ticket-to-pr/job_1" },
     });
 
     expect(command.file).toBe("docker");
@@ -83,8 +83,8 @@ describe("buildGstackDockerCommand", () => {
         "CODEX_CONFIG_FILE=/codex-seed/config.toml",
         "-e",
         "CODEX_SKILLS_DIR=/codex-seed/skills",
-        "ghcr.io/acme/ticket-runner@sha256:abc"
-      ])
+        "ghcr.io/acme/ticket-runner@sha256:abc",
+      ]),
     );
     expect(command.args.join(" ")).not.toContain("/var/run/docker.sock");
   });
@@ -100,13 +100,13 @@ describe("buildGstackDockerCommand", () => {
         larkRecordId: "rec_1",
         triggerVersion: "v1",
         repository: "acme/web",
-        targetBranch: "main"
+        targetBranch: "main",
       },
-      run: { runId: "run_1", attempt: 1, workBranch: "ticket-to-pr/job_1" }
+      run: { runId: "run_1", attempt: 1, workBranch: "ticket-to-pr/job_1" },
     });
 
     expect(command.args).toEqual(
-      expect.arrayContaining(["-v", "/Users/me/ticket-to-pr/work/jobs/job_1/run_1:/work/jobs/job_1"])
+      expect.arrayContaining(["-v", "/Users/me/ticket-to-pr/work/jobs/job_1/run_1:/work/jobs/job_1"]),
     );
     expect(command.args).not.toContain("/work/jobs/job_1/run_1:/work/jobs/job_1");
   });
@@ -129,7 +129,7 @@ describe("buildGstackDockerCommand", () => {
         review: { summary: "ok", risks: [], knownLimitations: [] },
         pullRequestDraft: { title: "Fix login", bodyPath: "output/pr-body.md" },
         failure: null,
-        retryable: false
+        retryable: false,
       },
       {
         targetBranch: "main",
@@ -137,8 +137,8 @@ describe("buildGstackDockerCommand", () => {
         headSha: "trusted-head",
         pushSha: "abcdefabcdefabcdefabcdefabcdefabcdefabcd",
         changedFiles: ["infra/prod.tf"],
-        commits: [{ sha: "trusted-commit", message: "Trusted commit" }]
-      }
+        commits: [{ sha: "trusted-commit", message: "Trusted commit" }],
+      },
     );
 
     expect(result).toMatchObject({
@@ -146,7 +146,7 @@ describe("buildGstackDockerCommand", () => {
       headSha: "trusted-head",
       pushSha: "abcdefabcdefabcdefabcdefabcdefabcdefabcd",
       changedFiles: ["infra/prod.tf"],
-      commits: [{ sha: "trusted-commit", message: "Trusted commit" }]
+      commits: [{ sha: "trusted-commit", message: "Trusted commit" }],
     });
   });
 
@@ -184,18 +184,18 @@ describe("buildGstackDockerCommand", () => {
             priority: "Normal",
             phase: "Queued",
             outcome: "Queued",
-            rawFields: {}
+            rawFields: {},
           },
           run: {
             runId: "run_1",
             attempt: 1,
             workspacePath,
-            workBranch: "ticket-to-pr/job_1"
-          }
+            workBranch: "ticket-to-pr/job_1",
+          },
         },
         50,
-        50
-      )
+        50,
+      ),
     ).rejects.toThrow("gstack runner timed out");
 
     expect(Date.now() - startedAt).toBeLessThan(1200);
@@ -216,20 +216,20 @@ describe("buildGstackDockerCommand", () => {
         description: "Login fails",
         definitionOfDone: "Users can log in",
         repository: "acme/web",
-        targetBranch: "main"
+        targetBranch: "main",
       },
       run: { runId: "run_1", attempt: 1, workBranch: "ticket-to-pr/job_1" },
-      policy: { repositoryAllowlist: ["acme/web"], protectedPathDenylist: ["infra/**"] }
+      policy: { repositoryAllowlist: ["acme/web"], protectedPathDenylist: ["infra/**"] },
     });
 
     expect(await readFile(join(workspacePath, "input", "ticket.md"), "utf8")).toContain("Fix login");
     expect(JSON.parse(await readFile(join(workspacePath, "input", "context.json"), "utf8"))).toMatchObject({
       jobId: "job_1",
-      runId: "run_1"
+      runId: "run_1",
     });
     expect(JSON.parse(await readFile(join(workspacePath, "input", "policy.json"), "utf8"))).toEqual({
       repositoryAllowlist: ["acme/web"],
-      protectedPathDenylist: ["infra/**"]
+      protectedPathDenylist: ["infra/**"],
     });
   });
 });

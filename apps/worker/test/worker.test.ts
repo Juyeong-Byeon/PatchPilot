@@ -23,7 +23,7 @@ const job = {
   priority: "Normal" as const,
   phase: "Queued" as const,
   outcome: "Queued" as const,
-  rawFields: {}
+  rawFields: {},
 };
 
 const completedResult = {
@@ -43,7 +43,7 @@ const completedResult = {
   review: { summary: "ok", risks: [], knownLimitations: [] },
   pullRequestDraft: { title: "Fix login", bodyPath: "PR_BODY.md" },
   failure: null,
-  retryable: false
+  retryable: false,
 };
 
 function createRepos() {
@@ -54,14 +54,14 @@ function createRepos() {
       jobId: input.jobId,
       attempt: input.attempt,
       workspacePath: input.workspacePath,
-      workBranch: input.workBranch
+      workBranch: input.workBranch,
     })),
     transitionJob: vi.fn().mockResolvedValue(undefined),
     appendEvent: vi.fn().mockResolvedValue(undefined),
     appendLog: vi.fn().mockResolvedValue(undefined),
     saveArtifact: vi.fn().mockResolvedValue(undefined),
     savePullRequest: vi.fn().mockResolvedValue(undefined),
-    appendAuditEvent: vi.fn().mockResolvedValue(undefined)
+    appendAuditEvent: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -83,7 +83,7 @@ describe("processAgentJob", () => {
       prUrl: "https://github.local/acme/web/pull/mock-job_1",
       prNumber: 1,
       prTitle: "Fix login",
-      prBody: "Generated body"
+      prBody: "Generated body",
     });
     const larkUpdater = vi.fn().mockResolvedValue(undefined);
 
@@ -98,23 +98,25 @@ describe("processAgentJob", () => {
         ids: {
           runId: () => "run_1",
           artifactId: (kind) => `artifact_${kind}`,
-          pullRequestId: () => "pr_1"
-        }
-      }
+          pullRequestId: () => "pr_1",
+        },
+      },
     );
 
     expect(outcome).toEqual({ status: "completed", runId: "run_1" });
     expect(repos.saveArtifact).toHaveBeenCalledWith(expect.objectContaining({ kind: "agent-result" }));
     expect(repos.saveArtifact).toHaveBeenCalledWith(expect.objectContaining({ kind: "policy-gate" }));
     expect(publisher).toHaveBeenCalledWith(expect.objectContaining({ title: "Fix login" }));
-    expect(repos.savePullRequest).toHaveBeenCalledWith(expect.objectContaining({ id: "pr_1", prUrl: expect.any(String) }));
+    expect(repos.savePullRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "pr_1", prUrl: expect.any(String) }),
+    );
     expect(repos.transitionJob).toHaveBeenLastCalledWith("job_1", "Completed", "NeedsReview");
     expect(larkUpdater).toHaveBeenCalledWith(
       expect.objectContaining({
         recordId: "rec_1",
         status: "Running",
-        jobId: "job_1"
-      })
+        jobId: "job_1",
+      }),
     );
     expect(larkUpdater).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -122,8 +124,8 @@ describe("processAgentJob", () => {
         status: "NeedsReview",
         jobId: "job_1",
         prUrl: "https://github.local/acme/web/pull/mock-job_1",
-        prNumber: 1
-      })
+        prNumber: 1,
+      }),
     );
   });
 
@@ -144,7 +146,7 @@ describe("processAgentJob", () => {
       prUrl: "https://github.local/acme/web/pull/mock-job_1",
       prNumber: 1,
       prTitle: "Fix login",
-      prBody: "Generated body"
+      prBody: "Generated body",
     });
 
     await processAgentJob(
@@ -157,37 +159,39 @@ describe("processAgentJob", () => {
         ids: {
           runId: () => "run_1",
           artifactId: (kind) => `artifact_${kind}`,
-          pullRequestId: () => "pr_1"
-        }
-      }
+          pullRequestId: () => "pr_1",
+        },
+      },
     );
 
-    const progressLogs = repos.appendLog.mock.calls.map(([entry]) => entry).filter((entry) => entry.stream === "progress");
+    const progressLogs = repos.appendLog.mock.calls
+      .map(([entry]) => entry)
+      .filter((entry) => entry.stream === "progress");
 
     expect(progressLogs.map((entry) => entry.sequence)).toEqual([0, 1, 2, 3, 4, 5]);
     expect(progressLogs).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           source: "worker",
-          text: "[계획] 작업자가 티켓과 저장소 정책을 확인하고 있습니다."
+          text: "[계획] 작업자가 티켓과 저장소 정책을 확인하고 있습니다.",
         }),
         expect.objectContaining({
           source: "gstack",
-          text: "[구현] 실행 워크스페이스를 준비하고 AI runner를 시작합니다."
+          text: "[구현] 실행 워크스페이스를 준비하고 AI runner를 시작합니다.",
         }),
         expect.objectContaining({
           source: "policy",
-          text: "[정책 검사] 변경 파일과 저장소 허용 정책을 검사하고 있습니다."
+          text: "[정책 검사] 변경 파일과 저장소 허용 정책을 검사하고 있습니다.",
         }),
         expect.objectContaining({
           source: "publisher",
-          text: "[게시] 브랜치를 푸시하고 PR을 생성하고 있습니다."
+          text: "[게시] 브랜치를 푸시하고 PR을 생성하고 있습니다.",
         }),
         expect.objectContaining({
           source: "worker",
-          text: "[완료] PR 생성이 끝났습니다."
-        })
-      ])
+          text: "[완료] PR 생성이 끝났습니다.",
+        }),
+      ]),
     );
   });
 
@@ -206,9 +210,9 @@ describe("processAgentJob", () => {
         ids: {
           runId: () => "run_1",
           artifactId: (kind) => `artifact_${kind}`,
-          pullRequestId: () => "pr_1"
-        }
-      }
+          pullRequestId: () => "pr_1",
+        },
+      },
     );
 
     expect(outcome.status).toBe("policy_blocked");
@@ -216,15 +220,15 @@ describe("processAgentJob", () => {
     expect(repos.saveArtifact).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: "policy-gate",
-        content: expect.objectContaining({ status: "failed", deniedFiles: ["infra/prod.tf"] })
-      })
+        content: expect.objectContaining({ status: "failed", deniedFiles: ["infra/prod.tf"] }),
+      }),
     );
     expect(repos.transitionJob).toHaveBeenLastCalledWith(
       "job_1",
       "Failed",
       "FailedActionable",
       expect.stringContaining("infra/prod.tf"),
-      expect.objectContaining({ category: "policy", nextAction: expect.any(String) })
+      expect.objectContaining({ category: "policy", nextAction: expect.any(String) }),
     );
   });
 
@@ -244,9 +248,9 @@ describe("processAgentJob", () => {
         ids: {
           runId: () => "run_1",
           artifactId: (kind) => `artifact_${kind}`,
-          pullRequestId: () => "pr_1"
-        }
-      }
+          pullRequestId: () => "pr_1",
+        },
+      },
     );
 
     expect(outcome.status).toBe("policy_blocked");
@@ -257,16 +261,16 @@ describe("processAgentJob", () => {
         kind: "policy-gate",
         content: expect.objectContaining({
           status: "failed",
-          repositoryAllowed: false
-        })
-      })
+          repositoryAllowed: false,
+        }),
+      }),
     );
     expect(repos.transitionJob).toHaveBeenLastCalledWith(
       "job_1",
       "Failed",
       "FailedActionable",
       expect.stringContaining("evil/web"),
-      expect.objectContaining({ category: "policy", nextAction: expect.any(String) })
+      expect.objectContaining({ category: "policy", nextAction: expect.any(String) }),
     );
   });
 
@@ -287,7 +291,7 @@ describe("processAgentJob", () => {
       prUrl: "https://github.local/acme/web/pull/mock-job_1",
       prNumber: 1,
       prTitle: "Fix login",
-      prBody: "Generated body"
+      prBody: "Generated body",
     });
 
     const outcome = await processAgentJob(
@@ -300,14 +304,14 @@ describe("processAgentJob", () => {
         ids: {
           runId: () => "unused",
           artifactId: (kind) => `artifact_${kind}`,
-          pullRequestId: () => "pr_1"
-        }
-      }
+          pullRequestId: () => "pr_1",
+        },
+      },
     );
 
     expect(outcome).toEqual({ status: "completed", runId: "run_2" });
     expect(repos.createRun).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "run_2", attempt: 2, workBranch: "ticket-to-pr/job_1-attempt-2" })
+      expect.objectContaining({ id: "run_2", attempt: 2, workBranch: "ticket-to-pr/job_1-attempt-2" }),
     );
     expect(executor).toHaveBeenCalledWith(expect.objectContaining({ run: expect.objectContaining({ attempt: 2 }) }));
     expect(publisher).toHaveBeenCalledWith(expect.objectContaining({ workBranch: "ticket-to-pr/job_1-attempt-2" }));
@@ -333,7 +337,7 @@ describe("processAgentJob", () => {
       prUrl: "https://github.local/acme/web/pull/mock-job_1",
       prNumber: 1,
       prTitle: input.title,
-      prBody: input.body
+      prBody: input.body,
     }));
 
     await processAgentJob(
@@ -347,9 +351,9 @@ describe("processAgentJob", () => {
         ids: {
           runId: () => "run_1",
           artifactId: (kind) => `artifact_${kind}`,
-          pullRequestId: () => "pr_1"
-        }
-      }
+          pullRequestId: () => "pr_1",
+        },
+      },
     );
 
     expect(publisher).toHaveBeenCalledWith(expect.objectContaining({ body: "Agent-authored body\n" }));
@@ -361,7 +365,7 @@ describe("processAgentJob", () => {
     tempDirs.push(workspaceRoot);
     const executor = vi.fn().mockResolvedValue({
       ...completedResult,
-      pullRequestDraft: { title: "Fix login", bodyPath: "output/missing-pr-body.md" }
+      pullRequestDraft: { title: "Fix login", bodyPath: "output/missing-pr-body.md" },
     });
     const publisher = vi.fn();
 
@@ -376,9 +380,9 @@ describe("processAgentJob", () => {
         ids: {
           runId: () => "run_1",
           artifactId: (kind) => `artifact_${kind}`,
-          pullRequestId: () => "pr_1"
-        }
-      }
+          pullRequestId: () => "pr_1",
+        },
+      },
     );
 
     expect(outcome).toEqual({ status: "failed", runId: "run_1" });
@@ -388,7 +392,7 @@ describe("processAgentJob", () => {
       "Failed",
       "FailedInternal",
       expect.stringContaining("Missing pull request body artifact"),
-      expect.objectContaining({ category: "infra", nextAction: expect.any(String) })
+      expect.objectContaining({ category: "infra", nextAction: expect.any(String) }),
     );
   });
 
@@ -408,9 +412,9 @@ describe("processAgentJob", () => {
         ids: {
           runId: () => "run_1",
           artifactId: (kind) => `artifact_${kind}`,
-          pullRequestId: () => "pr_1"
-        }
-      }
+          pullRequestId: () => "pr_1",
+        },
+      },
     );
 
     expect(outcome).toEqual({ status: "cancelled", runId: "run_1" });

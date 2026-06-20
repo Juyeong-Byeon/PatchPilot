@@ -14,14 +14,14 @@ const job = {
   priority: "Normal" as const,
   phase: "Queued" as const,
   outcome: "Queued" as const,
-  rawFields: {}
+  rawFields: {},
 };
 
 describe("executeMock", () => {
   it("returns a completed AgentResult with commit, test, and PR draft evidence", async () => {
     const result = await executeMock({
       job,
-      run: { runId: "run_1", attempt: 1, workspacePath: "/tmp/work", workBranch: "ticket-to-pr/job_1" }
+      run: { runId: "run_1", attempt: 1, workspacePath: "/tmp/work", workBranch: "ticket-to-pr/job_1" },
     });
 
     expect(result).toMatchObject({
@@ -33,7 +33,7 @@ describe("executeMock", () => {
       status: "completed",
       targetBranch: "main",
       failure: null,
-      retryable: false
+      retryable: false,
     });
     expect(result.changedFiles).toEqual(["mock/job_1.txt"]);
     expect(result.commits).toHaveLength(1);

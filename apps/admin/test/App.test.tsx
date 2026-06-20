@@ -34,9 +34,26 @@ describe("App", () => {
       const body = url.endsWith("/api/jobs")
         ? [{ id: "job_1", phase: "Implementing", outcome: "Running" }]
         : url.endsWith("/api/jobs/job_1/events")
-          ? [{ id: "event_1", phase: "Implementing", event_type: "worker.started", source: "worker", created_at: "2026-06-20T00:00:00.000Z" }]
+          ? [
+              {
+                id: "event_1",
+                phase: "Implementing",
+                event_type: "worker.started",
+                source: "worker",
+                created_at: "2026-06-20T00:00:00.000Z",
+              },
+            ]
           : url.endsWith("/api/jobs/job_1/logs")
-            ? [{ id: "log_1", source: "gstack", stream: "stdout", sequence: 0, text: "running", created_at: "2026-06-20T00:00:00.000Z" }]
+            ? [
+                {
+                  id: "log_1",
+                  source: "gstack",
+                  stream: "stdout",
+                  sequence: 0,
+                  text: "running",
+                  created_at: "2026-06-20T00:00:00.000Z",
+                },
+              ]
             : url.endsWith("/api/jobs/job_1/artifacts")
               ? []
               : { id: "job_1", phase: "Implementing", outcome: "Running", repository: "example-org/example-repo" };
@@ -45,7 +62,7 @@ describe("App", () => {
         ok: true,
         headers: new Headers({ "content-type": "application/json" }),
         json: async () => body,
-        text: async () => JSON.stringify(body)
+        text: async () => JSON.stringify(body),
       } as Response;
     });
 
@@ -65,6 +82,8 @@ describe("App", () => {
       await Promise.resolve();
     });
 
-    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/api/jobs/job_1/logs")).length).toBeGreaterThanOrEqual(2);
+    expect(
+      fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/api/jobs/job_1/logs")).length,
+    ).toBeGreaterThanOrEqual(2);
   });
 });

@@ -3,7 +3,7 @@ import { z } from "zod";
 const testResultSchema = z.object({
   command: z.string().min(1),
   status: z.enum(["passed", "failed", "skipped"]),
-  summary: z.string().min(1)
+  summary: z.string().min(1),
 });
 
 const fullShaSchema = z.string().regex(/^[0-9a-f]{40}$/i, "Expected a full 40-character git SHA");
@@ -13,7 +13,7 @@ const failureSchema = z.object({
   category: z.string().min(1),
   message: z.string().min(1),
   retryable: z.boolean(),
-  nextAction: z.string().min(1)
+  nextAction: z.string().min(1),
 });
 
 export const agentResultSchema = z
@@ -35,24 +35,24 @@ export const agentResultSchema = z
       .object({
         summary: z.string().min(1),
         risks: z.array(z.string()),
-        knownLimitations: z.array(z.string())
+        knownLimitations: z.array(z.string()),
       })
       .optional(),
     pullRequestDraft: z
       .object({
         title: z.string().min(1),
-        bodyPath: z.string().min(1)
+        bodyPath: z.string().min(1),
       })
       .optional(),
     failure: failureSchema.nullable(),
-    retryable: z.boolean()
+    retryable: z.boolean(),
   })
   .superRefine((result, context) => {
     if (result.status === "failed" && result.failure === null) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: "Failed results require failure details",
-        path: ["failure"]
+        path: ["failure"],
       });
     }
 
@@ -66,7 +66,7 @@ export const agentResultSchema = z
       [result.headSha, "headSha", "Completed results require headSha"],
       [result.pushSha, "pushSha", "Completed results require pushSha"],
       [result.review, "review", "Completed results require review"],
-      [result.pullRequestDraft, "pullRequestDraft", "Completed results require pullRequestDraft"]
+      [result.pullRequestDraft, "pullRequestDraft", "Completed results require pullRequestDraft"],
     ];
 
     for (const [value, path, message] of requiredCompletedFields) {
@@ -79,7 +79,7 @@ export const agentResultSchema = z
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: "Completed results require changed files",
-        path: ["changedFiles"]
+        path: ["changedFiles"],
       });
     }
 
@@ -87,7 +87,7 @@ export const agentResultSchema = z
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: "Completed results require local commit evidence",
-        path: ["commits"]
+        path: ["commits"],
       });
     }
 
@@ -95,7 +95,7 @@ export const agentResultSchema = z
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: "Completed results require test evidence",
-        path: ["tests"]
+        path: ["tests"],
       });
     }
 
@@ -103,7 +103,7 @@ export const agentResultSchema = z
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: "Completed results must not include failure details",
-        path: ["failure"]
+        path: ["failure"],
       });
     }
   });

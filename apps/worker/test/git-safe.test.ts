@@ -8,7 +8,7 @@ describe("buildSafeGitArgs", () => {
       "safe.directory=/work/jobs/job_1/repo",
       "rev-parse",
       "--verify",
-      "HEAD^{commit}"
+      "HEAD^{commit}",
     ]);
   });
 
@@ -17,7 +17,7 @@ describe("buildSafeGitArgs", () => {
       "ls-remote",
       "--heads",
       "https://github.com/acme/web.git",
-      "main"
+      "main",
     ]);
   });
 });

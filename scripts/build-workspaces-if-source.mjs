@@ -13,7 +13,7 @@ const workspaces = new Map([
   ["@ticket-to-pr/api", "apps/api"],
   ["@ticket-to-pr/worker", "apps/worker"],
   ["@ticket-to-pr/runner", "apps/runner"],
-  ["@ticket-to-pr/admin", "apps/admin"]
+  ["@ticket-to-pr/admin", "apps/admin"],
 ]);
 
 const requestedWorkspaces = process.argv.slice(2);
@@ -33,7 +33,7 @@ for (const workspaceName of selectedWorkspaces) {
 
   execFileSync("npm", ["--workspace", workspaceName, "run", "build"], {
     cwd: rootDir,
-    stdio: "inherit"
+    stdio: "inherit",
   });
 }
 
@@ -61,5 +61,9 @@ function hasSourceFiles(srcDir) {
 }
 
 function isSourceFile(filePath) {
-  return (filePath.endsWith(".ts") || filePath.endsWith(".tsx")) && !filePath.endsWith(".test.ts") && !filePath.endsWith(".test.tsx");
+  return (
+    (filePath.endsWith(".ts") || filePath.endsWith(".tsx")) &&
+    !filePath.endsWith(".test.ts") &&
+    !filePath.endsWith(".test.tsx")
+  );
 }

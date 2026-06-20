@@ -32,12 +32,17 @@ export function RunStepGraph({ events, currentPhase, copy, locale, selectedStep,
       <CardHeader className="items-start">
         <div>
           <CardTitle>{copy.stepGraph}</CardTitle>
-          {copy.stepGraphSummary ? <span className="text-[12px] leading-4 text-charcoal">{copy.stepGraphSummary}</span> : null}
+          {copy.stepGraphSummary ? (
+            <span className="text-[12px] leading-4 text-charcoal">{copy.stepGraphSummary}</span>
+          ) : null}
         </div>
       </CardHeader>
       <CardContent className="px-4 py-3">
         <div className="overflow-x-auto overflow-y-visible px-1 py-5" data-step-graph-scroll>
-          <ol className="m-0 grid min-w-[680px] auto-cols-[minmax(104px,1fr)] grid-flow-col list-none p-0" aria-label={copy.stepGraph}>
+          <ol
+            className="m-0 grid min-w-[680px] auto-cols-[minmax(104px,1fr)] grid-flow-col list-none p-0"
+            aria-label={copy.stepGraph}
+          >
             {steps.map((step, index) => {
               const selected = selectedStep?.phase === step.phase;
               const nextStep = steps[index + 1];
@@ -60,7 +65,9 @@ export function RunStepGraph({ events, currentPhase, copy, locale, selectedStep,
                     type="button"
                     onClick={() => onSelectStep?.({ phase: step.phase })}
                   >
-                    <span className={`relative z-10 flex size-9 shrink-0 items-center justify-center rounded-full border transition-all duration-200 ${nodeClass(step.status, selected)}`}>
+                    <span
+                      className={`relative z-10 flex size-9 shrink-0 items-center justify-center rounded-full border transition-all duration-200 ${nodeClass(step.status, selected)}`}
+                    >
                       {statusGlyph(step.status)}
                     </span>
                     <span className="grid w-full min-w-0 gap-0.5">
@@ -108,15 +115,17 @@ function buildGraphSteps(events: RunEvent[], currentPhase: string | undefined): 
       ? "failed"
       : completedRun && index <= currentIndex
         ? "complete"
-      : index < currentIndex
-        ? phaseEvents.length > 0 ? "complete" : "skipped"
-        : index === currentIndex
-          ? activeStatus(currentPhase)
-          : "pending";
+        : index < currentIndex
+          ? phaseEvents.length > 0
+            ? "complete"
+            : "skipped"
+          : index === currentIndex
+            ? activeStatus(currentPhase)
+            : "pending";
 
     return {
       phase,
-      status
+      status,
     };
   });
 }
@@ -125,13 +134,13 @@ function resolveCurrentIndex(
   phaseFlow: string[],
   events: RunEvent[],
   currentPhase: string | undefined,
-  failedPhase: string | undefined
+  failedPhase: string | undefined,
 ): number {
   if (failedPhase && phaseFlow.includes(failedPhase)) return phaseFlow.indexOf(failedPhase);
   if (currentPhase && phaseFlow.includes(currentPhase)) return phaseFlow.indexOf(currentPhase);
   const lastObservedIndex = Math.max(
     0,
-    ...phaseFlow.map((phase, index) => (events.some((event) => event.phase === phase) ? index : -1))
+    ...phaseFlow.map((phase, index) => (events.some((event) => event.phase === phase) ? index : -1)),
   );
   return lastObservedIndex;
 }
@@ -186,13 +195,15 @@ function nodeClass(status: StepStatus, selected: boolean): string {
 
 function connectorClass(status: StepStatus, nextStatus: StepStatus): string {
   if (status === "failed") return "bg-hairline-gray";
-  if (status === "pending" || status === "skipped" || nextStatus === "pending" || nextStatus === "skipped") return "bg-hairline-gray";
+  if (status === "pending" || status === "skipped" || nextStatus === "pending" || nextStatus === "skipped")
+    return "bg-hairline-gray";
   return "bg-electric-blue";
 }
 
 function statusGlyph(status: StepStatus) {
   if (status === "failed") return <AlertCircle aria-hidden="true" size={18} strokeWidth={2.4} />;
-  if (status === "active") return <LoaderCircle aria-hidden="true" className="animate-spin" size={18} strokeWidth={2.4} />;
+  if (status === "active")
+    return <LoaderCircle aria-hidden="true" className="animate-spin" size={18} strokeWidth={2.4} />;
   if (status === "complete") return <CheckCircle2 aria-hidden="true" size={18} strokeWidth={2.4} />;
   if (status === "skipped") return <MinusCircle aria-hidden="true" size={18} strokeWidth={2.2} />;
   return <CircleDashed aria-hidden="true" size={18} strokeWidth={2.2} />;
@@ -201,7 +212,14 @@ function statusGlyph(status: StepStatus) {
 function isFailureEvent(event: RunEvent): boolean {
   const phase = String(event.phase ?? "").toLowerCase();
   const type = String(event.event_type ?? event.eventType ?? "").toLowerCase();
-  return phase.includes("fail") || phase.includes("cancel") || type.includes("failed") || type.includes("error") || type.includes("blocked") || type.includes("cancel");
+  return (
+    phase.includes("fail") ||
+    phase.includes("cancel") ||
+    type.includes("failed") ||
+    type.includes("error") ||
+    type.includes("blocked") ||
+    type.includes("cancel")
+  );
 }
 
 function isTerminalFailure(phase: string | undefined): boolean {

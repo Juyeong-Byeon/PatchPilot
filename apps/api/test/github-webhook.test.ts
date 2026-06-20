@@ -9,8 +9,8 @@ const pullRequestMergedPayload = {
     number: 42,
     merged: true,
     html_url: "https://github.com/acme/web/pull/42",
-    merged_at: "2026-06-20T05:00:00Z"
-  }
+    merged_at: "2026-06-20T05:00:00Z",
+  },
 };
 
 function signatureFor(secret: string, body: string): string {
@@ -28,8 +28,8 @@ describe("github webhook route", () => {
         runId: "run_1",
         larkRecordId: "rec_1",
         prUrl: "https://github.com/acme/web/pull/42",
-        prNumber: 42
-      })
+        prNumber: 42,
+      }),
     };
     const larkUpdater = vi.fn().mockResolvedValue(undefined);
     const app = await buildServer({
@@ -37,7 +37,7 @@ describe("github webhook route", () => {
       queue: { add: vi.fn() },
       larkWebhookSecret: "lark-secret",
       githubWebhookSecret: "github-secret",
-      larkUpdater
+      larkUpdater,
     });
     const body = JSON.stringify(pullRequestMergedPayload);
 
@@ -47,9 +47,9 @@ describe("github webhook route", () => {
       headers: {
         "content-type": "application/json",
         "x-github-event": "pull_request",
-        "x-hub-signature-256": signatureFor("github-secret", body)
+        "x-hub-signature-256": signatureFor("github-secret", body),
       },
-      payload: body
+      payload: body,
     });
 
     expect(response.statusCode).toBe(202);
@@ -58,14 +58,14 @@ describe("github webhook route", () => {
       repository: "acme/web",
       prNumber: 42,
       prUrl: "https://github.com/acme/web/pull/42",
-      mergedAt: "2026-06-20T05:00:00Z"
+      mergedAt: "2026-06-20T05:00:00Z",
     });
     expect(larkUpdater).toHaveBeenCalledWith({
       recordId: "rec_1",
       status: "Completed",
       jobId: "job_1",
       prUrl: "https://github.com/acme/web/pull/42",
-      prNumber: 42
+      prNumber: 42,
     });
     await app.close();
   });
@@ -75,11 +75,11 @@ describe("github webhook route", () => {
       repos: {
         createJobFromTicket: vi.fn(),
         appendEvent: vi.fn(),
-        markPullRequestMerged: vi.fn()
+        markPullRequestMerged: vi.fn(),
       } as never,
       queue: { add: vi.fn() },
       larkWebhookSecret: "lark-secret",
-      githubWebhookSecret: "github-secret"
+      githubWebhookSecret: "github-secret",
     });
 
     const response = await app.inject({
@@ -88,9 +88,9 @@ describe("github webhook route", () => {
       headers: {
         "content-type": "application/json",
         "x-github-event": "pull_request",
-        "x-hub-signature-256": "sha256=bad"
+        "x-hub-signature-256": "sha256=bad",
       },
-      payload: JSON.stringify(pullRequestMergedPayload)
+      payload: JSON.stringify(pullRequestMergedPayload),
     });
 
     expect(response.statusCode).toBe(401);
@@ -101,20 +101,20 @@ describe("github webhook route", () => {
     const repos = {
       createJobFromTicket: vi.fn(),
       appendEvent: vi.fn(),
-      markPullRequestMerged: vi.fn()
+      markPullRequestMerged: vi.fn(),
     };
     const app = await buildServer({
       repos: repos as never,
       queue: { add: vi.fn() },
       larkWebhookSecret: "lark-secret",
-      githubWebhookSecret: "github-secret"
+      githubWebhookSecret: "github-secret",
     });
     const payload = {
       ...pullRequestMergedPayload,
       pull_request: {
         ...pullRequestMergedPayload.pull_request,
-        merged: false
-      }
+        merged: false,
+      },
     };
     const body = JSON.stringify(payload);
 
@@ -124,9 +124,9 @@ describe("github webhook route", () => {
       headers: {
         "content-type": "application/json",
         "x-github-event": "pull_request",
-        "x-hub-signature-256": signatureFor("github-secret", body)
+        "x-hub-signature-256": signatureFor("github-secret", body),
       },
-      payload: body
+      payload: body,
     });
 
     expect(response.statusCode).toBe(200);
