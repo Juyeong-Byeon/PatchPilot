@@ -87,6 +87,8 @@ export function buildGstackDockerCommand(input: GstackCommandInput): CommandSpec
     args: [
       "run",
       "--rm",
+      "--name",
+      runnerContainerName(input.run.runId),
       "--network",
       "bridge",
       "--cpus",
@@ -151,7 +153,10 @@ export async function executeGstack(input: ExecutorInput, options: GstackExecuto
     run: input.run,
     policy: options.policy ?? { repositoryAllowlist: [], protectedPathDenylist: [] },
   });
-  await runCommand(command, input, ((options.timeoutSeconds ?? 3600) + 30) * 1000);
+  await runCommand(command, input, ((options.timeoutSeconds ?? 3600) + 30) * 1000, 2000, {
+    signal: input.signal,
+    containerName: runnerContainerName(input.run.runId),
+  });
 
   const resultPath = options.resultPath ?? getWorkspacePaths(input.run.workspacePath).resultJson;
   const result = parseAgentResult(JSON.parse(await readFile(resultPath, "utf8")) as unknown);
@@ -309,17 +314,24 @@ function toRepositoryUrl(repository: string): string {
   return `https://github.com/${repository}.git`;
 }
 
+// Deterministic, docker-safe container name so a cancel can target the running runner.
+export function runnerContainerName(runId: string): string {
+  return `ticket-to-pr-${runId}`.replace(/[^a-zA-Z0-9_.-]/g, "-");
+}
+
 export async function runCommand(
   command: CommandSpec,
   input: ExecutorInput,
   timeoutMs = 3_630_000,
   killGraceMs = 2000,
+  options: { signal?: AbortSignal; containerName?: string } = {},
 ): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const child = spawn(command.file, command.args, { detached: true, stdio: ["ignore", "pipe", "pipe"] });
     let stdoutSequence = 0;
     let stderrSequence = 0;
     let timedOut = false;
+    let aborted = false;
     let settled = false;
     let timeout: NodeJS.Timeout | undefined;
     let killTimeout: NodeJS.Timeout | undefined;
@@ -337,6 +349,24 @@ export async function runCommand(
       clearRunCommandTimers(timeout, killTimeout);
       reject(error);
     };
+
+    // Cancel: stop the named container (so the attached `docker run` exits) and the client.
+    const onAbort = () => {
+      aborted = true;
+      if (options.containerName) {
+        try {
+          spawn("docker", ["kill", options.containerName], { stdio: "ignore" }).on("error", () => undefined);
+        } catch {
+          // best effort
+        }
+      }
+      terminateProcessGroup(child, "SIGTERM");
+      killTimeout = setTimeout(() => terminateProcessGroup(child, "SIGKILL"), killGraceMs);
+    };
+    if (options.signal) {
+      if (options.signal.aborted) onAbort();
+      else options.signal.addEventListener("abort", onAbort, { once: true });
+    }
 
     timeout = setTimeout(() => {
       timedOut = true;
@@ -356,6 +386,7 @@ export async function runCommand(
     });
     child.on("error", (error) => settleReject(error));
     child.on("close", async (code) => {
+      if (options.signal) options.signal.removeEventListener("abort", onAbort);
       clearRunCommandTimers(timeout, killTimeout);
       const stdoutTail = stdoutRedactor("", true);
       if (stdoutTail) {
@@ -371,6 +402,10 @@ export async function runCommand(
       const rejectedLog = logResults.find((result) => result.status === "rejected");
       if (rejectedLog?.status === "rejected") {
         settleReject(rejectedLog.reason instanceof Error ? rejectedLog.reason : new Error(String(rejectedLog.reason)));
+        return;
+      }
+      if (aborted) {
+        settleReject(new Error("gstack runner cancelled"));
         return;
       }
       if (timedOut) {
