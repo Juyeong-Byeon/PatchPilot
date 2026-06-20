@@ -9,7 +9,9 @@ const tempDirs: string[] = [];
 afterEach(async () => {
   delete process.env.GSTACK_COMMAND;
   delete process.env.GSTACK_ARGS;
-  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  await Promise.all(
+    tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })),
+  );
 });
 
 describe("runGstack", () => {
@@ -20,7 +22,7 @@ describe("runGstack", () => {
     const logPath = join(dir, "logs", "gstack.log");
     await writeFile(
       command,
-      "#!/bin/sh\nprintf 'GITHUB_TOKEN=github_pat_secret\\n'\nprintf 'ghp_abc123\\n' >&2\nprintf 'ghs_123'\nsleep 0.05\nprintf '4567890abcdef\\n'\n"
+      "#!/bin/sh\nprintf 'GITHUB_TOKEN=github_pat_secret\\n'\nprintf 'ghp_abc123\\n' >&2\nprintf 'ghs_123'\nsleep 0.05\nprintf '4567890abcdef\\n'\n",
     );
     await chmod(command, 0o755);
     process.env.GSTACK_COMMAND = command;
@@ -40,14 +42,19 @@ describe("runGstack", () => {
     tempDirs.push(dir);
     const command = join(dir, "stubborn-gstack.sh");
     const logPath = join(dir, "logs", "gstack.log");
-    await writeFile(command, "#!/usr/bin/env node\nprocess.on('SIGTERM', () => {});\nsetTimeout(() => {}, 2000);\n");
+    await writeFile(
+      command,
+      "#!/usr/bin/env node\nprocess.on('SIGTERM', () => {});\nsetTimeout(() => {}, 2000);\n",
+    );
     await chmod(command, 0o755);
     process.env.GSTACK_COMMAND = command;
     process.env.GSTACK_ARGS = "";
 
     const startedAt = Date.now();
 
-    await expect(runGstack(dir, logPath, 300, 50)).rejects.toThrow("gstack timed out");
+    await expect(runGstack(dir, logPath, 300, 50)).rejects.toThrow(
+      "gstack timed out",
+    );
 
     expect(Date.now() - startedAt).toBeLessThan(1200);
   });

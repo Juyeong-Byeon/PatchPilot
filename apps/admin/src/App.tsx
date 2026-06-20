@@ -25,7 +25,8 @@ import { cn } from "./lib/utils.js";
 import { isCompletedJob, isFailedJob, isRunningPhase, type StatusFilter } from "./lib/status.js";
 import { adminCopy, getInitialLocale, localeNames, storeLocale, type AdminCopy, type Locale } from "./i18n.js";
 
-const LIST_REFRESH_MS = 5000;
+const LIST_REFRESH_RUNNING_MS = 2000;
+const LIST_REFRESH_IDLE_MS = 5000;
 
 interface DetailState {
   job: JobRecord | null;
@@ -84,6 +85,8 @@ export default function App() {
     }),
     [jobs]
   );
+  // Poll the list faster while any job is in flight so status + rows feel live.
+  const listRefreshMs = jobStats.running > 0 ? LIST_REFRESH_RUNNING_MS : LIST_REFRESH_IDLE_MS;
 
   useEffect(() => {
     if (!token) return;
@@ -139,10 +142,10 @@ export default function App() {
 
     const intervalId = window.setInterval(() => {
       if (document.visibilityState === "hidden") return;
-      void refreshJobs(token);
-    }, LIST_REFRESH_MS);
+      void refreshJobs(token, { silent: true });
+    }, listRefreshMs);
     const onVisible = () => {
-      if (document.visibilityState === "visible") void refreshJobs(token);
+      if (document.visibilityState === "visible") void refreshJobs(token, { silent: true });
     };
     document.addEventListener("visibilitychange", onVisible);
 
@@ -150,25 +153,25 @@ export default function App() {
       window.clearInterval(intervalId);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [route.page, token]);
+  }, [route.page, token, listRefreshMs]);
 
-  async function refreshJobs(activeToken = token) {
+  async function refreshJobs(activeToken = token, options: { silent?: boolean } = {}) {
     if (!activeToken.trim()) {
       setStatus({ kind: "enterToken" });
       return;
     }
 
-    setIsLoadingJobs(true);
+    if (!options.silent) setIsLoadingJobs(true);
     setListError("");
     try {
       const nextJobs = await fetchJobs(activeToken);
       setJobs(nextJobs);
-      setStatus({ kind: "loadedJobs", count: nextJobs.length });
+      if (!options.silent) setStatus({ kind: "loadedJobs", count: nextJobs.length });
     } catch (caught) {
       setListError(errorMessage(caught, copy));
-      setStatus({ kind: "refreshFailed" });
+      if (!options.silent) setStatus({ kind: "refreshFailed" });
     } finally {
-      setIsLoadingJobs(false);
+      if (!options.silent) setIsLoadingJobs(false);
     }
   }
 
