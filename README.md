@@ -1,7 +1,7 @@
 # AI Ticket-to-PR Agent Platform
 
 <p align="center">
-  <img src="docs/assets/ticket-to-pr-logo.png" alt="Ticket-to-PR alien pet coding mascot" width="220" />
+  <img src="docs/assets/ticket-to-pr-logo.png" alt="Ticket-to-PR alien pet coding mascot" width="520" />
 </p>
 
 Lark Base tickets in, audited GitHub pull requests out.
