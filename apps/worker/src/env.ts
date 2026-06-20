@@ -10,6 +10,9 @@ export interface WorkerEnv {
   protectedPathDenylist: string[];
   runnerImage: string;
   workspaceRoot: string;
+  workspaceHostRoot?: string;
+  gstackCommand?: string;
+  gstackArgs?: string;
   jobTimeoutSeconds: number;
   githubToken?: string;
 }
@@ -34,6 +37,9 @@ export function readWorkerEnv(source: NodeJS.ProcessEnv = process.env): WorkerEn
     protectedPathDenylist: parseCsv(source.POLICY_PROTECTED_PATH_DENYLIST ?? source.PROTECTED_PATH_DENYLIST),
     runnerImage: source.GSTACK_RUNNER_IMAGE ?? source.RUNNER_IMAGE ?? "ticket-to-pr-runner:latest",
     workspaceRoot: source.WORKER_WORKSPACE_ROOT ?? source.JOB_WORKSPACE_ROOT ?? "/tmp/ticket-to-pr-worker",
+    workspaceHostRoot: parseOptional(source.WORKER_WORKSPACE_HOST_ROOT ?? source.JOB_WORKSPACE_HOST_ROOT),
+    gstackCommand: parseOptional(source.GSTACK_COMMAND),
+    gstackArgs: parseOptional(source.GSTACK_ARGS),
     jobTimeoutSeconds: parsePositiveInteger(source.WORKER_JOB_TIMEOUT_SECONDS ?? source.JOB_TIMEOUT_SECONDS, 3600),
     githubToken
   };
@@ -52,6 +58,11 @@ function parseMode<T extends string>(value: string | undefined, allowed: T[], fa
   if (!value) return fallback;
   if (allowed.includes(value as T)) return value as T;
   throw new Error(`Invalid worker mode: ${value}`);
+}
+
+function parseOptional(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
 }
 
 function normalizeAppPublisherMode(value: string | undefined): string | undefined {

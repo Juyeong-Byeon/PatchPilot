@@ -129,9 +129,12 @@ Use real mode only against a disposable test repository in the allowlist.
 2. Set `EXECUTOR_MODE=gstack` and `PUBLISHER_MODE=github`.
 3. Set `GITHUB_TOKEN` to a fine-grained PAT scoped to the test repository.
 4. Set `REPOSITORY_ALLOWLIST` to that test repository only.
-5. Mount `/var/run/docker.sock:/var/run/docker.sock` into the worker only for
-   this real executor test. The default mock compose file intentionally omits
-   the socket so local smoke does not grant broad Docker host control.
+5. Confirm the worker service has `/var/run/docker.sock:/var/run/docker.sock`
+   mounted. The runner container itself must not receive the Docker socket; only
+   the worker needs it so it can launch the isolated runner container.
+   Also confirm `WORKER_WORKSPACE_HOST_ROOT` points at the host path for the
+   worker workspace, for example `/Users/me/ticket-to-pr/work/jobs`, because the
+   host Docker daemon cannot mount the worker container's internal `/work` path.
 6. Start the stack and submit a small Lark ticket.
 7. Confirm the runner container can reach GitHub; real executor Docker runs use
    bridge networking for repository clone/fetch, while still avoiding Docker

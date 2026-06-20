@@ -21,6 +21,8 @@ describe("buildGstackDockerCommand", () => {
     const command = buildGstackDockerCommand({
       runnerImage: "ghcr.io/acme/ticket-runner@sha256:abc",
       workspacePath: "/var/tmp/ticket-to-pr/job_1",
+      gstackCommand: "node",
+      gstackArgs: "/opt/runner/apps/runner/dist/e2e-smoke-runner.js",
       job: {
         jobId: "job_1",
         ticketSnapshotId: "ts_1",
@@ -59,10 +61,36 @@ describe("buildGstackDockerCommand", () => {
         "WORK_BRANCH=ticket-to-pr/job_1",
         "-e",
         "TIMEOUT_SECONDS=3600",
+        "-e",
+        "GSTACK_COMMAND=node",
+        "-e",
+        "GSTACK_ARGS=/opt/runner/apps/runner/dist/e2e-smoke-runner.js",
         "ghcr.io/acme/ticket-runner@sha256:abc"
       ])
     );
     expect(command.args.join(" ")).not.toContain("/var/run/docker.sock");
+  });
+
+  it("uses a host-visible workspace source when Docker is launched from inside the worker container", () => {
+    const command = buildGstackDockerCommand({
+      runnerImage: "ticket-to-pr-runner:local",
+      workspacePath: "/work/jobs/job_1/run_1",
+      workspaceMountSource: "/Users/me/ticket-to-pr/work/jobs/job_1/run_1",
+      job: {
+        jobId: "job_1",
+        ticketSnapshotId: "ts_1",
+        larkRecordId: "rec_1",
+        triggerVersion: "v1",
+        repository: "acme/web",
+        targetBranch: "main"
+      },
+      run: { runId: "run_1", attempt: 1, workBranch: "ticket-to-pr/job_1" }
+    });
+
+    expect(command.args).toEqual(
+      expect.arrayContaining(["-v", "/Users/me/ticket-to-pr/work/jobs/job_1/run_1:/work/jobs/job_1"])
+    );
+    expect(command.args).not.toContain("/work/jobs/job_1/run_1:/work/jobs/job_1");
   });
 
   it("replaces agent-reported git evidence with worker-collected evidence", () => {

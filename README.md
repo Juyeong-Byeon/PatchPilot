@@ -93,6 +93,10 @@ PROTECTED_PATH_DENYLIST=.env,.env.*,infra/**,terraform/**,secrets/**,migrations/
 EXECUTOR_MODE=mock
 PUBLISHER_MODE=mock
 RUNNER_IMAGE=ticket-to-pr-runner:local
+WORKER_WORKSPACE_ROOT=/work/jobs
+WORKER_WORKSPACE_HOST_ROOT=/absolute/path/to/ticket-to-pr/work/jobs
+GSTACK_COMMAND=
+GSTACK_ARGS=
 ```
 
 Use `WORKER_EXECUTOR_MODE` and `WORKER_PUBLISHER_MODE` to override worker modes
@@ -110,6 +114,21 @@ WORKER_EXECUTOR_MODE=gstack
 WORKER_PUBLISHER_MODE=github
 GITHUB_TOKEN=github_pat_xxx
 REPOSITORY_ALLOWLIST=Juyeong-Byeon/example-repo
+```
+
+The worker service mounts `/var/run/docker.sock` so `EXECUTOR_MODE=gstack` can
+launch isolated runner containers. Keep real-mode runs limited to disposable,
+allowlisted repositories because that mount grants the worker access to the host
+Docker daemon. `WORKER_WORKSPACE_HOST_ROOT` is the same workspace directory as
+`WORKER_WORKSPACE_ROOT`, but from the host Docker daemon's point of view; the
+checked-in compose file defaults it to `${PWD}/work/jobs`.
+
+For a deterministic platform smoke without a real AI CLI, rebuild the runner
+image and run with:
+
+```env
+GSTACK_COMMAND=node
+GSTACK_ARGS=/opt/runner/apps/runner/dist/e2e-smoke-runner.js
 ```
 
 ## Lark Webhook

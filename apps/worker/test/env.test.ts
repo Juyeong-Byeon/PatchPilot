@@ -12,6 +12,9 @@ describe("readWorkerEnv", () => {
       PROTECTED_PATH_DENYLIST: ".env,infra/**",
       RUNNER_IMAGE: "ticket-to-pr-runner:local",
       JOB_WORKSPACE_ROOT: "/work/jobs",
+      WORKER_WORKSPACE_HOST_ROOT: "/Users/me/ticket-to-pr/work/jobs",
+      GSTACK_COMMAND: "node",
+      GSTACK_ARGS: "/opt/runner/apps/runner/dist/e2e-smoke-runner.js",
       JOB_TIMEOUT_SECONDS: "120"
     });
 
@@ -21,6 +24,9 @@ describe("readWorkerEnv", () => {
     expect(env.protectedPathDenylist).toEqual([".env", "infra/**"]);
     expect(env.runnerImage).toBe("ticket-to-pr-runner:local");
     expect(env.workspaceRoot).toBe("/work/jobs");
+    expect((env as { workspaceHostRoot?: string }).workspaceHostRoot).toBe("/Users/me/ticket-to-pr/work/jobs");
+    expect((env as { gstackCommand?: string }).gstackCommand).toBe("node");
+    expect((env as { gstackArgs?: string }).gstackArgs).toBe("/opt/runner/apps/runner/dist/e2e-smoke-runner.js");
     expect(env.jobTimeoutSeconds).toBe(120);
   });
 

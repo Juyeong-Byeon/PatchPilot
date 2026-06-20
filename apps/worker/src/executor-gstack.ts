@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { createSecretRedactor, maskSecrets, parseAgentResult, type AgentResult } from "@ticket-to-pr/core";
 import { getWorkspacePaths } from "@ticket-to-pr/runner-contract";
 import { buildSafeGitArgs } from "./git-safe.js";
@@ -8,6 +9,9 @@ import type { ExecutorInput } from "./worker.js";
 export interface GstackCommandInput {
   runnerImage: string;
   workspacePath: string;
+  workspaceMountSource?: string;
+  gstackCommand?: string;
+  gstackArgs?: string;
   job: {
     jobId: string;
     ticketSnapshotId: string;
@@ -35,6 +39,10 @@ export interface GstackExecutorOptions {
   resultPath?: string;
   timeoutSeconds?: number;
   githubToken?: string;
+  workspaceRoot?: string;
+  workspaceHostRoot?: string;
+  gstackCommand?: string;
+  gstackArgs?: string;
   policy?: {
     repositoryAllowlist: string[];
     protectedPathDenylist: string[];
@@ -52,6 +60,8 @@ export interface TrustedGitEvidence {
 
 export function buildGstackDockerCommand(input: GstackCommandInput): CommandSpec {
   const authArgs = input.githubToken ? ["-e", `GITHUB_TOKEN=${input.githubToken}`] : [];
+  const gstackCommandArgs = input.gstackCommand ? ["-e", `GSTACK_COMMAND=${input.gstackCommand}`] : [];
+  const gstackArgs = input.gstackArgs ? ["-e", `GSTACK_ARGS=${input.gstackArgs}`] : [];
   return {
     file: "docker",
     args: [
@@ -64,7 +74,7 @@ export function buildGstackDockerCommand(input: GstackCommandInput): CommandSpec
       "--memory",
       "4g",
       "-v",
-      `${input.workspacePath}:/work/jobs/${input.job.jobId}`,
+      `${input.workspaceMountSource ?? input.workspacePath}:/work/jobs/${input.job.jobId}`,
       "-e",
       `JOB_ID=${input.job.jobId}`,
       "-e",
@@ -79,6 +89,8 @@ export function buildGstackDockerCommand(input: GstackCommandInput): CommandSpec
       `WORK_BRANCH=${input.run.workBranch}`,
       "-e",
       `TIMEOUT_SECONDS=${input.timeoutSeconds ?? 3600}`,
+      ...gstackCommandArgs,
+      ...gstackArgs,
       ...authArgs,
       input.runnerImage
     ]
@@ -88,9 +100,17 @@ export function buildGstackDockerCommand(input: GstackCommandInput): CommandSpec
 export async function executeGstack(input: ExecutorInput, options: GstackExecutorOptions): Promise<AgentResult> {
   const repositoryUrl = toRepositoryUrl(input.job.repository);
   const trustedBaseSha = await resolveRemoteTargetSha(repositoryUrl, input.job.targetBranch, options.githubToken);
+  const workspaceMountSource = mapWorkspacePathForDockerMount(
+    input.run.workspacePath,
+    options.workspaceRoot,
+    options.workspaceHostRoot
+  );
   const command = buildGstackDockerCommand({
     runnerImage: options.runnerImage,
     workspacePath: input.run.workspacePath,
+    workspaceMountSource,
+    gstackCommand: options.gstackCommand,
+    gstackArgs: options.gstackArgs,
     job: input.job,
     run: input.run,
     timeoutSeconds: options.timeoutSeconds,
@@ -115,6 +135,23 @@ export async function executeGstack(input: ExecutorInput, options: GstackExecuto
     trustedBaseSha
   );
   return applyTrustedGitEvidence(result, trustedEvidence);
+}
+
+export function mapWorkspacePathForDockerMount(
+  workspacePath: string,
+  workspaceRoot?: string,
+  workspaceHostRoot?: string
+): string {
+  if (!workspaceHostRoot) return workspacePath;
+  const resolvedWorkspaceRoot = resolve(workspaceRoot ?? "/tmp/ticket-to-pr-worker");
+  const resolvedWorkspacePath = resolve(workspacePath);
+  const relativeWorkspacePath = relative(resolvedWorkspaceRoot, resolvedWorkspacePath);
+
+  if (relativeWorkspacePath.startsWith("..") || isAbsolute(relativeWorkspacePath)) {
+    throw new Error("Runner workspace path must stay inside the worker workspace root");
+  }
+
+  return join(workspaceHostRoot, relativeWorkspacePath);
 }
 
 export function applyTrustedGitEvidence(result: AgentResult, evidence: TrustedGitEvidence): AgentResult {

@@ -45,8 +45,14 @@ services:
     env_file:
       - path: .env
         required: false
+    environment:
+      WORKER_WORKSPACE_ROOT: /work/jobs
+      WORKER_WORKSPACE_HOST_ROOT: ${WORKER_WORKSPACE_HOST_ROOT:-${PWD}/work/jobs}
+      GSTACK_COMMAND: ${GSTACK_COMMAND:-}
+      GSTACK_ARGS: ${GSTACK_ARGS:-}
     volumes:
       - ./work:/work
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       postgres:
         condition: service_healthy
