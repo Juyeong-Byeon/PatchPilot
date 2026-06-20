@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Ban, ExternalLink, RotateCcw, Undo2, X } from "lucide-react";
 import type { Artifact, JobRecord, LogLine, RunEvent } from "../api.js";
 import { translateState, type AdminCopy, type Locale } from "../i18n.js";
@@ -41,14 +41,26 @@ export function JobDetail({
   onCancel
 }: JobDetailProps) {
   const [selectedSpan, setSelectedSpan] = useState<SpanSelection | null>(null);
+  const lastAutoFocusedKey = useRef<string>("");
   const currentAttempt = useMemo(() => resolveCurrentAttempt(job, events), [events, job]);
   const currentRunId = useMemo(() => resolveCurrentRunId(events, currentAttempt), [currentAttempt, events]);
   const currentEvents = useMemo(() => filterEventsForCurrentRun(events, currentAttempt, currentRunId), [currentAttempt, currentRunId, events]);
   const currentLogs = useMemo(() => filterRunScopedRecords(logs, currentRunId), [currentRunId, logs]);
   const currentArtifacts = useMemo(() => filterRunScopedRecords(artifacts, currentRunId), [artifacts, currentRunId]);
+  const runningPhase = useMemo(() => resolveRunningPhase(job), [job]);
   const selectedContext = useMemo(() => buildStepContext(selectedSpan, currentEvents, locale), [currentEvents, locale, selectedSpan]);
   const diagnosticLogs = useMemo(() => filterLogsForContext(currentLogs, selectedContext), [currentLogs, selectedContext]);
   const diagnosticArtifacts = useMemo(() => filterArtifactsForContext(currentArtifacts, selectedContext), [currentArtifacts, selectedContext]);
+
+  useEffect(() => {
+    if (!job || !runningPhase) return;
+
+    const focusKey = `${job.id}:${currentRunId ?? currentAttempt ?? ""}:${runningPhase}`;
+    if (lastAutoFocusedKey.current === focusKey) return;
+
+    lastAutoFocusedKey.current = focusKey;
+    setSelectedSpan({ phase: runningPhase });
+  }, [currentAttempt, currentRunId, job, runningPhase]);
 
   if (!job) {
     return (
@@ -325,6 +337,12 @@ function parseAttempt(value: unknown): number | null {
 
 function stringOrNull(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function resolveRunningPhase(job: JobRecord | null): string | null {
+  const phase = stringOrNull(job?.phase);
+  if (!phase || isTerminalPhase(phase)) return null;
+  return phase;
 }
 
 function buildStepContext(selection: SpanSelection | null, events: RunEvent[], locale: Locale): StepContext | null {

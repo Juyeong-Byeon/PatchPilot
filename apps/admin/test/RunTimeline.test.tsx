@@ -122,6 +122,69 @@ describe("RunTimeline", () => {
     expect(secondWidth).not.toEqual(firstWidth);
   });
 
+  it("keeps the current phase live even before a phase event is recorded", () => {
+    const { container, rerender } = render(
+      <RunTimeline
+        copy={adminCopy.ko}
+        locale="ko"
+        currentPhase="Implementing"
+        nowMs={Date.parse("2026-06-20T00:00:15.000Z")}
+        events={[
+          {
+            id: "1",
+            phase: "Queued",
+            event_type: "job.enqueued",
+            source: "api",
+            message: "accepted",
+            created_at: "2026-06-20T00:00:00.000Z"
+          },
+          {
+            id: "2",
+            phase: "Planning",
+            event_type: "worker.started",
+            source: "worker",
+            message: "worker started",
+            created_at: "2026-06-20T00:00:05.000Z"
+          }
+        ]}
+      />
+    );
+
+    const activeRow = container.querySelector('[data-phase="Implementing"]');
+    expect(activeRow).toHaveAttribute("data-status", "active");
+    expect(within(activeRow as HTMLElement).getByText("진행 중")).toBeInTheDocument();
+    expect(within(activeRow as HTMLElement).getByText("10s")).toBeInTheDocument();
+
+    rerender(
+      <RunTimeline
+        copy={adminCopy.ko}
+        locale="ko"
+        currentPhase="Implementing"
+        nowMs={Date.parse("2026-06-20T00:00:25.000Z")}
+        events={[
+          {
+            id: "1",
+            phase: "Queued",
+            event_type: "job.enqueued",
+            source: "api",
+            message: "accepted",
+            created_at: "2026-06-20T00:00:00.000Z"
+          },
+          {
+            id: "2",
+            phase: "Planning",
+            event_type: "worker.started",
+            source: "worker",
+            message: "worker started",
+            created_at: "2026-06-20T00:00:05.000Z"
+          }
+        ]}
+      />
+    );
+
+    expect(within(container.querySelector('[data-phase="Implementing"]') as HTMLElement).getByText("20s")).toBeInTheDocument();
+  });
+
   it("shows terminal failure on the last running phase instead of a final Failed row", () => {
     const { container } = render(
       <RunTimeline

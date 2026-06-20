@@ -138,6 +138,9 @@ function buildPhaseSpans(events: RunEvent[], currentPhase: string | undefined, n
   for (const phase of observedPhases) {
     if (!phaseFlow.includes(phase)) phaseFlow.push(phase);
   }
+  if (currentPhase && !isTerminalFailurePhase(currentPhase) && !phaseFlow.includes(currentPhase)) {
+    phaseFlow.push(currentPhase);
+  }
 
   const failedPhase = resolveFailedPhase(events, currentPhase);
   const eventTimes = events.map((event) => parseDate(event.created_at)).filter((time): time is number => time !== null);
@@ -157,7 +160,8 @@ function buildPhaseSpans(events: RunEvent[], currentPhase: string | undefined, n
   return phaseFlow.map((phase, index) => {
     const phaseEvents = events.filter((event) => event.phase === phase);
     const phaseTimes = phaseEvents.map((event) => parseDate(event.created_at)).filter((time): time is number => time !== null);
-    const firstTime = phaseTimes[0] ?? firstOverall;
+    const isCurrentActive = !terminalPhase && index === currentIndex;
+    const firstTime = phaseTimes[0] ?? (isCurrentActive ? inferActiveStartTime(events, phaseFlow, index, firstOverall) : firstOverall);
     const lastTime = phaseTimes[phaseTimes.length - 1] ?? firstTime;
     const nextPhaseTime = events
       .map((event) => ({ phase: event.phase, time: parseDate(event.created_at) }))
@@ -165,22 +169,47 @@ function buildPhaseSpans(events: RunEvent[], currentPhase: string | undefined, n
     const hasFailure = phase === failedPhase || phaseEvents.some(isFailureEvent);
     const status = hasFailure
       ? "failed"
-      : phaseEvents.length === 0
-        ? "pending"
-        : !terminalPhase && index === currentIndex
-          ? "active"
+      : isCurrentActive
+        ? "active"
+        : phaseEvents.length === 0
+          ? "pending"
           : index < currentIndex || terminalPhase || phase === "Completed"
             ? "complete"
             : "pending";
     const endTime = status === "active" ? nowMs : nextPhaseTime ?? lastTime;
     const sources = Array.from(new Set(phaseEvents.map((event) => event.source).filter(Boolean) as string[]));
+    const inferredSources = sources.length > 0 ? sources : isCurrentActive ? inferActiveSources(events, phaseFlow, index) : [];
     return {
       phase,
       status,
-      sources,
-      durationMs: phaseEvents.length > 0 ? Math.max(0, endTime - firstTime) : 0
+      sources: inferredSources,
+      durationMs: phaseEvents.length > 0 || status === "active" ? Math.max(0, endTime - firstTime) : 0
     };
   });
+}
+
+function inferActiveStartTime(events: RunEvent[], phaseFlow: string[], currentIndex: number, fallback: number): number {
+  const precedingEvents = events
+    .map((event) => ({
+      phaseIndex: phaseFlow.indexOf(String(event.phase ?? "")),
+      time: parseDate(event.created_at)
+    }))
+    .filter((event): event is { phaseIndex: number; time: number } => event.time !== null && event.phaseIndex >= 0 && event.phaseIndex < currentIndex);
+  if (precedingEvents.length > 0) return precedingEvents[precedingEvents.length - 1]?.time ?? fallback;
+
+  const latestEventTime = [...events]
+    .reverse()
+    .map((event) => parseDate(event.created_at))
+    .find((time): time is number => time !== null);
+  return latestEventTime ?? fallback;
+}
+
+function inferActiveSources(events: RunEvent[], phaseFlow: string[], currentIndex: number): string[] {
+  const latestSource = [...events].reverse().find((event) => {
+    const phaseIndex = phaseFlow.indexOf(String(event.phase ?? ""));
+    return phaseIndex >= 0 && phaseIndex < currentIndex && Boolean(event.source);
+  })?.source;
+  return latestSource ? [latestSource] : [];
 }
 
 function selectWithKeyboard(

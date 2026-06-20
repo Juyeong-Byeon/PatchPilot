@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { JobDetail } from "../src/components/JobDetail.js";
 import { adminCopy } from "../src/i18n.js";
@@ -158,5 +158,46 @@ describe("JobDetail", () => {
     expect(screen.queryByText(/old failed attempt/)).not.toBeInTheDocument();
     expect(screen.getByText(/Runner completed successfully/)).toBeInTheDocument();
     expect(screen.getByText(/"status": "passed"/)).toBeInTheDocument();
+  });
+
+  it("focuses the running phase when opening an active job detail", async () => {
+    const { container } = render(
+      <JobDetail
+        {...baseProps}
+        nowMs={Date.parse("2026-06-20T00:00:15.000Z")}
+        job={{
+          id: "job_1",
+          phase: "Implementing",
+          outcome: "Running",
+          repository: "Juyeong-Byeon/test_pr_repo",
+          attempt: 1
+        }}
+        events={[
+          {
+            id: "event_1",
+            phase: "Queued",
+            event_type: "job.enqueued",
+            source: "api",
+            message: "Queued",
+            created_at: "2026-06-20T00:00:00.000Z"
+          },
+          {
+            id: "event_2",
+            run_id: "run_1",
+            attempt: 1,
+            phase: "Planning",
+            event_type: "worker.started",
+            source: "worker",
+            message: "Worker picked up job",
+            created_at: "2026-06-20T00:00:05.000Z"
+          }
+        ]}
+      />
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-phase="Implementing"]')).toHaveAttribute("aria-selected", "true");
+    });
+    expect(screen.getByRole("button", { name: "구현 진행 중" })).toBeInTheDocument();
   });
 });
