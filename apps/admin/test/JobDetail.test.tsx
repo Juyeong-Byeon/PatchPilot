@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { JobDetail } from "../src/components/JobDetail.js";
 import { adminCopy } from "../src/i18n.js";
 
@@ -11,6 +11,7 @@ const baseProps = {
   artifacts: [],
   isLoading: false,
   actionState: "",
+  nowMs: Date.parse("2026-06-20T00:00:00.000Z"),
   copy: adminCopy.ko,
   locale: "ko" as const,
   onRetry: vi.fn(),
@@ -18,6 +19,8 @@ const baseProps = {
 };
 
 describe("JobDetail", () => {
+  afterEach(() => cleanup());
+
   it("only enables retry for failed terminal jobs", () => {
     const { rerender } = render(
       <JobDetail
@@ -36,5 +39,124 @@ describe("JobDetail", () => {
     );
 
     expect(screen.getByRole("button", { name: "재시도" })).toBeEnabled();
+  });
+
+  it("can render an empty detail state and then hydrate the job after refresh", () => {
+    const { rerender } = render(
+      <JobDetail
+        {...baseProps}
+        isLoading
+        job={null}
+      />
+    );
+
+    expect(screen.getByText("작업 상세를 불러오는 중입니다.")).toBeInTheDocument();
+
+    rerender(
+      <JobDetail
+        {...baseProps}
+        job={{ id: "job_1", phase: "Planning", outcome: "Running", repository: "Juyeong-Byeon/test_pr_repo" }}
+      />
+    );
+
+    expect(screen.getByText("Juyeong-Byeon/test_pr_repo")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "취소" }).some((button) => !button.hasAttribute("disabled"))).toBe(true);
+  });
+
+  it("shows the latest retry attempt as current when an earlier attempt failed", () => {
+    render(
+      <JobDetail
+        {...baseProps}
+        job={{
+          id: "job_1",
+          phase: "Completed",
+          outcome: "NeedsReview",
+          repository: "Juyeong-Byeon/test_pr_repo",
+          attempt: 2
+        }}
+        events={[
+          {
+            id: "event_1",
+            phase: "Queued",
+            event_type: "job.enqueued",
+            source: "api",
+            message: "Queued",
+            created_at: "2026-06-20T00:00:00.000Z"
+          },
+          {
+            id: "event_2",
+            run_id: "run_1",
+            attempt: 1,
+            phase: "Failed",
+            event_type: "worker.error",
+            source: "worker",
+            message: "old runner failure",
+            created_at: "2026-06-20T00:00:10.000Z"
+          },
+          {
+            id: "event_3",
+            run_id: "run_2",
+            attempt: 2,
+            phase: "Planning",
+            event_type: "worker.started",
+            source: "worker",
+            message: "retry started",
+            created_at: "2026-06-20T00:01:00.000Z"
+          },
+          {
+            id: "event_4",
+            run_id: "run_2",
+            attempt: 2,
+            phase: "Completed",
+            event_type: "worker.completed",
+            source: "worker",
+            message: "retry completed",
+            created_at: "2026-06-20T00:01:05.000Z"
+          }
+        ]}
+        logs={[
+          {
+            id: "log_1",
+            run_id: "run_1",
+            source: "gstack",
+            stream: "stderr",
+            sequence: 0,
+            text: "gstack failed with exit code 1",
+            created_at: "2026-06-20T00:00:10.000Z"
+          },
+          {
+            id: "log_2",
+            run_id: "run_2",
+            source: "gstack",
+            stream: "stdout",
+            sequence: 0,
+            text: "Runner completed successfully",
+            created_at: "2026-06-20T00:01:05.000Z"
+          }
+        ]}
+        artifacts={[
+          {
+            id: "artifact_1",
+            run_id: "run_1",
+            kind: "agent-result",
+            content: { failure: "old failed attempt" },
+            created_at: "2026-06-20T00:00:10.000Z"
+          },
+          {
+            id: "artifact_2",
+            run_id: "run_2",
+            kind: "policy-gate",
+            content: { status: "passed" },
+            created_at: "2026-06-20T00:01:05.000Z"
+          }
+        ]}
+      />
+    );
+
+    expect(screen.queryByText("실패 지점")).not.toBeInTheDocument();
+    expect(screen.queryByText(/gstack failed with exit code 1/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/old failed attempt/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Runner completed successfully/)).toBeInTheDocument();
+    expect(screen.getByText(/"status": "passed"/)).toBeInTheDocument();
   });
 });

@@ -57,6 +57,7 @@ export default function App() {
   const [detail, setDetail] = useState<DetailState>(emptyDetail);
   const [isLoadingJobs, setIsLoadingJobs] = useState(false);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [status, setStatus] = useState<StatusState>(() => (token ? { kind: "ready" } : { kind: "enterToken" }));
   const [error, setError] = useState<string>("");
   const [actionState, setActionState] = useState<string>("");
@@ -108,6 +109,23 @@ export default function App() {
     void refreshDetail(selectedJobId, token);
   }, [selectedJobId, token]);
 
+  useEffect(() => {
+    if (!selectedJobId || !token) return;
+
+    const intervalId = window.setInterval(() => {
+      void refreshDetail(selectedJobId, token, { silent: true });
+    }, 3000);
+
+    return () => window.clearInterval(intervalId);
+  }, [selectedJobId, token]);
+
+  useEffect(() => {
+    if (!selectedJobId) return;
+
+    const intervalId = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(intervalId);
+  }, [selectedJobId]);
+
   async function refreshJobs(activeToken = token) {
     if (!activeToken.trim()) {
       setStatus({ kind: "enterToken" });
@@ -128,8 +146,8 @@ export default function App() {
     }
   }
 
-  async function refreshDetail(jobId: string, activeToken = token) {
-    setIsLoadingDetail(true);
+  async function refreshDetail(jobId: string, activeToken = token, options: { silent?: boolean } = {}) {
+    if (!options.silent) setIsLoadingDetail(true);
     setError("");
     try {
       const [job, events, logs, artifacts] = await Promise.all([
@@ -141,9 +159,8 @@ export default function App() {
       setDetail({ job, events, logs, artifacts });
     } catch (caught) {
       setError(errorMessage(caught, copy));
-      setDetail(emptyDetail);
     } finally {
-      setIsLoadingDetail(false);
+      if (!options.silent) setIsLoadingDetail(false);
     }
   }
 
@@ -325,6 +342,7 @@ export default function App() {
               artifacts={detail.artifacts}
               isLoading={isLoadingDetail}
               actionState={actionState}
+              nowMs={nowMs}
               copy={copy}
               locale={locale}
               onBack={openJobList}

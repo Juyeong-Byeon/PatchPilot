@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 import { RunTimeline } from "../src/components/RunTimeline.js";
 import { adminCopy } from "../src/i18n.js";
 
 describe("RunTimeline", () => {
+  afterEach(() => cleanup());
+
   it("renders a trace flow table with phase rows and failure context", () => {
     render(
       <RunTimeline
@@ -55,5 +57,111 @@ describe("RunTimeline", () => {
     expect(within(table).queryByText("2 이벤트")).not.toBeInTheDocument();
     expect(within(flow).queryByText("git authentication failed")).not.toBeInTheDocument();
     expect(screen.queryByText("git authentication failed")).not.toBeInTheDocument();
+  });
+
+  it("keeps the active trace duration and duration bar live", () => {
+    const { container, rerender } = render(
+      <RunTimeline
+        copy={adminCopy.ko}
+        locale="ko"
+        currentPhase="Implementing"
+        nowMs={Date.parse("2026-06-20T00:00:15.000Z")}
+        events={[
+          {
+            id: "1",
+            phase: "Queued",
+            event_type: "job.enqueued",
+            source: "api",
+            message: "accepted",
+            created_at: "2026-06-20T00:00:00.000Z"
+          },
+          {
+            id: "2",
+            phase: "Implementing",
+            event_type: "worker.started",
+            source: "worker",
+            message: "clone started",
+            created_at: "2026-06-20T00:00:05.000Z"
+          }
+        ]}
+      />
+    );
+
+    const firstWidth = container.querySelector('[data-phase="Implementing"] [data-duration-bar]')?.getAttribute("style");
+    expect(screen.getByText("10s")).toBeInTheDocument();
+
+    rerender(
+      <RunTimeline
+        copy={adminCopy.ko}
+        locale="ko"
+        currentPhase="Implementing"
+        nowMs={Date.parse("2026-06-20T00:00:25.000Z")}
+        events={[
+          {
+            id: "1",
+            phase: "Queued",
+            event_type: "job.enqueued",
+            source: "api",
+            message: "accepted",
+            created_at: "2026-06-20T00:00:00.000Z"
+          },
+          {
+            id: "2",
+            phase: "Implementing",
+            event_type: "worker.started",
+            source: "worker",
+            message: "clone started",
+            created_at: "2026-06-20T00:00:05.000Z"
+          }
+        ]}
+      />
+    );
+
+    const secondWidth = container.querySelector('[data-phase="Implementing"] [data-duration-bar]')?.getAttribute("style");
+    expect(screen.getByText("20s")).toBeInTheDocument();
+    expect(secondWidth).not.toEqual(firstWidth);
+  });
+
+  it("shows terminal failure on the last running phase instead of a final Failed row", () => {
+    const { container } = render(
+      <RunTimeline
+        copy={adminCopy.ko}
+        locale="ko"
+        currentPhase="Failed"
+        events={[
+          {
+            id: "1",
+            phase: "Queued",
+            event_type: "job.enqueued",
+            source: "api",
+            message: "accepted",
+            created_at: "2026-06-20T00:00:00.000Z"
+          },
+          {
+            id: "2",
+            phase: "Implementing",
+            event_type: "worker.started",
+            source: "worker",
+            message: "runner started",
+            created_at: "2026-06-20T00:00:05.000Z"
+          },
+          {
+            id: "3",
+            phase: "Failed",
+            event_type: "worker.error",
+            source: "worker",
+            message: "gstack runner exited with code 1",
+            created_at: "2026-06-20T00:00:12.000Z"
+          }
+        ]}
+      />
+    );
+
+    const failedImplementing = container.querySelector('[data-phase="Implementing"][data-status="failed"]');
+
+    expect(failedImplementing).toBeInTheDocument();
+    expect(container.querySelector('[data-phase="Failed"]')).not.toBeInTheDocument();
+    expect(within(failedImplementing as HTMLElement).getByText("실패 지점")).toBeInTheDocument();
+    expect(container.querySelector(".bg-red-600")).toBeInTheDocument();
   });
 });

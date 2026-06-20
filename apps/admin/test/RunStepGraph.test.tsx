@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 import { RunStepGraph } from "../src/components/RunStepGraph.js";
 import { adminCopy } from "../src/i18n.js";
 
 describe("RunStepGraph", () => {
+  afterEach(() => cleanup());
+
   it("renders a GitHub Actions style phase graph with failure state", () => {
     render(
       <RunStepGraph
@@ -52,5 +54,79 @@ describe("RunStepGraph", () => {
     expect(within(graph).queryByText(/2 이벤트/)).not.toBeInTheDocument();
     expect(within(graph).queryByText("worker")).not.toBeInTheDocument();
     expect(within(graph).queryByText("git authentication failed")).not.toBeInTheDocument();
+  });
+
+  it("animates the currently running phase", () => {
+    const { container } = render(
+      <RunStepGraph
+        copy={adminCopy.ko}
+        locale="ko"
+        currentPhase="Implementing"
+        events={[
+          {
+            id: "1",
+            phase: "Queued",
+            event_type: "job.enqueued",
+            source: "api",
+            message: "accepted",
+            created_at: "2026-06-20T00:00:00.000Z"
+          },
+          {
+            id: "2",
+            phase: "Implementing",
+            event_type: "worker.started",
+            source: "worker",
+            message: "clone started",
+            created_at: "2026-06-20T00:00:05.000Z"
+          }
+        ]}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "구현 진행 중" })).toBeInTheDocument();
+    expect(container.querySelector(".animate-spin")).toBeInTheDocument();
+  });
+
+  it("attributes terminal failure to the last running phase", () => {
+    const { container } = render(
+      <RunStepGraph
+        copy={adminCopy.ko}
+        locale="ko"
+        currentPhase="Failed"
+        events={[
+          {
+            id: "1",
+            phase: "Queued",
+            event_type: "job.enqueued",
+            source: "api",
+            message: "accepted",
+            created_at: "2026-06-20T00:00:00.000Z"
+          },
+          {
+            id: "2",
+            phase: "Implementing",
+            event_type: "worker.started",
+            source: "worker",
+            message: "runner started",
+            created_at: "2026-06-20T00:00:05.000Z"
+          },
+          {
+            id: "3",
+            phase: "Failed",
+            event_type: "worker.error",
+            source: "worker",
+            message: "gstack runner exited with code 1",
+            created_at: "2026-06-20T00:00:12.000Z"
+          }
+        ]}
+      />
+    );
+
+    const graph = screen.getByRole("list", { name: "처리 단계 그래프" });
+    const implementingButton = within(graph).getByRole("button", { name: "구현 실패 지점" });
+
+    expect(implementingButton).toBeInTheDocument();
+    expect(within(graph).queryByRole("button", { name: "실패 실패 지점" })).not.toBeInTheDocument();
+    expect(container.querySelector(".bg-red-600")).toBeInTheDocument();
   });
 });

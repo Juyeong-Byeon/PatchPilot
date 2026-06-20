@@ -16,6 +16,7 @@ interface JobDetailProps {
   artifacts: Artifact[];
   isLoading: boolean;
   actionState: string;
+  nowMs: number;
   copy: AdminCopy;
   locale: Locale;
   onBack?(): void;
@@ -31,6 +32,7 @@ export function JobDetail({
   artifacts,
   isLoading,
   actionState,
+  nowMs,
   copy,
   locale,
   onBack,
@@ -39,6 +41,14 @@ export function JobDetail({
   onCancel
 }: JobDetailProps) {
   const [selectedSpan, setSelectedSpan] = useState<SpanSelection | null>(null);
+  const currentAttempt = useMemo(() => resolveCurrentAttempt(job, events), [events, job]);
+  const currentRunId = useMemo(() => resolveCurrentRunId(events, currentAttempt), [currentAttempt, events]);
+  const currentEvents = useMemo(() => filterEventsForCurrentRun(events, currentAttempt, currentRunId), [currentAttempt, currentRunId, events]);
+  const currentLogs = useMemo(() => filterRunScopedRecords(logs, currentRunId), [currentRunId, logs]);
+  const currentArtifacts = useMemo(() => filterRunScopedRecords(artifacts, currentRunId), [artifacts, currentRunId]);
+  const selectedContext = useMemo(() => buildStepContext(selectedSpan, currentEvents, locale), [currentEvents, locale, selectedSpan]);
+  const diagnosticLogs = useMemo(() => filterLogsForContext(currentLogs, selectedContext), [currentLogs, selectedContext]);
+  const diagnosticArtifacts = useMemo(() => filterArtifactsForContext(currentArtifacts, selectedContext), [currentArtifacts, selectedContext]);
 
   if (!job) {
     return (
@@ -55,9 +65,6 @@ export function JobDetail({
   const terminal = isTerminalPhase(job.phase);
   const retryDisabled = Boolean(actionState) || job.phase !== "Failed";
   const cancelDisabled = Boolean(actionState) || terminal;
-  const selectedContext = useMemo(() => buildStepContext(selectedSpan, events, locale), [events, locale, selectedSpan]);
-  const diagnosticLogs = useMemo(() => filterLogsForContext(logs, selectedContext), [logs, selectedContext]);
-  const diagnosticArtifacts = useMemo(() => filterArtifactsForContext(artifacts, selectedContext), [artifacts, selectedContext]);
 
   return (
     <section className="grid gap-4">
@@ -142,7 +149,7 @@ export function JobDetail({
       </Card>
 
       <RunStepGraph
-        events={events}
+        events={currentEvents}
         currentPhase={job.phase}
         copy={copy}
         locale={locale}
@@ -160,7 +167,9 @@ export function JobDetail({
         </CardHeader>
         <CardContent className="grid gap-4">
           <RunTimeline
-            events={events}
+            events={currentEvents}
+            currentPhase={job.phase}
+            nowMs={nowMs}
             copy={copy}
             locale={locale}
             selectedSpan={selectedSpan}
@@ -169,13 +178,13 @@ export function JobDetail({
           />
           <LogViewer
             logs={diagnosticLogs}
-            totalCount={logs.length}
+            totalCount={currentLogs.length}
             copy={copy}
             variant="embedded"
           />
           <ArtifactPanel
             artifacts={diagnosticArtifacts}
-            totalCount={artifacts.length}
+            totalCount={currentArtifacts.length}
             copy={copy}
             locale={locale}
             variant="embedded"
@@ -251,6 +260,71 @@ interface StepContext {
   startMs: number | null;
   endMs: number | null;
   label: string;
+}
+
+function resolveCurrentAttempt(job: JobRecord | null, events: RunEvent[]): number | null {
+  const jobAttempt = parseAttempt(job?.attempt);
+  if (jobAttempt !== null) return jobAttempt;
+
+  const attempts = events.map((event) => parseAttempt(event.attempt)).filter((attempt): attempt is number => attempt !== null);
+  return attempts.length > 0 ? Math.max(...attempts) : null;
+}
+
+function resolveCurrentRunId(events: RunEvent[], currentAttempt: number | null): string | null {
+  const orderedEvents = [...events].sort((left, right) => {
+    const leftTime = parseTime(left.created_at);
+    const rightTime = parseTime(right.created_at);
+    return (leftTime ?? 0) - (rightTime ?? 0);
+  });
+  const currentRunEvent = [...orderedEvents].reverse().find((event) => {
+    const runId = stringOrNull(event.run_id);
+    if (!runId) return false;
+    return currentAttempt === null || parseAttempt(event.attempt) === currentAttempt;
+  });
+
+  return stringOrNull(currentRunEvent?.run_id);
+}
+
+function filterEventsForCurrentRun(events: RunEvent[], currentAttempt: number | null, currentRunId: string | null): RunEvent[] {
+  if (currentAttempt === null && !currentRunId) return events;
+
+  const filtered = events.filter((event) => {
+    const eventRunId = stringOrNull(event.run_id);
+    const eventAttempt = parseAttempt(event.attempt);
+
+    if (currentRunId && eventRunId === currentRunId) return true;
+    if (currentAttempt !== null && eventAttempt === currentAttempt) return true;
+    return isJobLevelQueueEvent(event);
+  });
+
+  return filtered.length > 0 ? filtered : events;
+}
+
+function filterRunScopedRecords<T extends { run_id?: string | null }>(records: T[], currentRunId: string | null): T[] {
+  if (!currentRunId) return records;
+
+  const filtered = records.filter((record) => {
+    const runId = stringOrNull(record.run_id);
+    return !runId || runId === currentRunId;
+  });
+
+  return filtered.length > 0 ? filtered : records;
+}
+
+function isJobLevelQueueEvent(event: RunEvent): boolean {
+  if (stringOrNull(event.run_id) || parseAttempt(event.attempt) !== null) return false;
+  const phase = String(event.phase ?? "").toLowerCase();
+  const type = String(event.event_type ?? event.eventType ?? "").toLowerCase();
+  return phase === "queued" || type.includes("enqueued") || type.includes("retry");
+}
+
+function parseAttempt(value: unknown): number | null {
+  const attempt = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN;
+  return Number.isInteger(attempt) && attempt > 0 ? attempt : null;
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
 }
 
 function buildStepContext(selection: SpanSelection | null, events: RunEvent[], locale: Locale): StepContext | null {

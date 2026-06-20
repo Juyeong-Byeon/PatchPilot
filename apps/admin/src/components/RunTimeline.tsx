@@ -10,6 +10,8 @@ interface RunTimelineProps {
   selectedSpan?: SpanSelection | null;
   onSelectSpan?(selection: SpanSelection): void;
   variant?: "card" | "embedded";
+  currentPhase?: string;
+  nowMs?: number;
 }
 
 export interface SpanSelection {
@@ -26,7 +28,7 @@ interface PhaseSpan {
   durationMs: number;
 }
 
-export function RunTimeline({ events, copy, locale, selectedSpan, onSelectSpan, variant = "card" }: RunTimelineProps) {
+export function RunTimeline({ events, copy, locale, selectedSpan, onSelectSpan, variant = "card", currentPhase, nowMs }: RunTimelineProps) {
   const orderedEvents = useMemo(
     () =>
       [...events].sort((left, right) => {
@@ -36,8 +38,9 @@ export function RunTimeline({ events, copy, locale, selectedSpan, onSelectSpan, 
       }),
     [events]
   );
-  const spans = useMemo(() => buildPhaseSpans(orderedEvents), [orderedEvents]);
-  const longestSpanDuration = Math.max(1, ...spans.map((span) => span.durationMs));
+  const effectiveNowMs = nowMs ?? Date.now();
+  const spans = useMemo(() => buildPhaseSpans(orderedEvents, currentPhase, effectiveNowMs), [currentPhase, effectiveNowMs, orderedEvents]);
+  const totalRunDuration = Math.max(1, totalDuration(spans));
 
   const content = (
     <section aria-label={copy.traceFlow} className={variant === "embedded" ? "" : "px-4 py-3"}>
@@ -69,6 +72,8 @@ export function RunTimeline({ events, copy, locale, selectedSpan, onSelectSpan, 
                 <tr
                   aria-selected={selected}
                   className={`cursor-pointer border-b border-hairline-gray outline-none last:border-b-0 hover:bg-mist-blue ${selected ? "bg-mist-blue ring-1 ring-inset ring-electric-blue" : ""}`}
+                  data-phase={span.phase}
+                  data-status={span.status}
                   key={span.phase}
                   onClick={() => onSelectSpan?.({ phase: span.phase, source: span.sources[0] })}
                   onKeyDown={(event) => selectWithKeyboard(event, span, onSelectSpan)}
@@ -91,7 +96,8 @@ export function RunTimeline({ events, copy, locale, selectedSpan, onSelectSpan, 
                       <div className="h-2 w-32 overflow-hidden rounded-full bg-linen">
                         <div
                           className={`h-full rounded-full ${durationBarClassName(span.status)}`}
-                          style={{ width: `${durationWidth(span.durationMs, longestSpanDuration)}%` }}
+                          data-duration-bar
+                          style={{ width: `${durationWidth(span.durationMs, totalRunDuration)}%` }}
                         />
                       </div>
                       <span className="w-12 text-right font-mono text-[12px] text-charcoal">
@@ -124,7 +130,7 @@ export function RunTimeline({ events, copy, locale, selectedSpan, onSelectSpan, 
   );
 }
 
-function buildPhaseSpans(events: RunEvent[]): PhaseSpan[] {
+function buildPhaseSpans(events: RunEvent[], currentPhase: string | undefined, nowMs: number): PhaseSpan[] {
   const observedPhases = events.map((event) => String(event.phase ?? "")).filter(Boolean);
   const phaseFlow = [...standardPhaseFlow];
   for (const phase of observedPhases) {
@@ -137,20 +143,34 @@ function buildPhaseSpans(events: RunEvent[]): PhaseSpan[] {
     -1,
     ...phaseFlow.map((phase, index) => (events.some((event) => event.phase === phase) ? index : -1))
   );
+  const currentIndex = currentPhase && phaseFlow.includes(currentPhase) ? phaseFlow.indexOf(currentPhase) : lastObservedIndex;
+  const terminalPhase = isTerminalPhase(currentPhase);
 
   return phaseFlow.map((phase, index) => {
     const phaseEvents = events.filter((event) => event.phase === phase);
     const phaseTimes = phaseEvents.map((event) => parseDate(event.created_at)).filter((time): time is number => time !== null);
     const firstTime = phaseTimes[0] ?? firstOverall;
     const lastTime = phaseTimes[phaseTimes.length - 1] ?? firstTime;
+    const nextPhaseTime = events
+      .map((event) => ({ phase: event.phase, time: parseDate(event.created_at) }))
+      .find((event) => event.time !== null && event.time > firstTime && event.phase !== phase)?.time;
     const hasFailure = phaseEvents.some(isFailureEvent);
-    const status = hasFailure ? "failed" : phaseEvents.length === 0 ? "pending" : index < lastObservedIndex || phase === "Completed" ? "complete" : "active";
+    const status = hasFailure
+      ? "failed"
+      : phaseEvents.length === 0
+        ? "pending"
+        : !terminalPhase && index === currentIndex
+          ? "active"
+          : index < currentIndex || terminalPhase || phase === "Completed"
+            ? "complete"
+            : "pending";
+    const endTime = status === "active" ? nowMs : nextPhaseTime ?? lastTime;
     const sources = Array.from(new Set(phaseEvents.map((event) => event.source).filter(Boolean) as string[]));
     return {
       phase,
       status,
       sources,
-      durationMs: phaseEvents.length > 0 ? Math.max(0, lastTime - firstTime) : 0
+      durationMs: phaseEvents.length > 0 ? Math.max(0, endTime - firstTime) : 0
     };
   });
 }
@@ -191,7 +211,7 @@ function durationWidth(durationMs: number, longestDurationMs: number): number {
 }
 
 function totalDuration(spans: PhaseSpan[]): number {
-  return spans.reduce((longest, span) => Math.max(longest, span.durationMs), 0);
+  return spans.reduce((sum, span) => sum + span.durationMs, 0);
 }
 
 function isFailureEvent(event: RunEvent): boolean {
@@ -204,6 +224,10 @@ function parseDate(value: string | undefined): number | null {
   if (!value) return null;
   const time = Date.parse(value);
   return Number.isNaN(time) ? null : time;
+}
+
+function isTerminalPhase(phase: string | undefined): boolean {
+  return phase === "Completed" || phase === "Failed" || phase === "Cancelled" || phase === "CancelFailed";
 }
 
 function formatDuration(milliseconds: number): string {

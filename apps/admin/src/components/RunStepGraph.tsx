@@ -152,7 +152,7 @@ function connectorClass(status: StepStatus): string {
 
 function statusGlyph(status: StepStatus) {
   if (status === "failed") return <AlertCircle aria-hidden="true" size={18} strokeWidth={2.4} />;
-  if (status === "active") return <LoaderCircle aria-hidden="true" size={18} strokeWidth={2.4} />;
+  if (status === "active") return <LoaderCircle aria-hidden="true" className="animate-spin" size={18} strokeWidth={2.4} />;
   if (status === "complete") return <CheckCircle2 aria-hidden="true" size={18} strokeWidth={2.4} />;
   if (status === "skipped") return <MinusCircle aria-hidden="true" size={18} strokeWidth={2.2} />;
   return <CircleDashed aria-hidden="true" size={18} strokeWidth={2.2} />;
