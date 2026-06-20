@@ -18,7 +18,7 @@ export interface CodexAgentRunnerInput {
   codexSkillsDir?: string;
 }
 
-interface RunnerContext {
+export interface RunnerContext {
   jobId: string;
   ticketSnapshotId: string;
   triggerVersion: string;
@@ -88,7 +88,7 @@ export async function prepareCodexHome(input: {
   return input.codexHome;
 }
 
-function defaultCodexArgs(repoDir: string): string[] {
+export function defaultCodexArgs(repoDir: string): string[] {
   return ["exec", "--ephemeral", "--sandbox", "danger-full-access", "--skip-git-repo-check", "--cd", repoDir, "-"];
 }
 
@@ -128,12 +128,15 @@ async function buildCodexPrompt(input: {
   ].join("\n");
 }
 
-function runCodexCommand(input: {
+export function runCodexCommand(input: {
   repoDir: string;
   codexHome: string;
   command: string;
   args: string[];
   prompt: string;
+  /** Per-invocation wall-clock budget. The outer runner timeout is the hard backstop. */
+  timeoutMs?: number;
+  killGraceMs?: number;
 }): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(input.command, input.args, {
@@ -141,9 +144,31 @@ function runCodexCommand(input: {
       env: { ...process.env, CODEX_HOME: input.codexHome },
       stdio: ["pipe", "inherit", "inherit"],
     });
+    let timedOut = false;
+    let timer: NodeJS.Timeout | undefined;
+    let killTimer: NodeJS.Timeout | undefined;
+    const clearTimers = () => {
+      if (timer) clearTimeout(timer);
+      if (killTimer) clearTimeout(killTimer);
+    };
+    if (input.timeoutMs && input.timeoutMs > 0) {
+      timer = setTimeout(() => {
+        timedOut = true;
+        child.kill("SIGTERM");
+        killTimer = setTimeout(() => child.kill("SIGKILL"), input.killGraceMs ?? 2000);
+      }, input.timeoutMs);
+    }
     child.stdin.end(input.prompt);
-    child.on("error", reject);
+    child.on("error", (error) => {
+      clearTimers();
+      reject(error);
+    });
     child.on("close", (code, signal) => {
+      clearTimers();
+      if (timedOut) {
+        reject(new Error(`codex runner timed out after ${input.timeoutMs}ms`));
+        return;
+      }
       if (code === 0) {
         resolve();
         return;
@@ -153,12 +178,12 @@ function runCodexCommand(input: {
   });
 }
 
-async function ensureGitIdentity(repoDir: string): Promise<void> {
+export async function ensureGitIdentity(repoDir: string): Promise<void> {
   await runGit(["config", "user.name", "Ticket-to-PR Codex"], repoDir);
   await runGit(["config", "user.email", "ticket-to-pr-codex@example.local"], repoDir);
 }
 
-async function commitDirtyWorktreeIfNeeded(repoDir: string, baseSha: string): Promise<void> {
+export async function commitDirtyWorktreeIfNeeded(repoDir: string, baseSha: string): Promise<void> {
   const commitCount = Number(await gitStdout(["rev-list", "--count", `${baseSha}..HEAD`], repoDir));
   if (commitCount > 0) return;
 
@@ -171,12 +196,18 @@ async function commitDirtyWorktreeIfNeeded(repoDir: string, baseSha: string): Pr
   await runGit(["commit", "-m", "chore: implement ticket with Codex"], repoDir);
 }
 
-async function writeResultArtifacts(input: {
+export async function writeResultArtifacts(input: {
   workspaceRoot: string;
   repoDir: string;
   targetBranch: string;
   baseSha: string;
   context: RunnerContext;
+  /** Overrides the default review summary recorded in result.json. */
+  reviewSummary?: string;
+  /** Extra markdown sections appended to pr-body.md (e.g. staged plan/review/qa output). */
+  prBodySections?: string[];
+  /** Real verification results to record in result.json (gated by the policy gate). */
+  tests?: Array<{ command: string; status: "passed" | "failed" | "skipped"; summary?: string }>;
 }): Promise<void> {
   const paths = getWorkspacePaths(input.workspaceRoot);
   const headSha = await gitStdout(["rev-parse", "HEAD"], input.repoDir);
@@ -210,7 +241,7 @@ async function writeResultArtifacts(input: {
     pushSha: headSha,
     changedFiles,
     commits,
-    tests: [
+    tests: input.tests ?? [
       {
         command: "git diff --name-only",
         status: "passed",
@@ -218,7 +249,8 @@ async function writeResultArtifacts(input: {
       },
     ],
     review: {
-      summary: "Codex CLI completed the requested ticket change in an isolated runner workspace.",
+      summary:
+        input.reviewSummary ?? "Codex CLI completed the requested ticket change in an isolated runner workspace.",
       risks: [],
       knownLimitations: ["The runner adapter generated PR metadata from trusted git evidence after Codex exited."],
     },
@@ -230,22 +262,21 @@ async function writeResultArtifacts(input: {
     retryable: false,
   });
 
+  const body = [
+    "## Summary",
+    "- Implemented by Codex CLI through the Ticket-to-PR runner.",
+    `- Changed files: ${changedFiles.join(", ")}`,
+    "",
+    "## Verification",
+    "- git diff --name-only",
+    ...(input.prBodySections && input.prBodySections.length > 0 ? ["", ...input.prBodySections] : []),
+  ].join("\n");
   await writeTextArtifact(paths.prTitle, `${title}\n`);
-  await writeTextArtifact(
-    paths.prBody,
-    [
-      "## Summary",
-      "- Implemented by Codex CLI through the Ticket-to-PR runner.",
-      `- Changed files: ${changedFiles.join(", ")}`,
-      "",
-      "## Verification",
-      "- git diff --name-only",
-    ].join("\n"),
-  );
+  await writeTextArtifact(paths.prBody, body);
   await writeJsonArtifact(paths.resultJson, result);
 }
 
-async function gitStdout(args: string[], cwd: string): Promise<string> {
+export async function gitStdout(args: string[], cwd: string): Promise<string> {
   return (await runGit(args, cwd)).stdout.trim();
 }
 

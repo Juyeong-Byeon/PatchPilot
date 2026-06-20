@@ -1,5 +1,7 @@
 FROM node:22-alpine
-RUN apk add --no-cache git openssh-client bash
+# ripgrep: gstack skills (and Codex's own file inventory) rely on `rg`; without it
+# skills degrade to slower `find` fallbacks or fail outright.
+RUN apk add --no-cache git openssh-client bash ripgrep
 ARG GSTACK_INSTALL_COMMAND=""
 RUN if [ -n "$GSTACK_INSTALL_COMMAND" ]; then sh -lc "$GSTACK_INSTALL_COMMAND"; fi
 RUN addgroup -S runner && adduser -S runner -G runner
