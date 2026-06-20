@@ -11,12 +11,13 @@ interface LogViewerProps {
   logs: LogLine[];
   totalCount?: number;
   copy: AdminCopy;
+  jobId?: string;
   contextLabel?: string;
   onClearContext?(): void;
   variant?: "card" | "embedded";
 }
 
-export function LogViewer({ logs, totalCount, copy, contextLabel, onClearContext, variant = "card" }: LogViewerProps) {
+export function LogViewer({ logs, totalCount, copy, jobId, contextLabel, onClearContext, variant = "card" }: LogViewerProps) {
   const [source, setSource] = useState("all");
   const [query, setQuery] = useState("");
   const sources = useMemo(
@@ -59,7 +60,7 @@ export function LogViewer({ logs, totalCount, copy, contextLabel, onClearContext
           <Button type="button" variant="outline" size="icon" aria-label={copy.copy} title={copy.copy} onClick={() => void navigator.clipboard?.writeText(text)}>
             <Copy data-icon aria-hidden="true" strokeWidth={2.2} />
           </Button>
-          <Button type="button" size="icon" aria-label={copy.download} title={copy.download} onClick={() => downloadText(text)}>
+          <Button type="button" size="icon" aria-label={copy.download} title={copy.download} onClick={() => downloadText(text, jobId)}>
             <Download data-icon aria-hidden="true" strokeWidth={2.2} />
           </Button>
         </div>
@@ -104,12 +105,13 @@ function formatLine(line: LogLine, copy: AdminCopy): string {
   return `[${time}] [${source}/${stream} #${sequence}${redacted}] ${line.text ?? ""}`;
 }
 
-function downloadText(text: string): void {
+function downloadText(text: string, jobId?: string): void {
   const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = "ticket-to-pr-job.log";
+  const uuid = jobId?.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)?.[0] ?? jobId;
+  anchor.download = uuid ? `patchpilot-${uuid}.log` : "patchpilot-job.log";
   anchor.click();
   URL.revokeObjectURL(url);
 }

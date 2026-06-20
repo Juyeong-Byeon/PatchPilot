@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Ban, ExternalLink, RotateCcw, Undo2, X } from "lucide-react";
+import { Ban, Check, Copy, ExternalLink, RotateCcw, Undo2, X } from "lucide-react";
 import type { Artifact, JobRecord, LogLine, RunEvent } from "../api.js";
-import { translateState, type AdminCopy, type Locale } from "../i18n.js";
+import { translateFailureCategory, translateState, type AdminCopy, type Locale } from "../i18n.js";
+import { statusBadgeVariant } from "../lib/status.js";
 import { LogViewer } from "./LogViewer.js";
 import { RunStepGraph } from "./RunStepGraph.js";
 import { RunTimeline, type SpanSelection } from "./RunTimeline.js";
@@ -19,6 +20,7 @@ interface JobDetailProps {
   nowMs: number;
   copy: AdminCopy;
   locale: Locale;
+  error?: string;
   onBack?(): void;
   onRefresh?(): void;
   onRetry(): void;
@@ -35,6 +37,7 @@ export function JobDetail({
   nowMs,
   copy,
   locale,
+  error,
   onBack,
   onRefresh,
   onRetry,
@@ -75,7 +78,11 @@ export function JobDetail({
     );
   }
   const terminal = isTerminalPhase(job.phase);
-  const retryDisabled = Boolean(actionState) || job.phase !== "Failed";
+  // Mirror the backend retry preflight (repositories.ts): only Failed jobs whose
+  // outcome is FailedInternal are retryable. Policy-blocked (FailedActionable)
+  // jobs need a config/ticket change first, so the button stays disabled instead
+  // of enabling an action that would 409.
+  const retryDisabled = Boolean(actionState) || !(job.phase === "Failed" && String(job.outcome) === "FailedInternal");
   const cancelDisabled = Boolean(actionState) || terminal;
 
   return (
@@ -84,10 +91,13 @@ export function JobDetail({
         <CardContent className="grid gap-4">
           <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
             <div className="min-w-0">
-              <p className="truncate font-mono text-[12px] leading-4 text-graphite" title={job.id}>{job.id}</p>
+              <div className="flex min-w-0 items-center gap-1">
+                <p className="truncate font-mono text-[12px] leading-4 text-graphite" title={job.id}>{job.id}</p>
+                <CopyButton value={job.id} copy={copy} />
+              </div>
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <Badge>{translateState(job.phase, locale)}</Badge>
-                <Badge variant={String(job.outcome).includes("Failed") ? "danger" : "outline"}>{translateState(job.outcome, locale)}</Badge>
+                <Badge variant={statusBadgeVariant(job.phase)}>{translateState(job.phase, locale)}</Badge>
+                <Badge variant={statusBadgeVariant(job.outcome)}>{translateState(job.outcome, locale)}</Badge>
               </div>
               <h2 className="mt-3 font-sans text-[22px] font-semibold leading-[1.25] text-forest-ink">
                 {stringValue(job.repository, copy)}
@@ -102,6 +112,7 @@ export function JobDetail({
                   <RotateCcw data-icon aria-hidden="true" className={isLoading ? "animate-spin" : ""} strokeWidth={2.2} />
                 </Button>
               ) : null}
+              {job.pr_url ? <CopyButton value={job.pr_url} copy={copy} label={copy.openPr} /> : null}
               {job.pr_url ? (
                 <a
                   aria-label={copy.openPr}
@@ -138,6 +149,12 @@ export function JobDetail({
             </div>
           </div>
 
+          {error ? (
+            <p role="alert" className="rounded-lg bg-danger px-3 py-2 text-[13px] leading-5 text-white">
+              {error}
+            </p>
+          ) : null}
+
           {(job.failure_reason || job.next_action) ? (
             <section className="status-glow-failed rounded-xl border border-danger bg-danger-wash px-4 py-3">
               <p className="text-[12px] leading-4 text-charcoal">{copy.failureSummary}</p>
@@ -155,7 +172,7 @@ export function JobDetail({
             <Fact label={copy.priority} value={stringValue(job.priority, copy)} />
             <Fact label={copy.attempt} value={stringValue(job.attempt, copy)} />
             <Fact label={copy.updated} value={formatDate(job.updated_at, locale, copy)} />
-            <Fact label={copy.failure} value={stringValue(job.failure_category, copy)} tone="danger" />
+            <Fact label={copy.failure} value={translateFailureCategory(job.failure_category, locale)} tone="danger" />
           </dl>
         </CardContent>
       </Card>
@@ -192,6 +209,7 @@ export function JobDetail({
             logs={diagnosticLogs}
             totalCount={currentLogs.length}
             copy={copy}
+            jobId={job.id}
             variant="embedded"
           />
           <ArtifactPanel
@@ -430,6 +448,36 @@ function isWithinContext(value: string | undefined, context: StepContext): boole
   if (time === null || context.startMs === null) return false;
   if (time < context.startMs) return false;
   return context.endMs === null ? true : time <= context.endMs;
+}
+
+function CopyButton({ value, copy, label }: { value: string; copy: AdminCopy; label?: string }) {
+  const [copied, setCopied] = useState(false);
+  const title = `${label ? `${label} · ` : ""}${copy.copy}`;
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      className="size-7 shrink-0 text-graphite"
+      aria-label={title}
+      title={title}
+      onClick={() => {
+        void navigator.clipboard?.writeText(value).then(
+          () => {
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 1200);
+          },
+          () => undefined
+        );
+      }}
+    >
+      {copied ? (
+        <Check data-icon aria-hidden="true" strokeWidth={2.2} />
+      ) : (
+        <Copy data-icon aria-hidden="true" strokeWidth={2.2} />
+      )}
+    </Button>
+  );
 }
 
 function Fact({ label, value, tone }: { label: string; value: string; tone?: "danger" }) {

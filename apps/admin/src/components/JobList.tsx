@@ -3,6 +3,7 @@ import { ArrowRight, LoaderCircle, Search } from "lucide-react";
 import type { JobRecord } from "../api.js";
 import { translateState, type AdminCopy, type Locale } from "../i18n.js";
 import { cn } from "../lib/utils.js";
+import { isRunningPhase, matchesStatusFilter, statusBadgeVariant, type StatusFilter } from "../lib/status.js";
 import { Badge } from "./ui/badge.js";
 import { Card, CardHeader, CardTitle } from "./ui/card.js";
 import { Input } from "./ui/input.js";
@@ -13,24 +14,26 @@ interface JobListProps {
   isLoading: boolean;
   copy: AdminCopy;
   locale: Locale;
+  statusFilter?: StatusFilter;
   onOpenJob(jobId: string): void;
 }
 
 const rowColumns = "grid-cols-[136px_300px_minmax(220px,1fr)_154px_56px]";
 
-export function JobList({ jobs, selectedJobId, isLoading, copy, locale, onOpenJob }: JobListProps) {
+export function JobList({ jobs, selectedJobId, isLoading, copy, locale, statusFilter = "all", onOpenJob }: JobListProps) {
   const [query, setQuery] = useState("");
   const filteredJobs = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    if (!normalized) return jobs;
-    return jobs.filter((job) =>
-      [job.id, job.repository, getValue(job, "target_branch", "targetBranch"), job.phase, job.outcome]
+    return jobs.filter((job) => {
+      if (!matchesStatusFilter(job, statusFilter)) return false;
+      if (!normalized) return true;
+      return [job.id, job.repository, getValue(job, "target_branch", "targetBranch"), job.phase, job.outcome]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
-        .includes(normalized)
-    );
-  }, [jobs, query]);
+        .includes(normalized);
+    });
+  }, [jobs, query, statusFilter]);
 
   return (
     <Card aria-label={copy.jobs} className="overflow-hidden">
@@ -162,7 +165,7 @@ function openWithKeyboard(event: KeyboardEvent<HTMLButtonElement>, jobId: string
 }
 
 function isRunningJob(job: JobRecord): boolean {
-  return ["Queued", "Planning", "Implementing", "PolicyChecking", "Publishing"].includes(String(job.phase));
+  return isRunningPhase(job.phase);
 }
 
 function getPrimaryStatus(job: JobRecord, locale: Locale, copy: AdminCopy, running: boolean): { value: string; label: string } {
@@ -190,15 +193,8 @@ function formatRunningPhase(job: JobRecord, locale: Locale, copy: AdminCopy): st
 }
 
 function StatusPill({ value, label }: { value: string; label: string }) {
-  const normalized = value.toLowerCase();
-  const variant =
-    normalized.includes("failed") || normalized === "cancelfailed"
-      ? "danger"
-      : normalized.includes("review") || normalized.includes("queued")
-        ? "warning"
-        : "default";
   return (
-    <Badge data-testid="job-status-pill" variant={variant}>
+    <Badge data-testid="job-status-pill" variant={statusBadgeVariant(value)}>
       {label}
     </Badge>
   );

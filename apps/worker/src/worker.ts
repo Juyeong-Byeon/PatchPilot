@@ -58,7 +58,13 @@ export interface WorkerRepositories {
     workBranch: string;
     runnerImageDigest?: string | null;
   }): Promise<WorkerRunRecord>;
-  transitionJob(jobId: string, phase: InternalPhase, outcome: UserOutcome, reason?: string): Promise<void>;
+  transitionJob(
+    jobId: string,
+    phase: InternalPhase,
+    outcome: UserOutcome,
+    reason?: string,
+    failure?: { category?: string | null; nextAction?: string | null }
+  ): Promise<void>;
   appendEvent(input: {
     jobId: string;
     runId?: string;
@@ -109,6 +115,25 @@ export interface ProcessAgentJobOptions {
     artifactId?: (kind: string) => string;
     pullRequestId?: () => string;
   };
+}
+
+export type FailureCategory = "policy" | "agent" | "publish" | "infra";
+
+// Operator-facing remediation hints, written to jobs.next_action so the admin
+// console can show "what to do next" for every failure. Korean-first to match
+// the worker progress logs and the primary operations audience.
+const NEXT_ACTION: Record<FailureCategory, string> = {
+  policy: "정책 위반 사항(저장소 허용 목록·보호 경로·대상 브랜치·검증 증거)을 해결한 뒤 티켓을 다시 승인하세요.",
+  agent: "티켓 설명과 완료 조건(DoD)을 보완한 뒤 티켓을 다시 승인하세요.",
+  publish: "대상 저장소 권한과 브랜치 충돌 여부를 확인한 뒤 관리자 콘솔에서 재시도하세요.",
+  infra: "일시적 인프라 오류일 수 있습니다. 관리자 콘솔에서 재시도하세요."
+};
+
+function failureDetails(category: FailureCategory, nextAction = NEXT_ACTION[category]): {
+  category: FailureCategory;
+  nextAction: string;
+} {
+  return { category, nextAction };
 }
 
 export type ProcessAgentJobResult =
@@ -165,9 +190,12 @@ export async function processAgentJob(payload: AgentJobPayload, options: Process
     phase: InternalPhase,
     outcome: UserOutcome,
     reason?: string,
-    lark?: { status: string; prUrl?: string; prNumber?: number; failureReason?: string }
+    lark?: { status: string; prUrl?: string; prNumber?: number; failureReason?: string },
+    failure?: { category: FailureCategory; nextAction: string }
   ) => {
-    if (reason === undefined) {
+    if (failure !== undefined) {
+      await options.repos.transitionJob(job.jobId, phase, outcome, reason, failure);
+    } else if (reason === undefined) {
       await options.repos.transitionJob(job.jobId, phase, outcome);
     } else {
       await options.repos.transitionJob(job.jobId, phase, outcome, reason);
@@ -199,7 +227,7 @@ export async function processAgentJob(payload: AgentJobPayload, options: Process
       await transitionJob("Failed", "FailedActionable", preExecutionGate.reason, {
         status: "FailedActionable",
         failureReason: preExecutionGate.reason
-      });
+      }, failureDetails("policy"));
       await appendEvent("Failed", "policy.blocked", preExecutionGate.reason ?? "Pre-execution policy gate blocked job", preExecutionGate.artifact);
       return { status: "policy_blocked", runId: run.runId };
     }
@@ -235,7 +263,8 @@ export async function processAgentJob(payload: AgentJobPayload, options: Process
     if (result.status !== "completed") {
       const reason = result.failure?.message ?? `Agent result status: ${result.status}`;
       const outcome = result.retryable ? "FailedInternal" : "FailedActionable";
-      await transitionJob("Failed", outcome, reason, { status: outcome, failureReason: reason });
+      await transitionJob("Failed", outcome, reason, { status: outcome, failureReason: reason },
+        failureDetails("agent", result.retryable ? NEXT_ACTION.infra : NEXT_ACTION.agent));
       await appendEvent("Failed", "worker.failed", reason, result.failure);
       return { status: "failed", runId: run.runId };
     }
@@ -257,7 +286,7 @@ export async function processAgentJob(payload: AgentJobPayload, options: Process
       content: gate.artifact
     });
     if (!gate.allowed) {
-      await transitionJob("Failed", "FailedActionable", gate.reason, { status: "FailedActionable", failureReason: gate.reason });
+      await transitionJob("Failed", "FailedActionable", gate.reason, { status: "FailedActionable", failureReason: gate.reason }, failureDetails("policy"));
       await appendEvent("Failed", "policy.blocked", gate.reason ?? "Policy gate blocked result", gate.artifact);
       return { status: "policy_blocked", runId: run.runId };
     }
@@ -295,7 +324,7 @@ export async function processAgentJob(payload: AgentJobPayload, options: Process
     return { status: "completed", runId: run.runId };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown worker error";
-    await transitionJob("Failed", "FailedInternal", message, { status: "FailedInternal", failureReason: message });
+    await transitionJob("Failed", "FailedInternal", message, { status: "FailedInternal", failureReason: message }, failureDetails("infra"));
     await appendEvent("Failed", "worker.error", message);
     return { status: "failed", runId: run.runId };
   }
