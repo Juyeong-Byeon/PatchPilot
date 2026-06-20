@@ -228,4 +228,25 @@ describe("JobDetail", () => {
     });
     expect(screen.getByRole("button", { name: "구현 진행 중" })).toBeInTheDocument();
   });
+
+  it("shows the live gstack sub-stage under the Implementing node while running", () => {
+    render(
+      <JobDetail
+        {...baseProps}
+        job={{ id: "job_1", phase: "Implementing", outcome: "Running", repository: "example-org/example-repo" }}
+        logs={[
+          {
+            id: "log_1",
+            source: "gstack",
+            stream: "stdout",
+            sequence: 0,
+            text: "=== gstack stage 3/4: review ===",
+            created_at: "2026-06-20T00:00:00.000Z",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("리뷰 3/4")).toBeInTheDocument();
+  });
 });
