@@ -15,6 +15,10 @@ describe("readWorkerEnv", () => {
       WORKER_WORKSPACE_HOST_ROOT: "/Users/me/ticket-to-pr/work/jobs",
       GSTACK_COMMAND: "node",
       GSTACK_ARGS: "/opt/runner/apps/runner/dist/e2e-smoke-runner.js",
+      CODEX_AUTH_FILE: "/Users/me/.codex/auth.json",
+      CODEX_CONFIG_FILE: "/Users/me/.codex/config.toml",
+      CODEX_SKILLS_DIR: "/Users/me/.codex/skills",
+      GSTACK_SKILL_SOURCE_DIR: "/Users/me/gstack",
       JOB_TIMEOUT_SECONDS: "120"
     });
 
@@ -27,6 +31,10 @@ describe("readWorkerEnv", () => {
     expect((env as { workspaceHostRoot?: string }).workspaceHostRoot).toBe("/Users/me/ticket-to-pr/work/jobs");
     expect((env as { gstackCommand?: string }).gstackCommand).toBe("node");
     expect((env as { gstackArgs?: string }).gstackArgs).toBe("/opt/runner/apps/runner/dist/e2e-smoke-runner.js");
+    expect((env as { codexAuthFile?: string }).codexAuthFile).toBe("/Users/me/.codex/auth.json");
+    expect((env as { codexConfigFile?: string }).codexConfigFile).toBe("/Users/me/.codex/config.toml");
+    expect((env as { codexSkillsDir?: string }).codexSkillsDir).toBe("/Users/me/.codex/skills");
+    expect((env as { gstackSkillSourceDir?: string }).gstackSkillSourceDir).toBe("/Users/me/gstack");
     expect(env.jobTimeoutSeconds).toBe(120);
   });
 

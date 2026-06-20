@@ -97,6 +97,10 @@ WORKER_WORKSPACE_ROOT=/work/jobs
 WORKER_WORKSPACE_HOST_ROOT=/absolute/path/to/ticket-to-pr/work/jobs
 GSTACK_COMMAND=
 GSTACK_ARGS=
+CODEX_AUTH_FILE=
+CODEX_CONFIG_FILE=
+CODEX_SKILLS_DIR=
+GSTACK_SKILL_SOURCE_DIR=
 ```
 
 Use `WORKER_EXECUTOR_MODE` and `WORKER_PUBLISHER_MODE` to override worker modes
@@ -131,6 +135,25 @@ GSTACK_COMMAND=node
 GSTACK_ARGS=/opt/runner/apps/runner/dist/e2e-smoke-runner.js
 ```
 
+For a real Codex CLI runner smoke, package Codex into the runner image and pass
+Codex login/config as read-only runtime mounts:
+
+```env
+GSTACK_INSTALL_COMMAND=npm install -g @openai/codex@0.141.0
+GSTACK_COMMAND=node
+GSTACK_ARGS=/opt/runner/apps/runner/dist/codex-agent-runner.js
+CODEX_AUTH_FILE=/Users/me/.codex/auth.json
+CODEX_CONFIG_FILE=/Users/me/.codex/config.toml
+CODEX_SKILLS_DIR=/Users/me/.codex/skills
+GSTACK_SKILL_SOURCE_DIR=/Users/me/gstack
+```
+
+`CODEX_AUTH_FILE` and `CODEX_CONFIG_FILE` are mounted into runner containers as
+read-only seed files and copied into a temporary `CODEX_HOME` inside the
+container. They must not be baked into the runner image. `GSTACK_SKILL_SOURCE_DIR`
+should point at the gstack checkout root, not only `.agents/skills`, because the
+Codex skills directory can contain symlinks to gstack helper binaries.
+
 ## Lark Webhook
 
 Webhook requests must include:
@@ -152,6 +175,24 @@ docker build \
   --build-arg GSTACK_INSTALL_COMMAND='<install gstack-compatible CLI here>' \
   -t ticket-to-pr-runner:local .
 ```
+
+For the Codex-backed runner used by local real-mode smoke tests:
+
+```bash
+GSTACK_INSTALL_COMMAND='npm install -g @openai/codex@0.141.0' \
+GSTACK_COMMAND=node \
+GSTACK_ARGS=/opt/runner/apps/runner/dist/codex-agent-runner.js \
+CODEX_AUTH_FILE="$HOME/.codex/auth.json" \
+CODEX_CONFIG_FILE="$HOME/.codex/config.toml" \
+CODEX_SKILLS_DIR="$HOME/.codex/skills" \
+GSTACK_SKILL_SOURCE_DIR="$HOME/gstack" \
+npm run docker:refresh-runtime
+```
+
+Package the image with a source/version tag such as
+`ghcr.io/<owner>/ticket-to-pr-runner:codex-0.141.0-<git-sha>`. Keep credentials,
+repository allowlists, and GitHub tokens outside the image and inject them only
+at runtime.
 
 In mock mode, no external agent CLI is required.
 

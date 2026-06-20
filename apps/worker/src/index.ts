@@ -26,6 +26,10 @@ export function createWorker(env: WorkerEnv = readWorkerEnv()): BullWorker<Agent
             workspaceHostRoot: env.workspaceHostRoot,
             gstackCommand: env.gstackCommand,
             gstackArgs: env.gstackArgs,
+            codexAuthFile: env.codexAuthFile,
+            codexConfigFile: env.codexConfigFile,
+            codexSkillsDir: env.codexSkillsDir,
+            gstackSkillSourceDir: env.gstackSkillSourceDir,
             policy: {
               repositoryAllowlist: env.repositoryAllowlist,
               protectedPathDenylist: env.protectedPathDenylist

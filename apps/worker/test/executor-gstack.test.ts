@@ -23,6 +23,10 @@ describe("buildGstackDockerCommand", () => {
       workspacePath: "/var/tmp/ticket-to-pr/job_1",
       gstackCommand: "node",
       gstackArgs: "/opt/runner/apps/runner/dist/e2e-smoke-runner.js",
+      codexAuthFile: "/Users/me/.codex/auth.json",
+      codexConfigFile: "/Users/me/.codex/config.toml",
+      codexSkillsDir: "/Users/me/.codex/skills",
+      gstackSkillSourceDir: "/Users/me/gstack",
       job: {
         jobId: "job_1",
         ticketSnapshotId: "ts_1",
@@ -65,6 +69,20 @@ describe("buildGstackDockerCommand", () => {
         "GSTACK_COMMAND=node",
         "-e",
         "GSTACK_ARGS=/opt/runner/apps/runner/dist/e2e-smoke-runner.js",
+        "-v",
+        "/Users/me/.codex/auth.json:/codex-seed/auth.json:ro",
+        "-v",
+        "/Users/me/.codex/config.toml:/codex-seed/config.toml:ro",
+        "-v",
+        "/Users/me/.codex/skills:/codex-seed/skills:ro",
+        "-v",
+        "/Users/me/gstack:/Users/me/gstack:ro",
+        "-e",
+        "CODEX_AUTH_FILE=/codex-seed/auth.json",
+        "-e",
+        "CODEX_CONFIG_FILE=/codex-seed/config.toml",
+        "-e",
+        "CODEX_SKILLS_DIR=/codex-seed/skills",
         "ghcr.io/acme/ticket-runner@sha256:abc"
       ])
     );

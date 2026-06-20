@@ -13,6 +13,10 @@ export interface WorkerEnv {
   workspaceHostRoot?: string;
   gstackCommand?: string;
   gstackArgs?: string;
+  codexAuthFile?: string;
+  codexConfigFile?: string;
+  codexSkillsDir?: string;
+  gstackSkillSourceDir?: string;
   jobTimeoutSeconds: number;
   githubToken?: string;
 }
@@ -40,6 +44,10 @@ export function readWorkerEnv(source: NodeJS.ProcessEnv = process.env): WorkerEn
     workspaceHostRoot: parseOptional(source.WORKER_WORKSPACE_HOST_ROOT ?? source.JOB_WORKSPACE_HOST_ROOT),
     gstackCommand: parseOptional(source.GSTACK_COMMAND),
     gstackArgs: parseOptional(source.GSTACK_ARGS),
+    codexAuthFile: parseOptional(source.CODEX_AUTH_FILE),
+    codexConfigFile: parseOptional(source.CODEX_CONFIG_FILE),
+    codexSkillsDir: parseOptional(source.CODEX_SKILLS_DIR),
+    gstackSkillSourceDir: parseOptional(source.GSTACK_SKILL_SOURCE_DIR),
     jobTimeoutSeconds: parsePositiveInteger(source.WORKER_JOB_TIMEOUT_SECONDS ?? source.JOB_TIMEOUT_SECONDS, 3600),
     githubToken
   };

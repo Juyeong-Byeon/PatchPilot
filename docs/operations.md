@@ -113,18 +113,27 @@ executor or pushing to GitHub.
 
 Use real mode only against a disposable test repository in the allowlist.
 
-1. Build a runner image that includes the real `gstack` or compatible agent CLI.
+1. Build a runner image that includes the real agent CLI. For the Codex-backed
+   runner, install `@openai/codex` and use the adapter entrypoint:
    The stock Dockerfile provides a build hook:
 
    ```bash
-   docker build \
-     -f docker/runner.Dockerfile \
-     --build-arg GSTACK_INSTALL_COMMAND='<install command for your runner CLI>' \
-     -t ticket-to-pr-runner:local .
+   GSTACK_INSTALL_COMMAND='npm install -g @openai/codex@0.141.0' \
+   GSTACK_COMMAND=node \
+   GSTACK_ARGS=/opt/runner/apps/runner/dist/codex-agent-runner.js \
+   CODEX_AUTH_FILE="$HOME/.codex/auth.json" \
+   CODEX_CONFIG_FILE="$HOME/.codex/config.toml" \
+   CODEX_SKILLS_DIR="$HOME/.codex/skills" \
+   GSTACK_SKILL_SOURCE_DIR="$HOME/gstack" \
+   npm run docker:refresh-runtime
    ```
 
+   Do not bake Codex auth into the image. `CODEX_AUTH_FILE`,
+   `CODEX_CONFIG_FILE`, and `CODEX_SKILLS_DIR` are mounted into each runner
+   container as read-only seed inputs. `GSTACK_SKILL_SOURCE_DIR` should point at
+   the gstack checkout root so Codex skill symlinks can resolve helper binaries.
    Do not use `EXECUTOR_MODE=gstack` until `docker run --rm
-   ticket-to-pr-runner:local sh -lc 'command -v gstack'` succeeds, or until
+   ticket-to-pr-runner:local sh -lc 'command -v codex'` succeeds, or until
    `GSTACK_COMMAND` points at another compatible executable in the image.
 2. Set `EXECUTOR_MODE=gstack` and `PUBLISHER_MODE=github`.
 3. Set `GITHUB_TOKEN` to a fine-grained PAT scoped to the test repository.

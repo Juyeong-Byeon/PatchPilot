@@ -12,6 +12,10 @@ export interface GstackCommandInput {
   workspaceMountSource?: string;
   gstackCommand?: string;
   gstackArgs?: string;
+  codexAuthFile?: string;
+  codexConfigFile?: string;
+  codexSkillsDir?: string;
+  gstackSkillSourceDir?: string;
   job: {
     jobId: string;
     ticketSnapshotId: string;
@@ -43,6 +47,10 @@ export interface GstackExecutorOptions {
   workspaceHostRoot?: string;
   gstackCommand?: string;
   gstackArgs?: string;
+  codexAuthFile?: string;
+  codexConfigFile?: string;
+  codexSkillsDir?: string;
+  gstackSkillSourceDir?: string;
   policy?: {
     repositoryAllowlist: string[];
     protectedPathDenylist: string[];
@@ -62,6 +70,18 @@ export function buildGstackDockerCommand(input: GstackCommandInput): CommandSpec
   const authArgs = input.githubToken ? ["-e", `GITHUB_TOKEN=${input.githubToken}`] : [];
   const gstackCommandArgs = input.gstackCommand ? ["-e", `GSTACK_COMMAND=${input.gstackCommand}`] : [];
   const gstackArgs = input.gstackArgs ? ["-e", `GSTACK_ARGS=${input.gstackArgs}`] : [];
+  const codexAuthArgs = input.codexAuthFile
+    ? ["-v", `${input.codexAuthFile}:/codex-seed/auth.json:ro`, "-e", "CODEX_AUTH_FILE=/codex-seed/auth.json"]
+    : [];
+  const codexConfigArgs = input.codexConfigFile
+    ? ["-v", `${input.codexConfigFile}:/codex-seed/config.toml:ro`, "-e", "CODEX_CONFIG_FILE=/codex-seed/config.toml"]
+    : [];
+  const codexSkillsArgs = input.codexSkillsDir
+    ? ["-v", `${input.codexSkillsDir}:/codex-seed/skills:ro`, "-e", "CODEX_SKILLS_DIR=/codex-seed/skills"]
+    : [];
+  const gstackSkillSourceArgs = input.gstackSkillSourceDir
+    ? ["-v", `${input.gstackSkillSourceDir}:${input.gstackSkillSourceDir}:ro`]
+    : [];
   return {
     file: "docker",
     args: [
@@ -91,6 +111,10 @@ export function buildGstackDockerCommand(input: GstackCommandInput): CommandSpec
       `TIMEOUT_SECONDS=${input.timeoutSeconds ?? 3600}`,
       ...gstackCommandArgs,
       ...gstackArgs,
+      ...codexAuthArgs,
+      ...codexConfigArgs,
+      ...codexSkillsArgs,
+      ...gstackSkillSourceArgs,
       ...authArgs,
       input.runnerImage
     ]
@@ -111,6 +135,10 @@ export async function executeGstack(input: ExecutorInput, options: GstackExecuto
     workspaceMountSource,
     gstackCommand: options.gstackCommand,
     gstackArgs: options.gstackArgs,
+    codexAuthFile: options.codexAuthFile,
+    codexConfigFile: options.codexConfigFile,
+    codexSkillsDir: options.codexSkillsDir,
+    gstackSkillSourceDir: options.gstackSkillSourceDir,
     job: input.job,
     run: input.run,
     timeoutSeconds: options.timeoutSeconds,
