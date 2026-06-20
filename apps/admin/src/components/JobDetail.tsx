@@ -151,10 +151,7 @@ export function JobDetail({
       />
       <Card>
         <CardHeader>
-          <div>
-            <CardTitle>{copy.runDiagnostics}</CardTitle>
-            <span className="text-xs text-charcoal">{selectedContext?.label ?? copy.allSteps}</span>
-          </div>
+          <CardTitle>{copy.runDiagnostics}</CardTitle>
           {selectedContext ? (
             <Button type="button" variant="ghost" size="icon" aria-label={copy.clear} title={copy.clear} onClick={() => setSelectedSpan(null)}>
               <X aria-hidden="true" size={15} strokeWidth={2.2} />
