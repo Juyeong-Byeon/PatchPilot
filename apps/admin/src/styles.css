@@ -192,3 +192,25 @@ code,
     transform: translateX(100%);
   }
 }
+
+/*
+ * Respect the OS reduced-motion setting. This is an always-on operational
+ * dashboard with 1s polling, so the looping shimmer skeletons, hover translate
+ * effects, and perpetual spinners are a vestibular-accessibility concern. Keep
+ * functional spinners visible but stop them from looping.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .interactive-card:hover,
+  .interactive-row:hover {
+    transform: none;
+  }
+}

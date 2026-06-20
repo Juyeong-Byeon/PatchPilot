@@ -21,7 +21,11 @@ import { JobList } from "./components/JobList.js";
 import { Badge } from "./components/ui/badge.js";
 import { Button } from "./components/ui/button.js";
 import { Input } from "./components/ui/input.js";
+import { cn } from "./lib/utils.js";
+import { isCompletedJob, isFailedJob, isRunningPhase, type StatusFilter } from "./lib/status.js";
 import { adminCopy, getInitialLocale, localeNames, storeLocale, type AdminCopy, type Locale } from "./i18n.js";
+
+const LIST_REFRESH_MS = 5000;
 
 interface DetailState {
   job: JobRecord | null;
@@ -60,8 +64,10 @@ export default function App() {
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [status, setStatus] = useState<StatusState>(() => (token ? { kind: "ready" } : { kind: "enterToken" }));
-  const [error, setError] = useState<string>("");
+  const [listError, setListError] = useState<string>("");
+  const [detailError, setDetailError] = useState<string>("");
   const [actionState, setActionState] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const selectedJobId = route.page === "detail" ? route.jobId : "";
 
   const selectedJob = useMemo(
@@ -72,9 +78,9 @@ export default function App() {
   const jobStats = useMemo(
     () => ({
       total: jobs.length,
-      running: jobs.filter((job) => ["Queued", "Planning", "Implementing", "PolicyChecking", "Publishing"].includes(String(job.phase))).length,
-      failed: jobs.filter((job) => String(job.phase).startsWith("Failed") || String(job.outcome).startsWith("Failed")).length,
-      completed: jobs.filter((job) => job.phase === "Completed").length
+      running: jobs.filter((job) => isRunningPhase(job.phase)).length,
+      failed: jobs.filter((job) => isFailedJob(job.phase, job.outcome)).length,
+      completed: jobs.filter((job) => isCompletedJob(job.phase, job.outcome)).length
     }),
     [jobs]
   );
@@ -128,6 +134,24 @@ export default function App() {
     return () => window.clearInterval(intervalId);
   }, [selectedJobId]);
 
+  useEffect(() => {
+    if (route.page !== "list" || !token) return;
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "hidden") return;
+      void refreshJobs(token);
+    }, LIST_REFRESH_MS);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refreshJobs(token);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [route.page, token]);
+
   async function refreshJobs(activeToken = token) {
     if (!activeToken.trim()) {
       setStatus({ kind: "enterToken" });
@@ -135,13 +159,13 @@ export default function App() {
     }
 
     setIsLoadingJobs(true);
-    setError("");
+    setListError("");
     try {
       const nextJobs = await fetchJobs(activeToken);
       setJobs(nextJobs);
       setStatus({ kind: "loadedJobs", count: nextJobs.length });
     } catch (caught) {
-      setError(errorMessage(caught, copy));
+      setListError(errorMessage(caught, copy));
       setStatus({ kind: "refreshFailed" });
     } finally {
       setIsLoadingJobs(false);
@@ -150,7 +174,7 @@ export default function App() {
 
   async function refreshDetail(jobId: string, activeToken = token, options: { silent?: boolean } = {}) {
     if (!options.silent) setIsLoadingDetail(true);
-    setError("");
+    setDetailError("");
     try {
       const [job, events, logs, artifacts] = await Promise.all([
         fetchJob(jobId, activeToken),
@@ -160,7 +184,7 @@ export default function App() {
       ]);
       setDetail({ job, events, logs, artifacts });
     } catch (caught) {
-      setError(errorMessage(caught, copy));
+      setDetailError(errorMessage(caught, copy));
     } finally {
       if (!options.silent) setIsLoadingDetail(false);
     }
@@ -175,7 +199,7 @@ export default function App() {
     if (!selectedJobId) return;
 
     setActionState(action);
-    setError("");
+    setDetailError("");
     try {
       if (action === "retry") {
         const retry = await retryJob(selectedJobId, token);
@@ -187,7 +211,7 @@ export default function App() {
       await refreshJobs(token);
       await refreshDetail(selectedJobId, token);
     } catch (caught) {
-      setError(errorMessage(caught, copy));
+      setDetailError(errorMessage(caught, copy));
     } finally {
       setActionState("");
     }
@@ -272,9 +296,9 @@ export default function App() {
                   </Button>
                 </div>
               </form>
-              <div className="mt-2" aria-live="polite">
-                <span className="text-[12px] leading-4 text-charcoal">{renderStatus(status, copy)}</span>
-                {error ? <strong className="mt-2 block rounded-lg bg-danger px-2.5 py-1.5 text-xs font-normal leading-4 text-white">{error}</strong> : null}
+              <div className="mt-2">
+                <span className="block text-[12px] leading-4 text-charcoal" aria-live="polite">{renderStatus(status, copy)}</span>
+                {listError ? <strong role="alert" className="mt-2 block rounded-lg bg-danger px-2.5 py-1.5 text-xs font-normal leading-4 text-white">{listError}</strong> : null}
               </div>
             </section>
 
@@ -318,11 +342,11 @@ export default function App() {
                 </div>
               </div>
               {route.page === "list" ? (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <MetricPill label={copy.totalJobs} value={jobStats.total} />
-                  <MetricPill label={copy.runningJobs} value={jobStats.running} />
-                  <MetricPill label={copy.failedJobs} value={jobStats.failed} />
-                  <MetricPill label={copy.completedJobs} value={jobStats.completed} />
+                <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label={copy.filterJobsLabel}>
+                  <MetricPill label={copy.totalJobs} value={jobStats.total} active={statusFilter === "all"} onClick={() => setStatusFilter("all")} />
+                  <MetricPill label={copy.runningJobs} value={jobStats.running} active={statusFilter === "running"} onClick={() => setStatusFilter("running")} />
+                  <MetricPill label={copy.failedJobs} value={jobStats.failed} active={statusFilter === "failed"} onClick={() => setStatusFilter("failed")} />
+                  <MetricPill label={copy.completedJobs} value={jobStats.completed} active={statusFilter === "completed"} onClick={() => setStatusFilter("completed")} />
                 </div>
               ) : null}
             </div>
@@ -337,6 +361,7 @@ export default function App() {
               isLoading={isLoadingJobs}
               copy={copy}
               locale={locale}
+              statusFilter={statusFilter}
               onOpenJob={openJob}
             />
           ) : (
@@ -350,6 +375,7 @@ export default function App() {
               nowMs={nowMs}
               copy={copy}
               locale={locale}
+              error={detailError}
               onBack={openJobList}
               onRefresh={refreshCurrentDetail}
               onCancel={() => void runAction("cancel")}
@@ -395,15 +421,21 @@ function renderStatus(status: StatusState, copy: AdminCopy): string {
   return copy.cancelRequested(status.phase);
 }
 
-function isRunningPhase(phase: unknown): boolean {
-  return ["Queued", "Planning", "Implementing", "PolicyChecking", "Publishing"].includes(String(phase));
-}
-
-function MetricPill({ label, value }: { label: string; value: number }) {
+function MetricPill({ label, value, active, onClick }: { label: string; value: number; active: boolean; onClick(): void }) {
   return (
-    <span className="inline-flex items-center gap-2 rounded-full border border-hairline-gray bg-linen-white px-2.5 py-1 text-[12px] leading-4 text-charcoal shadow-sm shadow-midnight-ink/5">
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        "interactive-card inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[12px] leading-4 shadow-sm transition-colors",
+        active
+          ? "border-cobalt-surface bg-mist-blue text-cobalt-surface shadow-electric-blue/10"
+          : "border-hairline-gray bg-linen-white text-charcoal shadow-midnight-ink/5 hover:border-electric-blue/40 hover:bg-mist-blue"
+      )}
+    >
       {label}
-      <strong className="font-semibold text-forest-ink">{value}</strong>
-    </span>
+      <strong className={cn("font-semibold", active ? "text-cobalt-surface" : "text-forest-ink")}>{value}</strong>
+    </button>
   );
 }

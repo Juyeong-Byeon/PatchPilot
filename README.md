@@ -121,14 +121,44 @@ Workspaces:
 
 ## Quickstart
 
+One command runs preflight checks, brings up Postgres/Redis/API/worker,
+migrates the database (handling the host-vs-container database URL for you), and
+waits for the API to report ready:
+
+```bash
+npm run setup
+```
+
+On success it prints the admin console URL (`http://localhost:3000`) and the
+`ADMIN_TOKEN` to paste. `npm run setup` is idempotent and safe to re-run.
+
+> **For AI coding agents:** see [docs/agent-setup.md](docs/agent-setup.md) for a
+> deterministic, copy-pasteable setup-and-verify runbook with expected output
+> and failure recovery. Point your agent at that file.
+
+### Stack management
+
+| Command | What it does |
+| --- | --- |
+| `npm run setup` | One-command bootstrap: preflight → up → migrate → wait for ready |
+| `npm run doctor` | Re-run preflight checks (Docker + `.env`) without touching the stack |
+| `npm run status` | Container status plus the `/api/ready` readiness probe |
+| `npm run logs` | Tail `api` and `worker` logs |
+| `npm run down` | Stop the stack |
+| `npm run reset:db` | Wipe the Postgres volume and re-migrate (destructive) |
+
+### Manual setup
+
+Equivalent steps if you prefer to run them yourself:
+
 ```bash
 cp .env.example .env
 npm install
 docker compose build
-docker compose up -d postgres redis
+docker compose up -d --wait postgres redis
 DATABASE_URL=postgres://ticket_to_pr:ticket_to_pr@localhost:5432/ticket_to_pr npm --workspace @ticket-to-pr/db run migrate
 npm run docker:build-runtime
-docker compose up -d api
+docker compose up -d --wait api
 npm run docker:recreate-worker
 docker compose logs -f api worker
 ```
@@ -136,12 +166,17 @@ docker compose logs -f api worker
 Open the admin console at `http://localhost:3000` and enter `ADMIN_TOKEN` from
 your local `.env`.
 
-The checked-in `.env.example` uses Docker service hostnames for containers. Use
-the `localhost` database URL above when running migrations from the host shell.
+The checked-in `.env.example` uses Docker service hostnames (`@postgres`) for
+containers. When running migrations from the host shell, use the `localhost`
+database URL shown above — `npm run setup` does this rewrite automatically.
 
 ## Environment
 
-Required for local compose:
+[`.env.example`](.env.example) is the canonical, commented list of every
+variable — copy it to `.env` and edit. `npm run doctor` validates `.env` against
+the selected executor/publisher modes (and rejects placeholder secrets in real
+mode). The snapshot below is a convenience reference; if it ever disagrees with
+`.env.example`, the file wins.
 
 ```env
 ADMIN_TOKEN=change-me-admin-token
@@ -311,19 +346,33 @@ rebuilt from the same checkout in one command.
 
 The admin UI supports:
 
-- Korean default copy with English language toggle.
-- Job queue scanning with status-first rows.
-- Job detail with failure summary and next action first.
+- Korean default copy with a fully translated English language toggle.
+- Job queue scanning with status-first rows and auto-refresh (paused when the
+  tab is hidden).
+- Clickable status metrics that filter the list (All / Running / Failed /
+  Completed).
+- Job detail with failure summary, failure category, and next action first.
+- Copy-to-clipboard for job id and PR URL.
 - Datadog-style phase spans for `Queued -> Planning -> Implementing ->
   PolicyChecking -> Publishing -> Completed`.
 - Span-to-log correlation by source for faster debugging.
-- Artifacts, raw logs, retry, and cancel actions.
+- Artifacts, raw logs, retry, and cancel actions. Retry is enabled only for
+  internally-failed jobs, matching the backend retry preflight.
 
 Run it directly during frontend work:
 
 ```bash
 npm run dev:admin
 ```
+
+## Health and Readiness
+
+- `GET /api/health` — liveness. Dependency-free; returns `{ "ok": true }` as long
+  as the process is serving.
+- `GET /api/ready` — readiness. Probes Postgres and Redis and returns `503` with
+  the failing dependency when either is down. Used by `npm run setup`,
+  `npm run status`, and the Compose `api` healthcheck to wait for a genuinely
+  usable stack.
 
 ## Development Checks
 

@@ -12,7 +12,7 @@ import { readApiEnv } from "./env.js";
 import { handleGitHubPullRequestWebhook, type GitHubWebhookRepositories } from "./github-webhook.js";
 import { handleLarkWebhook, type AgentQueue, type LarkWebhookInput } from "./lark-webhook.js";
 import { registerAdminRoutes, type AdminRepositories } from "./routes-admin.js";
-import { registerHealthRoutes } from "./routes-health.js";
+import { registerHealthRoutes, type HealthProbes } from "./routes-health.js";
 
 export interface ApiServerDependencies {
   repos: Pick<Repositories, "createJobFromTicket" | "appendEvent"> & Partial<AdminRepositories> & Partial<GitHubWebhookRepositories>;
@@ -24,6 +24,7 @@ export interface ApiServerDependencies {
   allowUnauthenticatedGitHubWebhook?: boolean;
   larkUpdater?: LarkStatusUpdater;
   adminStaticRoot?: string;
+  healthProbes?: HealthProbes;
 }
 
 export async function buildServer(deps: ApiServerDependencies): Promise<FastifyInstance> {
@@ -34,7 +35,7 @@ export async function buildServer(deps: ApiServerDependencies): Promise<FastifyI
     throw new Error("Lark webhook secret is required");
   }
 
-  await registerHealthRoutes(app);
+  await registerHealthRoutes(app, deps.healthProbes);
   if (deps.adminToken && hasAdminRepositories(deps.repos)) {
     await registerAdminRoutes(app, deps.repos, deps.queue, deps.adminToken);
   }
@@ -77,7 +78,16 @@ export async function startServer(): Promise<void> {
     larkWebhookSecret: env.larkWebhookSecret,
     githubWebhookSecret: env.githubWebhookSecret,
     larkUpdater: env.larkRecordUpdaterConfig ? createLarkRecordUpdater(env.larkRecordUpdaterConfig) : undefined,
-    adminStaticRoot: join(process.cwd(), "apps/admin/dist")
+    adminStaticRoot: join(process.cwd(), "apps/admin/dist"),
+    healthProbes: {
+      checkDatabase: async () => {
+        await pool.query("select 1");
+      },
+      checkRedis: async () => {
+        const client = await queue.client;
+        await client.info();
+      }
+    }
   });
 
   const close = async (): Promise<void> => {

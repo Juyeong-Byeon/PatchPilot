@@ -32,6 +32,16 @@ services:
         required: false
     ports:
       - "${HOST_API_PORT:-3000}:3000"
+    healthcheck:
+      test:
+        - "CMD"
+        - "node"
+        - "-e"
+        - "fetch('http://localhost:3000/api/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
     depends_on:
       postgres:
         condition: service_healthy

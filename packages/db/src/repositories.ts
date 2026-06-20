@@ -81,10 +81,18 @@ export class Repositories {
     }
   }
 
-  async transitionJob(jobId: string, phase: InternalPhase, outcome: UserOutcome, reason?: string): Promise<void> {
+  async transitionJob(
+    jobId: string,
+    phase: InternalPhase,
+    outcome: UserOutcome,
+    reason?: string,
+    failure?: { category?: string | null; nextAction?: string | null }
+  ): Promise<void> {
     await this.pool.query(
-      `update jobs set phase=$2, outcome=$3, failure_reason=$4, updated_at=now() where id=$1`,
-      [jobId, phase, outcome, reason ?? null]
+      `update jobs
+       set phase=$2, outcome=$3, failure_reason=$4, failure_category=$5, next_action=$6, updated_at=now()
+       where id=$1`,
+      [jobId, phase, outcome, reason ?? null, failure?.category ?? null, failure?.nextAction ?? null]
     );
   }
 
@@ -505,7 +513,7 @@ export class Repositories {
 
       await client.query(
         `update jobs
-         set phase='Queued', outcome='Queued', failure_reason=null, updated_at=now()
+         set phase='Queued', outcome='Queued', failure_reason=null, failure_category=null, next_action=null, updated_at=now()
          where id=$1`,
         [jobId]
       );

@@ -217,7 +217,38 @@ const stateLabels: Record<Locale, Record<string, string>> = {
     FailedInternal: "내부 실패",
     FailedActionable: "조치 필요 실패"
   },
-  en: {}
+  en: {
+    Queued: "Queued",
+    Planning: "Planning",
+    Implementing: "Implementing",
+    PolicyChecking: "Policy Check",
+    Publishing: "Publishing",
+    Completed: "Completed",
+    Failed: "Failed",
+    CancelRequested: "Cancel Requested",
+    Cancelled: "Cancelled",
+    CancelFailed: "Cancel Failed",
+    NeedsReview: "Needs Review",
+    Running: "Running",
+    FailedInternal: "Internal Failure",
+    FailedActionable: "Action Needed"
+  }
+};
+
+// Stable failure codes written by the worker (see apps/worker/src/worker.ts).
+const failureCategoryLabels: Record<Locale, Record<string, string>> = {
+  ko: {
+    policy: "정책",
+    agent: "에이전트",
+    publish: "게시",
+    infra: "인프라"
+  },
+  en: {
+    policy: "Policy",
+    agent: "Agent",
+    publish: "Publish",
+    infra: "Infrastructure"
+  }
 };
 
 export type AdminCopy = (typeof adminCopy)[Locale];
@@ -242,5 +273,15 @@ export function storeLocale(locale: Locale): void {
 export function translateState(value: unknown, locale: Locale): string {
   if (value === null || value === undefined || value === "") return adminCopy[locale].empty;
   const text = String(value);
-  return stateLabels[locale][text] ?? text;
+  const mapped = stateLabels[locale][text];
+  if (mapped) return mapped;
+  // Defensive fallback for any unmapped state code: split CamelCase so a future
+  // enum value never leaks as a raw "PolicyChecking"-style token.
+  return /^[A-Za-z]+$/.test(text) ? text.replace(/([a-z])([A-Z])/g, "$1 $2") : text;
+}
+
+export function translateFailureCategory(value: unknown, locale: Locale): string {
+  if (value === null || value === undefined || value === "") return adminCopy[locale].empty;
+  const text = String(value);
+  return failureCategoryLabels[locale][text] ?? text;
 }

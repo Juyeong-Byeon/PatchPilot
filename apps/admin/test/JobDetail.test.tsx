@@ -39,6 +39,29 @@ describe("JobDetail", () => {
     );
 
     expect(screen.getByRole("button", { name: "재시도" })).toBeEnabled();
+
+    // Policy-blocked (FailedActionable) jobs are not retryable by the backend, so
+    // the button must stay disabled instead of triggering a 409.
+    rerender(
+      <JobDetail
+        {...baseProps}
+        job={{ id: "job_1", phase: "Failed", outcome: "FailedActionable" }}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "재시도" })).toBeDisabled();
+  });
+
+  it("renders a detail-scoped error alert near the detail view", () => {
+    render(
+      <JobDetail
+        {...baseProps}
+        job={{ id: "job_1", phase: "Implementing", outcome: "Running" }}
+        error="작업 상세를 불러오지 못했습니다."
+      />
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("작업 상세를 불러오지 못했습니다.");
   });
 
   it("uses danger colors for all failure badges", () => {

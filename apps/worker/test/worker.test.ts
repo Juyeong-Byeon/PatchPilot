@@ -223,7 +223,8 @@ describe("processAgentJob", () => {
       "job_1",
       "Failed",
       "FailedActionable",
-      expect.stringContaining("infra/prod.tf")
+      expect.stringContaining("infra/prod.tf"),
+      expect.objectContaining({ category: "policy", nextAction: expect.any(String) })
     );
   });
 
@@ -264,7 +265,8 @@ describe("processAgentJob", () => {
       "job_1",
       "Failed",
       "FailedActionable",
-      expect.stringContaining("evil/web")
+      expect.stringContaining("evil/web"),
+      expect.objectContaining({ category: "policy", nextAction: expect.any(String) })
     );
   });
 
@@ -385,7 +387,8 @@ describe("processAgentJob", () => {
       "job_1",
       "Failed",
       "FailedInternal",
-      expect.stringContaining("Missing pull request body artifact")
+      expect.stringContaining("Missing pull request body artifact"),
+      expect.objectContaining({ category: "infra", nextAction: expect.any(String) })
     );
   });
 
