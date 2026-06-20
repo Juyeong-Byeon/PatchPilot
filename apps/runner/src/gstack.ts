@@ -4,7 +4,12 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { createSecretRedactor } from "@ticket-to-pr/core";
 
-export function runGstack(repoDir: string, logPath: string, timeoutMs: number, killGraceMs = 2000): Promise<void> {
+export function runGstack(
+  repoDir: string,
+  logPath: string,
+  timeoutMs: number,
+  killGraceMs = 2000,
+): Promise<void> {
   const command = process.env.GSTACK_COMMAND?.trim() || "gstack";
   const args = parseArgs(process.env.GSTACK_ARGS ?? "ship --no-push");
 
@@ -18,7 +23,11 @@ export function runGstack(repoDir: string, logPath: string, timeoutMs: number, k
     mkdir(path.dirname(logPath), { recursive: true })
       .then(() => {
         const logStream = createWriteStream(logPath, { flags: "a" });
-        child = spawn(command, args, { cwd: repoDir, detached: true, stdio: ["ignore", "pipe", "pipe"] });
+        child = spawn(command, args, {
+          cwd: repoDir,
+          detached: true,
+          stdio: ["ignore", "pipe", "pipe"],
+        });
         if (child.stdout === null || child.stderr === null) {
           throw new Error("gstack process streams were not available");
         }
@@ -80,7 +89,11 @@ export function runGstack(repoDir: string, logPath: string, timeoutMs: number, k
               return;
             }
 
-            reject(new Error(`gstack failed with exit code ${code ?? "null"}${signal ? ` signal ${signal}` : ""}`));
+            reject(
+              new Error(
+                `gstack failed with exit code ${code ?? "null"}${signal ? ` signal ${signal}` : ""}`,
+              ),
+            );
           });
         });
       })
@@ -88,7 +101,10 @@ export function runGstack(repoDir: string, logPath: string, timeoutMs: number, k
   });
 }
 
-function terminateProcessGroup(child: ReturnType<typeof spawn> | undefined, signal: NodeJS.Signals): void {
+function terminateProcessGroup(
+  child: ReturnType<typeof spawn> | undefined,
+  signal: NodeJS.Signals,
+): void {
   if (!child?.pid) return;
   try {
     process.kill(-child.pid, signal);
@@ -98,8 +114,5 @@ function terminateProcessGroup(child: ReturnType<typeof spawn> | undefined, sign
 }
 
 function parseArgs(value: string): string[] {
-  return value
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
+  return value.trim().split(/\s+/).filter(Boolean);
 }
