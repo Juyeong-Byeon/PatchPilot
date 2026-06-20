@@ -212,7 +212,7 @@ const stateLabels: Record<Locale, Record<string, string>> = {
     CancelRequested: "취소 요청",
     Cancelled: "취소됨",
     CancelFailed: "취소 실패",
-    NeedsReview: "검토 필요",
+    NeedsReview: "PR 리뷰 대기중",
     Running: "실행 중",
     FailedInternal: "내부 실패",
     FailedActionable: "조치 필요 실패"

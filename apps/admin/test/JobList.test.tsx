@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { JobList } from "../src/components/JobList.js";
 import { adminCopy } from "../src/i18n.js";
@@ -43,5 +43,58 @@ describe("JobList", () => {
     fireEvent.click(row);
 
     expect(onOpenJob).toHaveBeenCalledWith("job_09774cca-aa0f-4134-9093-6cebc794e385");
+  });
+
+  it("highlights running jobs with an animated status indicator", () => {
+    render(
+      <JobList
+        copy={adminCopy.ko}
+        isLoading={false}
+        jobs={[
+          {
+            id: "job_running_11111111-1111-4111-8111-111111111111",
+            repository: "Juyeong-Byeon/test_pr_repo",
+            phase: "Implementing",
+            outcome: "Running",
+            updated_at: "2026-06-20T00:25:00.000Z"
+          },
+          {
+            id: "job_done_22222222-2222-4222-8222-222222222222",
+            repository: "Juyeong-Byeon/test_pr_repo",
+            phase: "Completed",
+            outcome: "NeedsReview",
+            updated_at: "2026-06-20T00:26:00.000Z"
+          },
+          {
+            id: "job_failed_33333333-3333-4333-8333-333333333333",
+            repository: "Juyeong-Byeon/test_pr_repo",
+            phase: "Failed",
+            outcome: "FailedInternal",
+            updated_at: "2026-06-20T00:27:00.000Z"
+          }
+        ]}
+        locale="ko"
+        selectedJobId=""
+        onOpenJob={vi.fn()}
+      />
+    );
+
+    const runningRow = screen.getByRole("button", { name: /11111111-1111-4111-8111-111111111111/ });
+    const completedRow = screen.getByRole("button", { name: /22222222-2222-4222-8222-222222222222/ });
+    const failedRow = screen.getByRole("button", { name: /33333333-3333-4333-8333-333333333333/ });
+
+    expect(runningRow).toHaveAttribute("data-state", "running");
+    expect(within(runningRow).getByRole("status", { name: "실행 중" })).toHaveClass("animate-spin");
+    expect(within(runningRow).getAllByTestId("job-status-pill")).toHaveLength(1);
+    expect(within(runningRow).getByText("구현 중")).toBeInTheDocument();
+    expect(within(runningRow).queryByText("실행 중")).not.toBeInTheDocument();
+    expect(completedRow).not.toHaveAttribute("data-state", "running");
+    expect(within(completedRow).queryByRole("status", { name: "실행 중" })).not.toBeInTheDocument();
+    expect(within(completedRow).getAllByTestId("job-status-pill")).toHaveLength(1);
+    expect(within(completedRow).getByText("PR 리뷰 대기중")).toBeInTheDocument();
+    expect(within(completedRow).queryByText("완료")).not.toBeInTheDocument();
+    expect(within(failedRow).getAllByTestId("job-status-pill")).toHaveLength(1);
+    expect(within(failedRow).getByText("내부 실패")).toBeInTheDocument();
+    expect(within(failedRow).queryByText("실패")).not.toBeInTheDocument();
   });
 });

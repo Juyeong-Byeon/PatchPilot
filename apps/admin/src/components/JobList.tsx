@@ -1,5 +1,5 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
-import { ArrowRight, Search } from "lucide-react";
+import { ArrowRight, LoaderCircle, Search } from "lucide-react";
 import type { JobRecord } from "../api.js";
 import { translateState, type AdminCopy, type Locale } from "../i18n.js";
 import { cn } from "../lib/utils.js";
@@ -66,6 +66,8 @@ export function JobList({ jobs, selectedJobId, isLoading, copy, locale, onOpenJo
             {isLoading && jobs.length === 0 ? <JobListSkeleton /> : null}
             {filteredJobs.map((job) => {
               const selected = job.id === selectedJobId;
+              const running = isRunningJob(job);
+              const status = getPrimaryStatus(job, locale, copy, running);
               const repo = compactText(job.repository, copy, 120);
               const jobUuid = jobUuidValue(job.id, copy);
 
@@ -73,11 +75,14 @@ export function JobList({ jobs, selectedJobId, isLoading, copy, locale, onOpenJo
                 <li key={job.id}>
                   <button
                     aria-current={selected ? "page" : undefined}
+                    data-state={running ? "running" : undefined}
                     className={cn(
                       "interactive-row group grid w-full border-b border-l-4 border-hairline-gray px-4 py-3 text-left text-[13px] leading-5 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-electric-blue/25",
                       rowColumns,
                       selected
                         ? "border-l-cobalt-surface bg-mist-blue text-true-black shadow-inner"
+                        : running
+                          ? "border-l-cobalt-surface bg-mint-veil text-true-black shadow-[inset_4px_0_0_rgba(18,126,227,0.18),0_8px_24px_rgba(18,126,227,0.10)]"
                         : "border-l-transparent bg-linen-white text-true-black hover:border-l-electric-blue hover:bg-mist-blue"
                     )}
                     type="button"
@@ -98,9 +103,16 @@ export function JobList({ jobs, selectedJobId, isLoading, copy, locale, onOpenJo
                       </span>
                     </span>
                     <span className="min-w-0 pr-4">
-                      <span className="flex flex-wrap gap-1.5">
-                        <StatusPill value={job.outcome ?? copy.unknown} label={translateState(job.outcome, locale)} />
-                        <StatusPill value={job.phase ?? copy.unknown} label={translateState(job.phase, locale)} subtle />
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        {running ? (
+                          <LoaderCircle
+                            aria-label={copy.runningJobs}
+                            className="status-glow-active size-5 shrink-0 animate-spin rounded-full text-cobalt-surface"
+                            role="status"
+                            strokeWidth={2.3}
+                          />
+                        ) : null}
+                        <StatusPill value={status.value} label={status.label} />
                       </span>
                     </span>
                     <span className="flex min-w-0 items-start">
@@ -149,16 +161,47 @@ function openWithKeyboard(event: KeyboardEvent<HTMLButtonElement>, jobId: string
   onOpenJob(jobId);
 }
 
-function StatusPill({ value, label, subtle = false }: { value: string; label: string; subtle?: boolean }) {
+function isRunningJob(job: JobRecord): boolean {
+  return ["Queued", "Planning", "Implementing", "PolicyChecking", "Publishing"].includes(String(job.phase));
+}
+
+function getPrimaryStatus(job: JobRecord, locale: Locale, copy: AdminCopy, running: boolean): { value: string; label: string } {
+  if (running) {
+    return { value: "Running", label: formatRunningPhase(job, locale, copy) };
+  }
+
+  const outcome = getValue(job, "outcome");
+  if (outcome) {
+    return { value: outcome, label: translateState(outcome, locale) };
+  }
+
+  const phase = getValue(job, "phase");
+  if (phase) {
+    return { value: phase, label: translateState(phase, locale) };
+  }
+
+  return { value: copy.unknown, label: copy.unknown };
+}
+
+function formatRunningPhase(job: JobRecord, locale: Locale, copy: AdminCopy): string {
+  const phase = translateState(job.phase, locale);
+  if (!phase || phase === copy.empty) return copy.runningJobs;
+  return locale === "ko" ? `${phase} 중` : phase;
+}
+
+function StatusPill({ value, label }: { value: string; label: string }) {
   const normalized = value.toLowerCase();
-  const variant = subtle
-    ? "outline"
-    : normalized.includes("failed") || normalized.includes("cancel")
+  const variant =
+    normalized.includes("failed") || normalized.includes("cancel")
       ? "dark"
       : normalized.includes("review") || normalized.includes("queued")
         ? "warning"
         : "default";
-  return <Badge variant={variant}>{label}</Badge>;
+  return (
+    <Badge data-testid="job-status-pill" variant={variant}>
+      {label}
+    </Badge>
+  );
 }
 
 function getValue(job: JobRecord, ...keys: string[]): string | undefined {
