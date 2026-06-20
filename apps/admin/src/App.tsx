@@ -193,13 +193,6 @@ export default function App() {
   }
 
   const pageTitle = route.page === "list" ? copy.jobs : copy.jobDetail;
-  const pageSubtitle =
-    route.page === "list"
-      ? ""
-      : selectedJob
-        ? `${String(selectedJob.repository ?? copy.repository)} · ${selectedJob.id}`
-        : copy.loadingDetail;
-
   return (
     <div className="grid min-h-screen bg-linen text-true-black lg:grid-cols-[236px_minmax(0,1fr)]">
       <aside className="border-b border-hairline-gray bg-linen-white lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
@@ -302,17 +295,14 @@ export default function App() {
                   </h1>
                 </div>
               </div>
-              {pageSubtitle ? (
-                <p className="mt-2 max-w-3xl truncate text-[13px] leading-5 text-charcoal" title={pageSubtitle}>
-                  {pageSubtitle}
-                </p>
+              {route.page === "list" ? (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <MetricPill label={copy.totalJobs} value={jobStats.total} />
+                  <MetricPill label={copy.runningJobs} value={jobStats.running} />
+                  <MetricPill label={copy.failedJobs} value={jobStats.failed} />
+                  <MetricPill label={copy.completedJobs} value={jobStats.completed} />
+                </div>
               ) : null}
-              <div className="mt-4 flex flex-wrap gap-2">
-                <MetricPill label={copy.totalJobs} value={jobStats.total} />
-                <MetricPill label={copy.runningJobs} value={jobStats.running} />
-                <MetricPill label={copy.failedJobs} value={jobStats.failed} />
-                <MetricPill label={copy.completedJobs} value={jobStats.completed} />
-              </div>
             </div>
           </section>
         </header>
