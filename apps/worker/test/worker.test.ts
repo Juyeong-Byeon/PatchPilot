@@ -109,6 +109,70 @@ describe("processAgentJob", () => {
     expect(repos.transitionJob).toHaveBeenLastCalledWith("job_1", "Completed", "NeedsReview");
   });
 
+  it("writes simplified progress logs for the operator while each phase runs", async () => {
+    const repos = createRepos();
+    const executor = vi.fn().mockImplementation(async (input) => {
+      await writeFile(join(input.run.workspacePath, "PR_BODY.md"), "Generated body");
+      return completedResult;
+    });
+    const publisher = vi.fn().mockResolvedValue({
+      repository: "acme/web",
+      targetBranch: "main",
+      workBranch: "ticket-to-pr/job_1",
+      baseSha: "base",
+      headSha: "head",
+      pushSha: "0123456789abcdef0123456789abcdef01234567",
+      commitShas: ["abc"],
+      prUrl: "https://github.local/acme/web/pull/mock-job_1",
+      prNumber: 1,
+      prTitle: "Fix login",
+      prBody: "Generated body"
+    });
+
+    await processAgentJob(
+      { jobId: "job_1", ticketSnapshotId: "ts_1", larkRecordId: "rec_1", triggerVersion: "v1" },
+      {
+        repos,
+        executor,
+        publisher,
+        policyConfig: { repositoryAllowlist: ["acme/web"], protectedPathDenylist: ["infra/**"] },
+        ids: {
+          runId: () => "run_1",
+          artifactId: (kind) => `artifact_${kind}`,
+          pullRequestId: () => "pr_1"
+        }
+      }
+    );
+
+    const progressLogs = repos.appendLog.mock.calls.map(([entry]) => entry).filter((entry) => entry.stream === "progress");
+
+    expect(progressLogs.map((entry) => entry.sequence)).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(progressLogs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: "worker",
+          text: "[계획] 작업자가 티켓과 저장소 정책을 확인하고 있습니다."
+        }),
+        expect.objectContaining({
+          source: "gstack",
+          text: "[구현] 실행 워크스페이스를 준비하고 AI runner를 시작합니다."
+        }),
+        expect.objectContaining({
+          source: "policy",
+          text: "[정책 검사] 변경 파일과 저장소 허용 정책을 검사하고 있습니다."
+        }),
+        expect.objectContaining({
+          source: "publisher",
+          text: "[게시] 브랜치를 푸시하고 draft PR을 생성하고 있습니다."
+        }),
+        expect.objectContaining({
+          source: "worker",
+          text: "[완료] PR 생성이 끝났습니다."
+        })
+      ])
+    );
+  });
+
   it("stores policy gate artifacts and fails actionable when protected files change", async () => {
     const repos = createRepos();
     const executor = vi.fn().mockResolvedValue({ ...completedResult, changedFiles: ["infra/prod.tf"] });

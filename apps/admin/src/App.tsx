@@ -68,6 +68,7 @@ export default function App() {
     () => route.page === "detail" ? detail.job ?? jobs.find((job) => job.id === route.jobId) ?? null : null,
     [detail.job, jobs, route]
   );
+  const detailRefreshMs = isRunningPhase(selectedJob?.phase) ? 1000 : 3000;
   const jobStats = useMemo(
     () => ({
       total: jobs.length,
@@ -115,10 +116,10 @@ export default function App() {
 
     const intervalId = window.setInterval(() => {
       void refreshDetail(selectedJobId, token, { silent: true });
-    }, 3000);
+    }, detailRefreshMs);
 
     return () => window.clearInterval(intervalId);
-  }, [selectedJobId, token]);
+  }, [detailRefreshMs, selectedJobId, token]);
 
   useEffect(() => {
     if (!selectedJobId) return;
@@ -392,6 +393,10 @@ function renderStatus(status: StatusState, copy: AdminCopy): string {
   if (status.kind === "refreshFailed") return copy.refreshFailed;
   if (status.kind === "retryQueued") return copy.retryQueued(status.attempt);
   return copy.cancelRequested(status.phase);
+}
+
+function isRunningPhase(phase: unknown): boolean {
+  return ["Queued", "Planning", "Implementing", "PolicyChecking", "Publishing"].includes(String(phase));
 }
 
 function MetricPill({ label, value }: { label: string; value: number }) {

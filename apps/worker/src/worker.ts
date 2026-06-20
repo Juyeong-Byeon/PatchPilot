@@ -33,7 +33,7 @@ export interface WorkerRunRecord {
 
 export interface AppendExecutorLogInput {
   source: string;
-  stream: "stdout" | "stderr";
+  stream: "stdout" | "stderr" | "progress";
   sequence: number;
   text: string;
   redactionApplied?: boolean;
@@ -139,16 +139,26 @@ export async function processAgentJob(payload: AgentJobPayload, options: Process
     workBranch
   });
 
-  const appendEvent = (phase: InternalPhase, eventType: string, message: string, metadata?: unknown) =>
+  let progressSequence = 0;
+  const appendEvent = (phase: InternalPhase, eventType: string, message: string, metadata?: unknown, source = "worker") =>
     options.repos.appendEvent({
       jobId: job.jobId,
       runId: run.runId,
       attempt: run.attempt,
       phase,
       eventType,
-      source: "worker",
+      source,
       message,
       metadata
+    });
+  const appendProgressLog = (phase: InternalPhase, source: string, message: string) =>
+    options.repos.appendLog({
+      jobId: job.jobId,
+      runId: run.runId,
+      source,
+      stream: "progress",
+      sequence: progressSequence++,
+      text: `[${phaseLabel(phase)}] ${message}`
     });
 
   try {
@@ -179,14 +189,18 @@ export async function processAgentJob(payload: AgentJobPayload, options: Process
 
     await options.repos.transitionJob(job.jobId, "Planning", deriveOutcome("Planning"));
     await appendEvent("Planning", "worker.started", "Worker picked up job");
+    await appendProgressLog("Planning", "worker", "작업자가 티켓과 저장소 정책을 확인하고 있습니다.");
 
     await options.repos.transitionJob(job.jobId, "Implementing", deriveOutcome("Implementing"));
+    await appendEvent("Implementing", "runner.started", "AI runner started", undefined, "gstack");
+    await appendProgressLog("Implementing", "gstack", "실행 워크스페이스를 준비하고 AI runner를 시작합니다.");
     const rawResult = await options.executor({
       job,
       run,
       appendLog: (log) => options.repos.appendLog({ jobId: job.jobId, runId: run.runId, ...log })
     });
     const result = parseAgentResult(rawResult);
+    await appendProgressLog("Implementing", "gstack", "AI runner 결과를 수집하고 있습니다.");
     await options.repos.saveArtifact({
       id: artifactId("agent-result"),
       jobId: job.jobId,
@@ -209,6 +223,8 @@ export async function processAgentJob(payload: AgentJobPayload, options: Process
     }
 
     await options.repos.transitionJob(job.jobId, "PolicyChecking", deriveOutcome("PolicyChecking"));
+    await appendEvent("PolicyChecking", "policy.started", "Policy gate started", undefined, "policy");
+    await appendProgressLog("PolicyChecking", "policy", "변경 파일과 저장소 허용 정책을 검사하고 있습니다.");
     const gate = evaluatePolicyGate(result, {
       repository: job.repository,
       repositoryAllowlist: options.policyConfig.repositoryAllowlist,
@@ -235,6 +251,8 @@ export async function processAgentJob(payload: AgentJobPayload, options: Process
     }
 
     await options.repos.transitionJob(job.jobId, "Publishing", deriveOutcome("Publishing"));
+    await appendEvent("Publishing", "publisher.started", "Publisher started", undefined, "publisher");
+    await appendProgressLog("Publishing", "publisher", "브랜치를 푸시하고 draft PR을 생성하고 있습니다.");
     const published = await options.publisher(await createPublishInput(job, run, result));
     await options.repos.savePullRequest({
       id: pullRequestId(),
@@ -251,6 +269,7 @@ export async function processAgentJob(payload: AgentJobPayload, options: Process
     });
     await options.repos.transitionJob(job.jobId, "Completed", deriveOutcome("Completed"));
     await appendEvent("Completed", "worker.completed", "Worker completed job", { prUrl: published.prUrl });
+    await appendProgressLog("Completed", "worker", "PR 생성이 끝났습니다.");
     return { status: "completed", runId: run.runId };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown worker error";
@@ -297,6 +316,33 @@ async function createPublishInput(job: WorkerJobRecord, run: WorkerRunRecord, re
 
 export function createAttemptWorkBranch(jobId: string, attempt: number): string {
   return attempt > 1 ? `ticket-to-pr/${jobId}-attempt-${attempt}` : `ticket-to-pr/${jobId}`;
+}
+
+function phaseLabel(phase: InternalPhase): string {
+  switch (phase) {
+    case "Queued":
+      return "대기";
+    case "Planning":
+      return "계획";
+    case "Implementing":
+      return "구현";
+    case "PolicyChecking":
+      return "정책 검사";
+    case "Publishing":
+      return "게시";
+    case "Completed":
+      return "완료";
+    case "Failed":
+      return "실패";
+    case "CancelRequested":
+      return "취소 요청";
+    case "Cancelling":
+      return "취소 중";
+    case "Cancelled":
+      return "취소됨";
+    default:
+      return phase;
+  }
 }
 
 async function readPullRequestDraftBody(workspacePath: string, bodyPath: string): Promise<string> {

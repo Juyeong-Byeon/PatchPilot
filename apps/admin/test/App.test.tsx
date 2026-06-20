@@ -25,7 +25,7 @@ describe("App", () => {
     expect(screen.getByLabelText("관리자 인증키")).toBeInTheDocument();
   });
 
-  it("polls selected job detail including logs every three seconds", async () => {
+  it("polls running job detail including logs every second", async () => {
     vi.useFakeTimers();
     window.localStorage.setItem("ADMIN_TOKEN", "access-key");
     window.history.pushState(null, "", "/jobs/job_1");
@@ -60,7 +60,7 @@ describe("App", () => {
     expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/api/jobs/job_1/logs"))).toHaveLength(1);
 
     await act(async () => {
-      vi.advanceTimersByTime(3000);
+      vi.advanceTimersByTime(1000);
       await Promise.resolve();
       await Promise.resolve();
     });

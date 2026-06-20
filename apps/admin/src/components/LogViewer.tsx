@@ -95,8 +95,10 @@ export function LogViewer({ logs, totalCount, copy, contextLabel, onClearContext
 
 function formatLine(line: LogLine, copy: AdminCopy): string {
   const time = line.created_at ?? "-";
-  const source = line.source ?? copy.sourceSystem;
   const stream = line.stream ?? copy.logDefaultStream;
+  if (stream === "progress") return `[${time}] ${line.text ?? ""}`;
+
+  const source = line.source ?? copy.sourceSystem;
   const sequence = line.sequence ?? "-";
   const redacted = line.redaction_applied ? ` ${copy.redacted}` : "";
   return `[${time}] [${source}/${stream} #${sequence}${redacted}] ${line.text ?? ""}`;
