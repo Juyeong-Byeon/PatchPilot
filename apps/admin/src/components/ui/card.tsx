@@ -4,7 +4,7 @@ import { cn } from "../../lib/utils.js";
 export function Card({ className, ...props }: HTMLAttributes<HTMLElement>) {
   return (
     <section
-      className={cn("min-w-0 rounded-xl border border-hairline-gray bg-linen-white", className)}
+      className={cn("surface-card min-w-0 rounded-xl border border-hairline-gray bg-linen-white", className)}
       {...props}
     />
   );

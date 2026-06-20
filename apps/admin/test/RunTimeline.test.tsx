@@ -162,6 +162,6 @@ describe("RunTimeline", () => {
     expect(failedImplementing).toBeInTheDocument();
     expect(container.querySelector('[data-phase="Failed"]')).not.toBeInTheDocument();
     expect(within(failedImplementing as HTMLElement).getByText("실패 지점")).toBeInTheDocument();
-    expect(container.querySelector(".bg-red-600")).toBeInTheDocument();
+    expect(container.querySelector(".bg-danger")).toBeInTheDocument();
   });
 });

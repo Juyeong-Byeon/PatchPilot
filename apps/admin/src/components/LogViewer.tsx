@@ -32,7 +32,7 @@ export function LogViewer({ logs, totalCount, copy, contextLabel, onClearContext
     });
   }, [logs, query, source]);
   const text = filteredLogs.map((line) => formatLine(line, copy)).join("\n");
-  const shellClassName = variant === "embedded" ? "rounded-xl border border-hairline-gray bg-linen-white" : "";
+  const shellClassName = variant === "embedded" ? "surface-card-soft rounded-xl border border-hairline-gray bg-linen-white" : "";
 
   const content = (
     <>
@@ -57,10 +57,10 @@ export function LogViewer({ logs, totalCount, copy, contextLabel, onClearContext
             onChange={(event) => setQuery(event.target.value)}
           />
           <Button type="button" variant="outline" size="icon" aria-label={copy.copy} title={copy.copy} onClick={() => void navigator.clipboard?.writeText(text)}>
-            <Copy aria-hidden="true" size={16} strokeWidth={2.2} />
+            <Copy data-icon aria-hidden="true" strokeWidth={2.2} />
           </Button>
           <Button type="button" size="icon" aria-label={copy.download} title={copy.download} onClick={() => downloadText(text)}>
-            <Download aria-hidden="true" size={16} strokeWidth={2.2} />
+            <Download data-icon aria-hidden="true" strokeWidth={2.2} />
           </Button>
         </div>
       </div>
@@ -68,12 +68,12 @@ export function LogViewer({ logs, totalCount, copy, contextLabel, onClearContext
         <div className="flex items-center justify-between gap-3 border-b border-hairline-gray bg-linen px-4 py-2 text-[12px] text-charcoal">
           <span>{copy.correlatedLogs}: {contextLabel}</span>
           <Button type="button" variant="ghost" size="icon" aria-label={copy.clear} title={copy.clear} onClick={onClearContext}>
-            <X aria-hidden="true" size={15} strokeWidth={2.2} />
+            <X data-icon aria-hidden="true" strokeWidth={2.2} />
           </Button>
         </div>
       ) : null}
       <div>
-        <pre className="m-0 max-h-[320px] min-h-[180px] overflow-auto bg-linen p-4 text-[12px] leading-5 whitespace-pre-wrap text-true-black">{text || copy.noLogs}</pre>
+        <pre className="terminal-surface m-0 max-h-[320px] min-h-[180px] overflow-auto p-4 text-[12px] leading-5 whitespace-pre-wrap text-true-black">{text || copy.noLogs}</pre>
       </div>
     </>
   );

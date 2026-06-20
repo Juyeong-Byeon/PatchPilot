@@ -211,11 +211,11 @@ export default function App() {
 
   const pageTitle = route.page === "list" ? copy.jobs : copy.jobDetail;
   return (
-    <div className="grid min-h-screen bg-linen text-true-black lg:grid-cols-[236px_minmax(0,1fr)]">
-      <aside className="border-b border-hairline-gray bg-linen-white lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
+    <div className="admin-shell grid min-h-screen text-true-black lg:grid-cols-[236px_minmax(0,1fr)]">
+      <aside className="admin-sidebar border-b border-hairline-gray bg-linen-white/95 lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
         <div className="flex h-full flex-col gap-5 px-4 py-4">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-cobalt-surface text-paper">
+            <span className="status-glow-active flex size-8 shrink-0 items-center justify-center rounded-lg bg-cobalt-surface text-paper">
               <CheckCircle2 aria-hidden="true" size={18} strokeWidth={2.4} />
             </span>
             <div className="min-w-0">
@@ -226,7 +226,7 @@ export default function App() {
 
           <nav className="grid gap-1" aria-label={copy.appTitle}>
             <button
-              className="inline-flex h-9 items-center gap-2 rounded-lg bg-mist-blue px-3 text-left text-[13px] font-medium text-cobalt-surface transition-colors"
+              className="interactive-card inline-flex h-9 items-center gap-2 rounded-lg border border-electric-blue/20 bg-mist-blue px-3 text-left text-[13px] font-medium text-cobalt-surface shadow-sm shadow-electric-blue/10 transition-colors hover:border-electric-blue/40 hover:bg-sage-wash"
               type="button"
               onClick={openJobList}
             >
@@ -236,7 +236,7 @@ export default function App() {
           </nav>
 
           <div className="mt-auto grid gap-4">
-            <section className="rounded-xl border border-hairline-gray bg-linen p-3">
+            <section className="surface-card-soft rounded-xl border border-hairline-gray bg-linen-white p-3">
               <div className="mb-2">
                 <strong className="text-[13px] font-semibold text-forest-ink">{copy.tokenLabel}</strong>
               </div>
@@ -269,7 +269,7 @@ export default function App() {
               </form>
               <div className="mt-2" aria-live="polite">
                 <span className="text-[12px] leading-4 text-charcoal">{renderStatus(status, copy)}</span>
-                {error ? <strong className="mt-2 block rounded-lg bg-forest-ink px-2.5 py-1.5 text-xs font-normal leading-4 text-linen-white">{error}</strong> : null}
+                {error ? <strong className="mt-2 block rounded-lg bg-danger px-2.5 py-1.5 text-xs font-normal leading-4 text-white">{error}</strong> : null}
               </div>
             </section>
 
@@ -296,13 +296,13 @@ export default function App() {
       </aside>
 
       <div className="flex min-w-0 flex-col">
-        <header className="border-b border-hairline-gray bg-linen-white/90">
+        <header className="admin-topbar border-b border-hairline-gray bg-linen-white/86">
           <section className="mx-auto max-w-[var(--page-max-width)] px-4 py-5 md:px-6">
             <div className="min-w-0">
               <div className="flex min-w-0 items-start gap-3">
                 {route.page === "detail" ? (
                   <Button type="button" variant="ghost" size="icon" aria-label={copy.backToJobs} title={copy.backToJobs} onClick={openJobList}>
-                    <ChevronLeft aria-hidden="true" size={18} strokeWidth={2.3} />
+                    <ChevronLeft data-icon aria-hidden="true" strokeWidth={2.3} />
                   </Button>
                 ) : null}
                 <div className="min-w-0">
@@ -392,7 +392,7 @@ function renderStatus(status: StatusState, copy: AdminCopy): string {
 
 function MetricPill({ label, value }: { label: string; value: number }) {
   return (
-    <span className="inline-flex items-center gap-2 rounded-full bg-mist-blue px-2.5 py-1 text-[12px] leading-4 text-charcoal">
+    <span className="inline-flex items-center gap-2 rounded-full border border-hairline-gray bg-linen-white px-2.5 py-1 text-[12px] leading-4 text-charcoal shadow-sm shadow-midnight-ink/5">
       {label}
       <strong className="font-semibold text-forest-ink">{value}</strong>
     </span>

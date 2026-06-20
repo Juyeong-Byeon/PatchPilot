@@ -52,9 +52,9 @@ export function RunTimeline({ events, copy, locale, selectedSpan, onSelectSpan, 
         <span className="text-[12px] leading-4 text-charcoal">{formatDuration(totalDuration(spans))}</span>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-hairline-gray">
+      <div className="surface-card-soft overflow-x-auto rounded-lg border border-hairline-gray">
         <table className="w-full min-w-[680px] border-collapse text-left text-[13px]" aria-label={copy.traceFlow}>
-          <thead className="bg-linen-white text-[12px] font-medium leading-4 text-charcoal">
+          <thead className="bg-linen-white/95 text-[12px] font-medium leading-4 text-charcoal">
             <tr className="border-b border-hairline-gray">
               <th className="w-[52px] px-3 py-2">{copy.traceColumnIndex}</th>
               <th className="px-3 py-2">{copy.traceColumnStage}</th>
@@ -71,7 +71,7 @@ export function RunTimeline({ events, copy, locale, selectedSpan, onSelectSpan, 
               return (
                 <tr
                   aria-selected={selected}
-                  className={`cursor-pointer border-b border-hairline-gray outline-none last:border-b-0 hover:bg-mist-blue ${selected ? "bg-mist-blue ring-1 ring-inset ring-electric-blue" : ""}`}
+                  className={`interactive-row cursor-pointer border-b border-hairline-gray outline-none last:border-b-0 hover:bg-mist-blue focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-electric-blue/25 ${selected ? "bg-mist-blue ring-1 ring-inset ring-electric-blue" : ""}`}
                   data-phase={span.phase}
                   data-status={span.status}
                   key={span.phase}
@@ -84,7 +84,7 @@ export function RunTimeline({ events, copy, locale, selectedSpan, onSelectSpan, 
                     <span className="block truncate font-medium text-true-black">{translateState(span.phase, locale)}</span>
                   </td>
                   <td className="px-3 py-2">
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[12px] leading-4 ${statusClassName(span.status)}`}>
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[12px] leading-4 shadow-sm ${statusClassName(span.status)}`}>
                       {statusLabel(span.status, copy)}
                     </span>
                   </td>
@@ -93,9 +93,9 @@ export function RunTimeline({ events, copy, locale, selectedSpan, onSelectSpan, 
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex items-center justify-end gap-3">
-                      <div className="h-2 w-32 overflow-hidden rounded-full bg-linen">
+                      <div className="h-2 w-32 overflow-hidden rounded-full bg-linen shadow-inner">
                         <div
-                          className={`h-full rounded-full ${durationBarClassName(span.status)}`}
+                          className={`duration-bar h-full rounded-full ${durationBarClassName(span.status)}`}
                           data-duration-bar
                           style={{ width: `${durationWidth(span.durationMs, totalRunDuration)}%` }}
                         />
@@ -131,19 +131,27 @@ export function RunTimeline({ events, copy, locale, selectedSpan, onSelectSpan, 
 }
 
 function buildPhaseSpans(events: RunEvent[], currentPhase: string | undefined, nowMs: number): PhaseSpan[] {
-  const observedPhases = events.map((event) => String(event.phase ?? "")).filter(Boolean);
+  const observedPhases = events
+    .map((event) => String(event.phase ?? ""))
+    .filter((phase) => phase && !isTerminalFailurePhase(phase));
   const phaseFlow = [...standardPhaseFlow];
   for (const phase of observedPhases) {
     if (!phaseFlow.includes(phase)) phaseFlow.push(phase);
   }
 
+  const failedPhase = resolveFailedPhase(events, currentPhase);
   const eventTimes = events.map((event) => parseDate(event.created_at)).filter((time): time is number => time !== null);
   const firstOverall = eventTimes[0] ?? 0;
   const lastObservedIndex = Math.max(
     -1,
     ...phaseFlow.map((phase, index) => (events.some((event) => event.phase === phase) ? index : -1))
   );
-  const currentIndex = currentPhase && phaseFlow.includes(currentPhase) ? phaseFlow.indexOf(currentPhase) : lastObservedIndex;
+  const currentIndex =
+    failedPhase && phaseFlow.includes(failedPhase)
+      ? phaseFlow.indexOf(failedPhase)
+      : currentPhase && phaseFlow.includes(currentPhase)
+        ? phaseFlow.indexOf(currentPhase)
+        : lastObservedIndex;
   const terminalPhase = isTerminalPhase(currentPhase);
 
   return phaseFlow.map((phase, index) => {
@@ -154,7 +162,7 @@ function buildPhaseSpans(events: RunEvent[], currentPhase: string | undefined, n
     const nextPhaseTime = events
       .map((event) => ({ phase: event.phase, time: parseDate(event.created_at) }))
       .find((event) => event.time !== null && event.time > firstTime && event.phase !== phase)?.time;
-    const hasFailure = phaseEvents.some(isFailureEvent);
+    const hasFailure = phase === failedPhase || phaseEvents.some(isFailureEvent);
     const status = hasFailure
       ? "failed"
       : phaseEvents.length === 0
@@ -193,14 +201,14 @@ function statusLabel(status: PhaseSpan["status"], copy: AdminCopy): string {
 }
 
 function statusClassName(status: PhaseSpan["status"]): string {
-  if (status === "failed") return "bg-forest-ink text-linen-white";
-  if (status === "active") return "bg-cobalt-surface text-paper";
-  if (status === "complete") return "bg-mist-blue text-forest-ink";
+  if (status === "failed") return "bg-danger text-white shadow-danger/15";
+  if (status === "active") return "bg-cobalt-surface text-paper shadow-cobalt-surface/15";
+  if (status === "complete") return "bg-mist-blue text-forest-ink shadow-electric-blue/10";
   return "border border-hairline-gray bg-linen-white text-graphite";
 }
 
 function durationBarClassName(status: PhaseSpan["status"]): string {
-  if (status === "failed") return "bg-forest-ink";
+  if (status === "failed") return "bg-danger";
   if (status === "pending") return "bg-hairline-gray";
   return "bg-electric-blue";
 }
@@ -220,6 +228,33 @@ function isFailureEvent(event: RunEvent): boolean {
   return phase.includes("fail") || phase.includes("cancel") || type.includes("failed") || type.includes("error") || type.includes("blocked") || type.includes("cancel");
 }
 
+function resolveFailedPhase(events: RunEvent[], currentPhase: string | undefined): string | undefined {
+  const terminalFailureIndex = events.findIndex((event) => isTerminalFailurePhase(event.phase));
+  if (terminalFailureIndex >= 0) {
+    return lastNonTerminalPhase(events, terminalFailureIndex - 1);
+  }
+
+  if (isTerminalFailure(currentPhase)) {
+    return lastNonTerminalPhase(events, events.length - 1);
+  }
+
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    const phase = String(event.phase ?? "");
+    if (phase && !isTerminalFailurePhase(phase) && isFailureEvent(event)) return phase;
+  }
+
+  return undefined;
+}
+
+function lastNonTerminalPhase(events: RunEvent[], startIndex: number): string | undefined {
+  for (let index = startIndex; index >= 0; index -= 1) {
+    const phase = String(events[index]?.phase ?? "");
+    if (phase && !isTerminalFailurePhase(phase)) return phase;
+  }
+  return undefined;
+}
+
 function parseDate(value: string | undefined): number | null {
   if (!value) return null;
   const time = Date.parse(value);
@@ -228,6 +263,16 @@ function parseDate(value: string | undefined): number | null {
 
 function isTerminalPhase(phase: string | undefined): boolean {
   return phase === "Completed" || phase === "Failed" || phase === "Cancelled" || phase === "CancelFailed";
+}
+
+function isTerminalFailure(phase: string | undefined): boolean {
+  const normalized = String(phase ?? "").toLowerCase();
+  return normalized.includes("fail") || normalized.includes("cancel");
+}
+
+function isTerminalFailurePhase(phase: unknown): boolean {
+  const normalized = String(phase ?? "").toLowerCase();
+  return normalized === "failed" || normalized === "cancelled" || normalized === "cancelfailed";
 }
 
 function formatDuration(milliseconds: number): string {

@@ -127,6 +127,123 @@ describe("RunStepGraph", () => {
 
     expect(implementingButton).toBeInTheDocument();
     expect(within(graph).queryByRole("button", { name: "실패 실패 지점" })).not.toBeInTheDocument();
-    expect(container.querySelector(".bg-red-600")).toBeInTheDocument();
+    expect(container.querySelector(".bg-danger")).toBeInTheDocument();
+  });
+
+  it("does not draw a failed connector after the failed phase", () => {
+    const { container } = render(
+      <RunStepGraph
+        copy={adminCopy.ko}
+        locale="ko"
+        currentPhase="Failed"
+        events={[
+          {
+            id: "1",
+            phase: "Queued",
+            event_type: "job.enqueued",
+            source: "api",
+            message: "accepted",
+            created_at: "2026-06-20T00:00:00.000Z"
+          },
+          {
+            id: "2",
+            phase: "Planning",
+            event_type: "worker.started",
+            source: "worker",
+            message: "runner started",
+            created_at: "2026-06-20T00:00:01.000Z"
+          },
+          {
+            id: "3",
+            phase: "Planning",
+            event_type: "worker.error",
+            source: "worker",
+            message: "gstack runner exited with code 125",
+            created_at: "2026-06-20T00:00:02.000Z"
+          }
+        ]}
+      />
+    );
+
+    const graph = screen.getByRole("list", { name: "처리 단계 그래프" });
+
+    expect(within(graph).getByRole("button", { name: "계획 실패 지점" })).toBeInTheDocument();
+    expect(container.querySelector('[data-connector-from="Planning"]')).toHaveClass("bg-hairline-gray");
+    expect(container.querySelector('[data-connector-from="Planning"]')).not.toHaveClass("bg-danger");
+  });
+
+  it("reserves vertical room for selected and failed graph states", () => {
+    const { container } = render(
+      <RunStepGraph
+        copy={adminCopy.ko}
+        locale="ko"
+        currentPhase="Failed"
+        selectedStep={{ phase: "Planning" }}
+        events={[
+          {
+            id: "1",
+            phase: "Queued",
+            event_type: "job.enqueued",
+            source: "api",
+            message: "accepted",
+            created_at: "2026-06-20T00:00:00.000Z"
+          },
+          {
+            id: "2",
+            phase: "Planning",
+            event_type: "worker.error",
+            source: "worker",
+            message: "gstack runner exited with code 125",
+            created_at: "2026-06-20T00:00:02.000Z"
+          }
+        ]}
+      />
+    );
+
+    expect(container.querySelector("[data-step-graph-scroll]")).toHaveClass("py-5");
+    expect(container.querySelector("[data-step-graph-item]")).toHaveClass("min-h-[132px]");
+  });
+
+  it("marks intermediate standard phases complete when the run is completed", () => {
+    render(
+      <RunStepGraph
+        copy={adminCopy.ko}
+        locale="ko"
+        currentPhase="Completed"
+        events={[
+          {
+            id: "1",
+            phase: "Queued",
+            event_type: "job.enqueued",
+            source: "api",
+            message: "accepted",
+            created_at: "2026-06-20T00:00:00.000Z"
+          },
+          {
+            id: "2",
+            phase: "Implementing",
+            event_type: "worker.started",
+            source: "worker",
+            message: "runner started",
+            created_at: "2026-06-20T00:00:05.000Z"
+          },
+          {
+            id: "3",
+            phase: "Completed",
+            event_type: "worker.completed",
+            source: "worker",
+            message: "pull request opened",
+            created_at: "2026-06-20T00:00:30.000Z"
+          }
+        ]}
+      />
+    );
+
+    const graph = screen.getByRole("list", { name: "처리 단계 그래프" });
+
+    expect(within(graph).getByRole("button", { name: "계획 완료" })).toBeInTheDocument();
+    expect(within(graph).getByRole("button", { name: "정책 검사 완료" })).toBeInTheDocument();
+    expect(within(graph).getByRole("button", { name: "게시 완료" })).toBeInTheDocument();
+    expect(within(graph).queryByText("건너뜀")).not.toBeInTheDocument();
   });
 });

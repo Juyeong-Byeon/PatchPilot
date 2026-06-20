@@ -87,13 +87,13 @@ export function JobDetail({
             <div className="flex flex-wrap gap-2">
               {onRefresh ? (
                 <Button type="button" variant="outline" size="icon" aria-label={copy.refresh} title={copy.refresh} disabled={isLoading} onClick={onRefresh}>
-                  <RotateCcw aria-hidden="true" size={16} strokeWidth={2.2} />
+                  <RotateCcw data-icon aria-hidden="true" className={isLoading ? "animate-spin" : ""} strokeWidth={2.2} />
                 </Button>
               ) : null}
               {job.pr_url ? (
                 <a
                   aria-label={copy.openPr}
-                  className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg border border-hairline-gray bg-linen-white text-cobalt-surface no-underline hover:border-electric-blue hover:bg-mist-blue"
+                  className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg border border-hairline-gray bg-linen-white text-cobalt-surface no-underline shadow-sm shadow-midnight-ink/5 transition-all duration-150 hover:-translate-y-0.5 hover:border-electric-blue hover:bg-mist-blue hover:shadow-md hover:shadow-electric-blue/10"
                   href={job.pr_url}
                   rel="noreferrer"
                   title={copy.openPr}
@@ -110,7 +110,7 @@ export function JobDetail({
                 disabled={retryDisabled}
                 onClick={onRetry}
               >
-                <Undo2 aria-hidden="true" size={16} strokeWidth={2.2} />
+                <Undo2 data-icon aria-hidden="true" strokeWidth={2.2} />
               </Button>
               <Button
                 type="button"
@@ -121,15 +121,15 @@ export function JobDetail({
                 disabled={cancelDisabled}
                 onClick={onCancel}
               >
-                <Ban aria-hidden="true" size={16} strokeWidth={2.2} />
+                <Ban data-icon aria-hidden="true" strokeWidth={2.2} />
               </Button>
             </div>
           </div>
 
           {(job.failure_reason || job.next_action) ? (
-            <section className="rounded-xl border border-forest-ink bg-linen px-4 py-3">
+            <section className="status-glow-failed rounded-xl border border-danger bg-danger-wash px-4 py-3">
               <p className="text-[12px] leading-4 text-charcoal">{copy.failureSummary}</p>
-              {job.failure_reason ? <p className="mt-2 break-words text-[13px] leading-5 text-forest-ink">{job.failure_reason}</p> : null}
+              {job.failure_reason ? <p className="mt-2 break-words text-[13px] leading-5 text-danger">{job.failure_reason}</p> : null}
               {job.next_action ? (
                 <p className="mt-2 break-words text-[13px] leading-5 text-true-black">
                   <span className="text-charcoal">{copy.nextAction}: </span>
@@ -161,7 +161,7 @@ export function JobDetail({
           <CardTitle>{copy.runDiagnostics}</CardTitle>
           {selectedContext ? (
             <Button type="button" variant="ghost" size="icon" aria-label={copy.clear} title={copy.clear} onClick={() => setSelectedSpan(null)}>
-              <X aria-hidden="true" size={15} strokeWidth={2.2} />
+              <X data-icon aria-hidden="true" strokeWidth={2.2} />
             </Button>
           ) : null}
         </CardHeader>
@@ -227,7 +227,7 @@ function ArtifactPanel({
               <time className="text-charcoal md:text-right">{formatDate(artifact.created_at, locale, copy)}</time>
             </header>
             {artifact.content ? (
-              <pre className="m-0 max-h-[280px] overflow-auto bg-linen-white p-4 text-[12px] leading-5 whitespace-pre-wrap break-all text-true-black">
+              <pre className="terminal-surface m-0 max-h-[280px] overflow-auto p-4 text-[12px] leading-5 whitespace-pre-wrap break-all text-true-black">
                 {formatJson(artifact.content)}
               </pre>
             ) : null}
@@ -240,7 +240,7 @@ function ArtifactPanel({
 
   if (variant === "embedded") {
     return (
-      <section className="rounded-xl border border-hairline-gray bg-linen-white" aria-label={copy.artifacts}>
+      <section className="surface-card-soft rounded-xl border border-hairline-gray bg-linen-white" aria-label={copy.artifacts}>
         {content}
       </section>
     );
@@ -416,7 +416,7 @@ function isWithinContext(value: string | undefined, context: StepContext): boole
 
 function Fact({ label, value, tone }: { label: string; value: string; tone?: "danger" }) {
   return (
-    <div className="min-w-0 rounded-xl border border-hairline-gray bg-linen p-3">
+    <div className="min-w-0 rounded-xl border border-hairline-gray bg-linen-white p-3">
       <dt className="mb-2 text-[12px] leading-4 text-charcoal">{label}</dt>
       <dd className="m-0 break-words text-[13px] leading-5 text-true-black">
         {tone === "danger" && value !== "-" ? <Badge variant="dark">{value}</Badge> : value}
