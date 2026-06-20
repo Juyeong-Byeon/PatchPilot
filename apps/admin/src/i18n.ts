@@ -7,9 +7,9 @@ export const localeNames: Record<Locale, string> = {
 
 export const adminCopy = {
   ko: {
-    documentTitle: "티켓-PR 운영 관리자",
+    documentTitle: "PRonaut 운영 관리자",
     appEyebrow: "관리자 콘솔",
-    appTitle: "티켓-PR 운영",
+    appTitle: "PRonaut",
     navTrace: "실행 추적",
     controlPanel: "운영 컨트롤",
     footerScope: "작업 큐 · 실행 로그 · PR 아티팩트",
@@ -103,9 +103,9 @@ export const adminCopy = {
     empty: "-"
   },
   en: {
-    documentTitle: "Ticket-to-PR Operations",
+    documentTitle: "PRonaut Operations",
     appEyebrow: "Admin Console",
-    appTitle: "Ticket-to-PR Operations",
+    appTitle: "PRonaut",
     navTrace: "Run Trace",
     controlPanel: "Operations Control",
     footerScope: "Job queue · runtime logs · PR artifacts",

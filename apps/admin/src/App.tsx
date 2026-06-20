@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, ChevronLeft, ListChecks } from "lucide-react";
+import { ChevronLeft, ListChecks } from "lucide-react";
+import adminLogo from "./assets/admin-logo.png";
 import {
   cancelJob,
   fetchJob,
@@ -215,9 +216,12 @@ export default function App() {
       <aside className="admin-sidebar border-b border-hairline-gray bg-linen-white/95 lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
         <div className="flex h-full flex-col gap-5 px-4 py-4">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="status-glow-active flex size-8 shrink-0 items-center justify-center rounded-lg bg-cobalt-surface text-paper">
-              <CheckCircle2 aria-hidden="true" size={18} strokeWidth={2.4} />
-            </span>
+            <img
+              src={adminLogo}
+              alt=""
+              aria-hidden="true"
+              className="status-glow-active size-9 shrink-0 rounded-xl border border-electric-blue/20 bg-mist-blue object-cover"
+            />
             <div className="min-w-0">
               <p className="text-[12px] leading-4 text-charcoal">{copy.appEyebrow}</p>
               <strong className="block truncate text-[17px] font-semibold leading-5 text-forest-ink">{copy.appTitle}</strong>

@@ -1,7 +1,7 @@
-# AI Ticket-to-PR Agent Platform
+# PRonaut
 
 <p align="center">
-  <img src="docs/assets/ticket-to-pr-logo.png" alt="Ticket-to-PR alien pet coding mascot" width="520" />
+  <img src="docs/assets/ticket-to-pr-logo.png" alt="PRonaut alien pet coding mascot" width="520" />
 </p>
 
 Lark Base tickets in, audited GitHub pull requests out.
