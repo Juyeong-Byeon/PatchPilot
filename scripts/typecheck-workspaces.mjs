@@ -14,7 +14,7 @@ const projects = [
   { name: "@ticket-to-pr/api", dir: "apps/api" },
   { name: "@ticket-to-pr/worker", dir: "apps/worker" },
   { name: "@ticket-to-pr/runner", dir: "apps/runner" },
-  { name: "@ticket-to-pr/admin", dir: "apps/admin" }
+  { name: "@ticket-to-pr/admin", dir: "apps/admin" },
 ];
 
 let checkedCount = 0;
@@ -28,7 +28,7 @@ for (const project of projects) {
   checkedCount += 1;
   execFileSync(tscBin, ["-p", path.join(project.dir, "tsconfig.json"), "--pretty", "false"], {
     cwd: rootDir,
-    stdio: "inherit"
+    stdio: "inherit",
   });
 }
 
@@ -60,5 +60,9 @@ function hasSourceFiles(srcDir) {
 }
 
 function isSourceFile(filePath) {
-  return (filePath.endsWith(".ts") || filePath.endsWith(".tsx")) && !filePath.endsWith(".test.ts") && !filePath.endsWith(".test.tsx");
+  return (
+    (filePath.endsWith(".ts") || filePath.endsWith(".tsx")) &&
+    !filePath.endsWith(".test.ts") &&
+    !filePath.endsWith(".test.tsx")
+  );
 }

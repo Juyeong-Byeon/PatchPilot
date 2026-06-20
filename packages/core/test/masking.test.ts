@@ -6,7 +6,7 @@ describe("maskSecrets", () => {
     expect(maskSecrets("token github_pat_1234567890abcdef")).toContain("[REDACTED_GITHUB_TOKEN]");
     expect(maskSecrets("token ghs_1234567890abcdef")).toContain("[REDACTED_GITHUB_TOKEN]");
     expect(maskSecrets("authorization: bearer gho_1234567890abcdef")).toBe(
-      "authorization: bearer [REDACTED_GITHUB_TOKEN]"
+      "authorization: bearer [REDACTED_GITHUB_TOKEN]",
     );
   });
 

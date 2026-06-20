@@ -53,7 +53,7 @@ export function readWorkerEnv(source: NodeJS.ProcessEnv = process.env): WorkerEn
     gstackSkillSourceDir: parseOptional(source.GSTACK_SKILL_SOURCE_DIR),
     jobTimeoutSeconds: parsePositiveInteger(source.WORKER_JOB_TIMEOUT_SECONDS ?? source.JOB_TIMEOUT_SECONDS, 3600),
     githubToken,
-    larkRecordUpdaterConfig: readLarkRecordUpdaterConfig(source)
+    larkRecordUpdaterConfig: readLarkRecordUpdaterConfig(source),
   };
 }
 

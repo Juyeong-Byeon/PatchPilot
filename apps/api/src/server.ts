@@ -15,7 +15,9 @@ import { registerAdminRoutes, type AdminRepositories } from "./routes-admin.js";
 import { registerHealthRoutes, type HealthProbes } from "./routes-health.js";
 
 export interface ApiServerDependencies {
-  repos: Pick<Repositories, "createJobFromTicket" | "appendEvent"> & Partial<AdminRepositories> & Partial<GitHubWebhookRepositories>;
+  repos: Pick<Repositories, "createJobFromTicket" | "appendEvent"> &
+    Partial<AdminRepositories> &
+    Partial<GitHubWebhookRepositories>;
   queue: AgentQueue;
   adminToken?: string;
   larkWebhookSecret?: string;
@@ -50,7 +52,8 @@ export async function buildServer(deps: ApiServerDependencies): Promise<FastifyI
     app.post("/webhooks/github", async (request, reply) => {
       if (githubWebhookSecret) assertGitHubWebhookSignature(request, githubWebhookSecret, readRawBody(request));
       if (request.headers["x-github-event"] !== "pull_request") return reply.code(200).send({ action: "ignored" });
-      if (!hasGitHubWebhookRepositories(deps.repos)) return reply.code(503).send({ error: "GitHub webhook repository unavailable" });
+      if (!hasGitHubWebhookRepositories(deps.repos))
+        return reply.code(503).send({ error: "GitHub webhook repository unavailable" });
 
       const result = await handleGitHubPullRequestWebhook(request.body as never, deps.repos, deps.larkUpdater);
       const statusCode = result.action === "completed" ? 202 : 200;
@@ -60,7 +63,7 @@ export async function buildServer(deps: ApiServerDependencies): Promise<FastifyI
   if (deps.adminStaticRoot && existsSync(deps.adminStaticRoot)) {
     await app.register(fastifyStatic, {
       root: deps.adminStaticRoot,
-      prefix: "/"
+      prefix: "/",
     });
   }
 
@@ -86,8 +89,8 @@ export async function startServer(): Promise<void> {
       checkRedis: async () => {
         const client = await queue.client;
         await client.info();
-      }
-    }
+      },
+    },
   });
 
   const close = async (): Promise<void> => {
@@ -107,7 +110,9 @@ export async function startServer(): Promise<void> {
 }
 
 function hasGitHubWebhookRepositories(
-  repos: Pick<Repositories, "createJobFromTicket" | "appendEvent"> & Partial<AdminRepositories> & Partial<GitHubWebhookRepositories>
+  repos: Pick<Repositories, "createJobFromTicket" | "appendEvent"> &
+    Partial<AdminRepositories> &
+    Partial<GitHubWebhookRepositories>,
 ): repos is Pick<Repositories, "createJobFromTicket" | "appendEvent"> & GitHubWebhookRepositories {
   return typeof repos.markPullRequestMerged === "function";
 }
@@ -134,7 +139,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 }
 
 function hasAdminRepositories(
-  repos: Pick<Repositories, "createJobFromTicket" | "appendEvent"> & Partial<AdminRepositories>
+  repos: Pick<Repositories, "createJobFromTicket" | "appendEvent"> & Partial<AdminRepositories>,
 ): repos is Pick<Repositories, "createJobFromTicket" | "appendEvent"> & AdminRepositories {
   return (
     typeof repos.listJobs === "function" &&

@@ -26,7 +26,7 @@ describe("health routes", () => {
   it("readiness reports ok when dependencies answer", async () => {
     const app = await buildHealthApp({
       checkDatabase: async () => undefined,
-      checkRedis: async () => undefined
+      checkRedis: async () => undefined,
     });
     const res = await app.inject({ method: "GET", url: "/api/ready" });
     expect(res.statusCode).toBe(200);
@@ -38,7 +38,7 @@ describe("health routes", () => {
       checkDatabase: async () => {
         throw new Error("connection refused");
       },
-      checkRedis: async () => undefined
+      checkRedis: async () => undefined,
     });
     const res = await app.inject({ method: "GET", url: "/api/ready" });
     expect(res.statusCode).toBe(503);

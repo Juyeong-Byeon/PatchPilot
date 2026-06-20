@@ -63,7 +63,7 @@ export interface WorkerRepositories {
     phase: InternalPhase,
     outcome: UserOutcome,
     reason?: string,
-    failure?: { category?: string | null; nextAction?: string | null }
+    failure?: { category?: string | null; nextAction?: string | null },
   ): Promise<void>;
   appendEvent(input: {
     jobId: string;
@@ -84,7 +84,14 @@ export interface WorkerRepositories {
     redactionApplied?: boolean;
     text: string;
   }): Promise<void>;
-  saveArtifact(input: { id: string; jobId: string; runId?: string; kind: string; path?: string | null; content?: unknown }): Promise<void>;
+  saveArtifact(input: {
+    id: string;
+    jobId: string;
+    runId?: string;
+    kind: string;
+    path?: string | null;
+    content?: unknown;
+  }): Promise<void>;
   savePullRequest(input: {
     id: string;
     jobId: string;
@@ -100,7 +107,13 @@ export interface WorkerRepositories {
     prTitle: string;
     prBody: string;
   }): Promise<void>;
-  appendAuditEvent(input: { actor: string; action: string; jobId?: string; runId?: string; metadata?: unknown }): Promise<void>;
+  appendAuditEvent(input: {
+    actor: string;
+    action: string;
+    jobId?: string;
+    runId?: string;
+    metadata?: unknown;
+  }): Promise<void>;
 }
 
 export interface ProcessAgentJobOptions {
@@ -126,10 +139,13 @@ const NEXT_ACTION: Record<FailureCategory, string> = {
   policy: "정책 위반 사항(저장소 허용 목록·보호 경로·대상 브랜치·검증 증거)을 해결한 뒤 티켓을 다시 승인하세요.",
   agent: "티켓 설명과 완료 조건(DoD)을 보완한 뒤 티켓을 다시 승인하세요.",
   publish: "대상 저장소 권한과 브랜치 충돌 여부를 확인한 뒤 관리자 콘솔에서 재시도하세요.",
-  infra: "일시적 인프라 오류일 수 있습니다. 관리자 콘솔에서 재시도하세요."
+  infra: "일시적 인프라 오류일 수 있습니다. 관리자 콘솔에서 재시도하세요.",
 };
 
-function failureDetails(category: FailureCategory, nextAction = NEXT_ACTION[category]): {
+function failureDetails(
+  category: FailureCategory,
+  nextAction = NEXT_ACTION[category],
+): {
   category: FailureCategory;
   nextAction: string;
 } {
@@ -142,7 +158,10 @@ export type ProcessAgentJobResult =
   | { status: "policy_blocked"; runId: string }
   | { status: "cancelled"; runId: string };
 
-export async function processAgentJob(payload: AgentJobPayload, options: ProcessAgentJobOptions): Promise<ProcessAgentJobResult> {
+export async function processAgentJob(
+  payload: AgentJobPayload,
+  options: ProcessAgentJobOptions,
+): Promise<ProcessAgentJobResult> {
   const job = await options.repos.getJobForWorker(payload.jobId);
   if (!job) throw new Error(`Job not found: ${payload.jobId}`);
   if (payload.ticketSnapshotId && job.ticketSnapshotId !== payload.ticketSnapshotId) {
@@ -162,11 +181,17 @@ export async function processAgentJob(payload: AgentJobPayload, options: Process
     jobId: job.jobId,
     attempt,
     workspacePath,
-    workBranch
+    workBranch,
   });
 
   let progressSequence = 0;
-  const appendEvent = (phase: InternalPhase, eventType: string, message: string, metadata?: unknown, source = "worker") =>
+  const appendEvent = (
+    phase: InternalPhase,
+    eventType: string,
+    message: string,
+    metadata?: unknown,
+    source = "worker",
+  ) =>
     options.repos.appendEvent({
       jobId: job.jobId,
       runId: run.runId,
@@ -175,7 +200,7 @@ export async function processAgentJob(payload: AgentJobPayload, options: Process
       eventType,
       source,
       message,
-      metadata
+      metadata,
     });
   const appendProgressLog = (phase: InternalPhase, source: string, message: string) =>
     options.repos.appendLog({
@@ -184,14 +209,14 @@ export async function processAgentJob(payload: AgentJobPayload, options: Process
       source,
       stream: "progress",
       sequence: progressSequence++,
-      text: `[${phaseLabel(phase)}] ${message}`
+      text: `[${phaseLabel(phase)}] ${message}`,
     });
   const transitionJob = async (
     phase: InternalPhase,
     outcome: UserOutcome,
     reason?: string,
     lark?: { status: string; prUrl?: string; prNumber?: number; failureReason?: string },
-    failure?: { category: FailureCategory; nextAction: string }
+    failure?: { category: FailureCategory; nextAction: string },
   ) => {
     if (failure !== undefined) {
       await options.repos.transitionJob(job.jobId, phase, outcome, reason, failure);
@@ -214,7 +239,7 @@ export async function processAgentJob(payload: AgentJobPayload, options: Process
       repository: job.repository,
       repositoryAllowlist: options.policyConfig.repositoryAllowlist,
       protectedPathDenylist: options.policyConfig.protectedPathDenylist,
-      expectedTargetBranch: job.targetBranch
+      expectedTargetBranch: job.targetBranch,
     });
     if (!preExecutionGate.allowed) {
       await options.repos.saveArtifact({
@@ -222,13 +247,24 @@ export async function processAgentJob(payload: AgentJobPayload, options: Process
         jobId: job.jobId,
         runId: run.runId,
         kind: "policy-gate",
-        content: preExecutionGate.artifact
+        content: preExecutionGate.artifact,
       });
-      await transitionJob("Failed", "FailedActionable", preExecutionGate.reason, {
-        status: "FailedActionable",
-        failureReason: preExecutionGate.reason
-      }, failureDetails("policy"));
-      await appendEvent("Failed", "policy.blocked", preExecutionGate.reason ?? "Pre-execution policy gate blocked job", preExecutionGate.artifact);
+      await transitionJob(
+        "Failed",
+        "FailedActionable",
+        preExecutionGate.reason,
+        {
+          status: "FailedActionable",
+          failureReason: preExecutionGate.reason,
+        },
+        failureDetails("policy"),
+      );
+      await appendEvent(
+        "Failed",
+        "policy.blocked",
+        preExecutionGate.reason ?? "Pre-execution policy gate blocked job",
+        preExecutionGate.artifact,
+      );
       return { status: "policy_blocked", runId: run.runId };
     }
 
@@ -242,7 +278,7 @@ export async function processAgentJob(payload: AgentJobPayload, options: Process
     const rawResult = await options.executor({
       job,
       run,
-      appendLog: (log) => options.repos.appendLog({ jobId: job.jobId, runId: run.runId, ...log })
+      appendLog: (log) => options.repos.appendLog({ jobId: job.jobId, runId: run.runId, ...log }),
     });
     const result = parseAgentResult(rawResult);
     await appendProgressLog("Implementing", "gstack", "AI runner 결과를 수집하고 있습니다.");
@@ -251,7 +287,7 @@ export async function processAgentJob(payload: AgentJobPayload, options: Process
       jobId: job.jobId,
       runId: run.runId,
       kind: "agent-result",
-      content: result
+      content: result,
     });
 
     if (await isCancelRequested(options.repos, job.jobId)) {
@@ -263,8 +299,13 @@ export async function processAgentJob(payload: AgentJobPayload, options: Process
     if (result.status !== "completed") {
       const reason = result.failure?.message ?? `Agent result status: ${result.status}`;
       const outcome = result.retryable ? "FailedInternal" : "FailedActionable";
-      await transitionJob("Failed", outcome, reason, { status: outcome, failureReason: reason },
-        failureDetails("agent", result.retryable ? NEXT_ACTION.infra : NEXT_ACTION.agent));
+      await transitionJob(
+        "Failed",
+        outcome,
+        reason,
+        { status: outcome, failureReason: reason },
+        failureDetails("agent", result.retryable ? NEXT_ACTION.infra : NEXT_ACTION.agent),
+      );
       await appendEvent("Failed", "worker.failed", reason, result.failure);
       return { status: "failed", runId: run.runId };
     }
@@ -276,17 +317,23 @@ export async function processAgentJob(payload: AgentJobPayload, options: Process
       repository: job.repository,
       repositoryAllowlist: options.policyConfig.repositoryAllowlist,
       protectedPathDenylist: options.policyConfig.protectedPathDenylist,
-      expectedTargetBranch: job.targetBranch
+      expectedTargetBranch: job.targetBranch,
     });
     await options.repos.saveArtifact({
       id: artifactId("policy-gate"),
       jobId: job.jobId,
       runId: run.runId,
       kind: "policy-gate",
-      content: gate.artifact
+      content: gate.artifact,
     });
     if (!gate.allowed) {
-      await transitionJob("Failed", "FailedActionable", gate.reason, { status: "FailedActionable", failureReason: gate.reason }, failureDetails("policy"));
+      await transitionJob(
+        "Failed",
+        "FailedActionable",
+        gate.reason,
+        { status: "FailedActionable", failureReason: gate.reason },
+        failureDetails("policy"),
+      );
       await appendEvent("Failed", "policy.blocked", gate.reason ?? "Policy gate blocked result", gate.artifact);
       return { status: "policy_blocked", runId: run.runId };
     }
@@ -305,26 +352,32 @@ export async function processAgentJob(payload: AgentJobPayload, options: Process
       id: pullRequestId(),
       jobId: job.jobId,
       runId: run.runId,
-      ...published
+      ...published,
     });
     await options.repos.appendAuditEvent({
       actor: "worker",
       action: "pull_request.created",
       jobId: job.jobId,
       runId: run.runId,
-      metadata: { prUrl: published.prUrl, prNumber: published.prNumber }
+      metadata: { prUrl: published.prUrl, prNumber: published.prNumber },
     });
     await transitionJob("Completed", deriveOutcome("Completed"), undefined, {
       status: "NeedsReview",
       prUrl: published.prUrl,
-      prNumber: published.prNumber
+      prNumber: published.prNumber,
     });
     await appendEvent("Completed", "worker.completed", "Worker completed job", { prUrl: published.prUrl });
     await appendProgressLog("Completed", "worker", "PR 생성이 끝났습니다.");
     return { status: "completed", runId: run.runId };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown worker error";
-    await transitionJob("Failed", "FailedInternal", message, { status: "FailedInternal", failureReason: message }, failureDetails("infra"));
+    await transitionJob(
+      "Failed",
+      "FailedInternal",
+      message,
+      { status: "FailedInternal", failureReason: message },
+      failureDetails("infra"),
+    );
     await appendEvent("Failed", "worker.error", message);
     return { status: "failed", runId: run.runId };
   }
@@ -333,7 +386,7 @@ export async function processAgentJob(payload: AgentJobPayload, options: Process
 async function syncLarkStatus(
   larkUpdater: LarkStatusUpdater | undefined,
   job: WorkerJobRecord,
-  update: { status: string; prUrl?: string; prNumber?: number; failureReason?: string }
+  update: { status: string; prUrl?: string; prNumber?: number; failureReason?: string },
 ): Promise<void> {
   if (!larkUpdater) return;
   try {
@@ -343,7 +396,7 @@ async function syncLarkStatus(
       jobId: job.jobId,
       prUrl: update.prUrl,
       prNumber: update.prNumber,
-      failureReason: update.failureReason
+      failureReason: update.failureReason,
     });
   } catch {
     // Lark write-back must not fail the platform-owned job execution.
@@ -355,7 +408,11 @@ async function isCancelRequested(repos: Pick<WorkerRepositories, "getJobForWorke
   return latest?.phase === "CancelRequested" || latest?.phase === "Cancelling";
 }
 
-async function createPublishInput(job: WorkerJobRecord, run: WorkerRunRecord, result: AgentResult): Promise<PublishInput> {
+async function createPublishInput(
+  job: WorkerJobRecord,
+  run: WorkerRunRecord,
+  result: AgentResult,
+): Promise<PublishInput> {
   if (
     result.status !== "completed" ||
     !result.baseSha ||
@@ -381,7 +438,7 @@ async function createPublishInput(job: WorkerJobRecord, run: WorkerRunRecord, re
     pushSha: result.pushSha,
     commitShas: result.commits.map((commit) => commit.sha),
     title: result.pullRequestDraft.title,
-    body
+    body,
   };
 }
 

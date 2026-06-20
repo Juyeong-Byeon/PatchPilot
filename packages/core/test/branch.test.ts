@@ -8,7 +8,7 @@ describe("createWorkBranchName", () => {
 
   it("truncates long titles and appends attempt suffix", () => {
     expect(createWorkBranchName("rec123", "A".repeat(120), 3)).toBe(
-      "agent/rec123-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-3"
+      "agent/rec123-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-3",
     );
   });
 });

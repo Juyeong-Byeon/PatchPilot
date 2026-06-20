@@ -26,7 +26,7 @@ export type GitHubWebhookResult =
 export async function handleGitHubPullRequestWebhook(
   payload: GitHubPullRequestPayload,
   repos: GitHubWebhookRepositories,
-  larkUpdater?: LarkStatusUpdater
+  larkUpdater?: LarkStatusUpdater,
 ): Promise<GitHubWebhookResult> {
   if (payload.action !== "closed" || payload.pull_request?.merged !== true) return { action: "ignored" };
 
@@ -38,7 +38,7 @@ export async function handleGitHubPullRequestWebhook(
     repository,
     prNumber,
     prUrl: payload.pull_request.html_url,
-    mergedAt: payload.pull_request.merged_at
+    mergedAt: payload.pull_request.merged_at,
   });
   if (result.status === "not_found") return { action: "not_found" };
 
@@ -49,7 +49,7 @@ export async function handleGitHubPullRequestWebhook(
         status: "Completed",
         jobId: result.jobId,
         prUrl: result.prUrl,
-        prNumber: result.prNumber
+        prNumber: result.prNumber,
       });
     } catch {
       // Lark write-back is best-effort; GitHub merge state is already persisted.

@@ -4,12 +4,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { createSecretRedactor } from "@ticket-to-pr/core";
 
-export function runGstack(
-  repoDir: string,
-  logPath: string,
-  timeoutMs: number,
-  killGraceMs = 2000,
-): Promise<void> {
+export function runGstack(repoDir: string, logPath: string, timeoutMs: number, killGraceMs = 2000): Promise<void> {
   const command = process.env.GSTACK_COMMAND?.trim() || "gstack";
   const args = parseArgs(process.env.GSTACK_ARGS ?? "ship --no-push");
 
@@ -89,11 +84,7 @@ export function runGstack(
               return;
             }
 
-            reject(
-              new Error(
-                `gstack failed with exit code ${code ?? "null"}${signal ? ` signal ${signal}` : ""}`,
-              ),
-            );
+            reject(new Error(`gstack failed with exit code ${code ?? "null"}${signal ? ` signal ${signal}` : ""}`));
           });
         });
       })
@@ -101,10 +92,7 @@ export function runGstack(
   });
 }
 
-function terminateProcessGroup(
-  child: ReturnType<typeof spawn> | undefined,
-  signal: NodeJS.Signals,
-): void {
+function terminateProcessGroup(child: ReturnType<typeof spawn> | undefined, signal: NodeJS.Signals): void {
   if (!child?.pid) return;
   try {
     process.kill(-child.pid, signal);

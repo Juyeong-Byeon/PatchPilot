@@ -2,7 +2,13 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { getWorkspacePaths, readJsonArtifact, readTextArtifact, writeJsonArtifact, writeTextArtifact } from "../src/index.js";
+import {
+  getWorkspacePaths,
+  readJsonArtifact,
+  readTextArtifact,
+  writeJsonArtifact,
+  writeTextArtifact,
+} from "../src/index.js";
 
 const tempDirs: string[] = [];
 
@@ -30,7 +36,7 @@ describe("getWorkspacePaths", () => {
       policyJson: path.join(root, "input", "policy.json"),
       resultJson: path.join(root, "output", "result.json"),
       prTitle: path.join(root, "output", "pr-title.txt"),
-      prBody: path.join(root, "output", "pr-body.md")
+      prBody: path.join(root, "output", "pr-body.md"),
     });
   });
 });
@@ -46,6 +52,8 @@ describe("artifact helpers", () => {
 
     expect(await readJsonArtifact(jsonPath)).toEqual({ status: "completed", changedFiles: ["src/a.ts"] });
     expect(await readTextArtifact(textPath)).toBe("Implement ticket\n");
-    expect(await readFile(jsonPath, "utf8")).toBe('{\n  "status": "completed",\n  "changedFiles": [\n    "src/a.ts"\n  ]\n}\n');
+    expect(await readFile(jsonPath, "utf8")).toBe(
+      '{\n  "status": "completed",\n  "changedFiles": [\n    "src/a.ts"\n  ]\n}\n',
+    );
   });
 });

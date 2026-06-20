@@ -13,7 +13,7 @@ const allowed: Record<InternalPhase, InternalPhase[]> = {
   CancelRequested: ["Cancelling", "CancelFailed"],
   Cancelling: ["Cancelled", "CancelFailed"],
   Cancelled: [],
-  CancelFailed: ["Failed"]
+  CancelFailed: ["Failed"],
 };
 
 export function transitionPhase(current: InternalPhase, next: InternalPhase): InternalPhase {

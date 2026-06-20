@@ -16,7 +16,7 @@ function makeRepos() {
     getRetryPreflight: vi.fn().mockResolvedValue({ jobId: "job_1", retryable: true, lastAttempt: 1 }),
     createRetryAttempt: vi.fn().mockResolvedValue({ runId: "run_2", attempt: 2 }),
     transitionJob: vi.fn().mockResolvedValue(undefined),
-    appendEvent: vi.fn().mockResolvedValue(undefined)
+    appendEvent: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -26,7 +26,7 @@ describe("admin routes", () => {
       adminToken: "secret",
       larkWebhookSecret: "webhook-secret",
       repos: makeRepos() as never,
-      queue: { add: vi.fn() }
+      queue: { add: vi.fn() },
     });
 
     const response = await app.inject({ method: "GET", url: "/api/jobs" });
@@ -41,18 +41,18 @@ describe("admin routes", () => {
       adminToken: "secret",
       larkWebhookSecret: "webhook-secret",
       repos: repos as never,
-      queue: { add: vi.fn() }
+      queue: { add: vi.fn() },
     });
 
     const list = await app.inject({
       method: "GET",
       url: "/api/jobs",
-      headers: { authorization: "Bearer secret" }
+      headers: { authorization: "Bearer secret" },
     });
     const detail = await app.inject({
       method: "GET",
       url: "/api/jobs/job_1/events",
-      headers: { authorization: "Bearer secret" }
+      headers: { authorization: "Bearer secret" },
     });
 
     expect(list.statusCode).toBe(200);
@@ -69,18 +69,18 @@ describe("admin routes", () => {
       adminToken: "secret",
       larkWebhookSecret: "webhook-secret",
       repos: repos as never,
-      queue
+      queue,
     });
 
     const cancel = await app.inject({
       method: "POST",
       url: "/api/jobs/job_1/cancel",
-      headers: { authorization: "Bearer secret" }
+      headers: { authorization: "Bearer secret" },
     });
     const retry = await app.inject({
       method: "POST",
       url: "/api/jobs/job_1/retry",
-      headers: { authorization: "Bearer secret" }
+      headers: { authorization: "Bearer secret" },
     });
 
     expect(cancel.statusCode).toBe(200);
@@ -92,7 +92,7 @@ describe("admin routes", () => {
     expect(queue.add).toHaveBeenCalledWith("job_1", {
       jobId: "job_1",
       runId: "run_2",
-      attempt: 2
+      attempt: 2,
     });
     await app.close();
   });
@@ -104,13 +104,13 @@ describe("admin routes", () => {
       adminToken: "secret",
       larkWebhookSecret: "webhook-secret",
       repos: repos as never,
-      queue: { add: vi.fn() }
+      queue: { add: vi.fn() },
     });
 
     const retry = await app.inject({
       method: "POST",
       url: "/api/jobs/job_1/retry",
-      headers: { authorization: "Bearer secret" }
+      headers: { authorization: "Bearer secret" },
     });
 
     expect(retry.statusCode).toBe(409);
@@ -125,13 +125,13 @@ describe("admin routes", () => {
       adminToken: "secret",
       larkWebhookSecret: "webhook-secret",
       repos: repos as never,
-      queue: { add: vi.fn() }
+      queue: { add: vi.fn() },
     });
 
     const retry = await app.inject({
       method: "POST",
       url: "/api/jobs/job_1/retry",
-      headers: { authorization: "Bearer secret" }
+      headers: { authorization: "Bearer secret" },
     });
 
     expect(retry.statusCode).toBe(409);
@@ -146,13 +146,13 @@ describe("admin routes", () => {
       adminToken: "secret",
       larkWebhookSecret: "webhook-secret",
       repos: repos as never,
-      queue
+      queue,
     });
 
     const retry = await app.inject({
       method: "POST",
       url: "/api/jobs/job_1/retry",
-      headers: { authorization: "Bearer secret" }
+      headers: { authorization: "Bearer secret" },
     });
 
     expect(retry.statusCode).toBe(503);
@@ -165,8 +165,8 @@ describe("admin routes", () => {
         attempt: 2,
         phase: "Failed",
         eventType: "job.retry_enqueue_failed",
-        source: "api"
-      })
+        source: "api",
+      }),
     );
     await app.close();
   });
@@ -177,21 +177,21 @@ describe("admin routes", () => {
       adminToken: "secret",
       larkWebhookSecret: "webhook-secret",
       repos: repos as never,
-      queue: { add: vi.fn() }
+      queue: { add: vi.fn() },
     });
 
     repos.requestCancel.mockResolvedValueOnce({ status: "not_found" });
     const missing = await app.inject({
       method: "POST",
       url: "/api/jobs/job_missing/cancel",
-      headers: { authorization: "Bearer secret" }
+      headers: { authorization: "Bearer secret" },
     });
 
     repos.requestCancel.mockResolvedValueOnce({ status: "not_cancelable", phase: "Completed" });
     const terminal = await app.inject({
       method: "POST",
       url: "/api/jobs/job_done/cancel",
-      headers: { authorization: "Bearer secret" }
+      headers: { authorization: "Bearer secret" },
     });
 
     expect(missing.statusCode).toBe(404);
@@ -207,13 +207,13 @@ describe("admin routes", () => {
       adminToken: "secret",
       larkWebhookSecret: "webhook-secret",
       repos: repos as never,
-      queue: { add: vi.fn() }
+      queue: { add: vi.fn() },
     });
 
     const response = await app.inject({
       method: "POST",
       url: "/api/jobs/job_publishing/cancel",
-      headers: { authorization: "Bearer secret" }
+      headers: { authorization: "Bearer secret" },
     });
 
     expect(response.statusCode).toBe(409);
@@ -229,7 +229,7 @@ describe("admin routes", () => {
       adminToken: "secret",
       larkWebhookSecret: "webhook-secret",
       repos: makeRepos() as never,
-      queue: { add: vi.fn() }
+      queue: { add: vi.fn() },
     });
 
     const response = await app.inject({ method: "GET", url: "/" });

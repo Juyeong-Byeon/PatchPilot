@@ -2,7 +2,7 @@ export type Locale = "ko" | "en";
 
 export const localeNames: Record<Locale, string> = {
   ko: "한국어",
-  en: "English"
+  en: "English",
 };
 
 export const adminCopy = {
@@ -100,7 +100,7 @@ export const adminCopy = {
     download: "다운로드",
     noLogs: "기록된 로그가 없습니다.",
     unknown: "알 수 없음",
-    empty: "-"
+    empty: "-",
   },
   en: {
     documentTitle: "PatchPilot Operations",
@@ -196,8 +196,8 @@ export const adminCopy = {
     download: "Download",
     noLogs: "No logs recorded.",
     unknown: "Unknown",
-    empty: "-"
-  }
+    empty: "-",
+  },
 } as const;
 
 const stateLabels: Record<Locale, Record<string, string>> = {
@@ -215,7 +215,7 @@ const stateLabels: Record<Locale, Record<string, string>> = {
     NeedsReview: "PR 리뷰 대기중",
     Running: "실행 중",
     FailedInternal: "내부 실패",
-    FailedActionable: "조치 필요 실패"
+    FailedActionable: "조치 필요 실패",
   },
   en: {
     Queued: "Queued",
@@ -231,8 +231,8 @@ const stateLabels: Record<Locale, Record<string, string>> = {
     NeedsReview: "Needs Review",
     Running: "Running",
     FailedInternal: "Internal Failure",
-    FailedActionable: "Action Needed"
-  }
+    FailedActionable: "Action Needed",
+  },
 };
 
 // Stable failure codes written by the worker (see apps/worker/src/worker.ts).
@@ -241,14 +241,14 @@ const failureCategoryLabels: Record<Locale, Record<string, string>> = {
     policy: "정책",
     agent: "에이전트",
     publish: "게시",
-    infra: "인프라"
+    infra: "인프라",
   },
   en: {
     policy: "Policy",
     agent: "Agent",
     publish: "Publish",
-    infra: "Infrastructure"
-  }
+    infra: "Infrastructure",
+  },
 };
 
 export type AdminCopy = (typeof adminCopy)[Locale];

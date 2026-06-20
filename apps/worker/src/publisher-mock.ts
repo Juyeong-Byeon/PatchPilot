@@ -39,6 +39,6 @@ export async function publishMockPullRequest(input: PublishInput): Promise<Publi
     prUrl: `https://github.local/${input.repository}/pull/mock-${input.jobId}`,
     prNumber: 1,
     prTitle: input.title,
-    prBody: input.body
+    prBody: input.body,
   };
 }

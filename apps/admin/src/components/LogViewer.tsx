@@ -17,12 +17,20 @@ interface LogViewerProps {
   variant?: "card" | "embedded";
 }
 
-export function LogViewer({ logs, totalCount, copy, jobId, contextLabel, onClearContext, variant = "card" }: LogViewerProps) {
+export function LogViewer({
+  logs,
+  totalCount,
+  copy,
+  jobId,
+  contextLabel,
+  onClearContext,
+  variant = "card",
+}: LogViewerProps) {
   const [source, setSource] = useState("all");
   const [query, setQuery] = useState("");
   const sources = useMemo(
     () => Array.from(new Set(logs.map((line) => line.source).filter(Boolean) as string[])).sort(),
-    [logs]
+    [logs],
   );
   const filteredLogs = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -33,14 +41,17 @@ export function LogViewer({ logs, totalCount, copy, jobId, contextLabel, onClear
     });
   }, [logs, query, source]);
   const text = filteredLogs.map((line) => formatLine(line, copy)).join("\n");
-  const shellClassName = variant === "embedded" ? "surface-card-soft rounded-xl border border-hairline-gray bg-linen-white" : "";
+  const shellClassName =
+    variant === "embedded" ? "surface-card-soft rounded-xl border border-hairline-gray bg-linen-white" : "";
 
   const content = (
     <>
       <div className="flex flex-col items-stretch justify-between gap-3 border-b border-hairline-gray p-4 xl:flex-row xl:items-center">
         <div>
           <CardTitle>{copy.logs}</CardTitle>
-          <span className="text-[12px] leading-4 text-charcoal">{filteredLogs.length}/{totalCount ?? logs.length}</span>
+          <span className="text-[12px] leading-4 text-charcoal">
+            {filteredLogs.length}/{totalCount ?? logs.length}
+          </span>
         </div>
         <div className="grid gap-2 md:grid-cols-[150px_minmax(180px,1fr)_auto_auto]">
           <Select aria-label={copy.filterLogsLabel} value={source} onChange={(event) => setSource(event.target.value)}>
@@ -57,24 +68,48 @@ export function LogViewer({ logs, totalCount, copy, jobId, contextLabel, onClear
             placeholder={copy.searchLogsPlaceholder}
             onChange={(event) => setQuery(event.target.value)}
           />
-          <Button type="button" variant="outline" size="icon" aria-label={copy.copy} title={copy.copy} onClick={() => void navigator.clipboard?.writeText(text)}>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label={copy.copy}
+            title={copy.copy}
+            onClick={() => void navigator.clipboard?.writeText(text)}
+          >
             <Copy data-icon aria-hidden="true" strokeWidth={2.2} />
           </Button>
-          <Button type="button" size="icon" aria-label={copy.download} title={copy.download} onClick={() => downloadText(text, jobId)}>
+          <Button
+            type="button"
+            size="icon"
+            aria-label={copy.download}
+            title={copy.download}
+            onClick={() => downloadText(text, jobId)}
+          >
             <Download data-icon aria-hidden="true" strokeWidth={2.2} />
           </Button>
         </div>
       </div>
       {contextLabel ? (
         <div className="flex items-center justify-between gap-3 border-b border-hairline-gray bg-linen px-4 py-2 text-[12px] text-charcoal">
-          <span>{copy.correlatedLogs}: {contextLabel}</span>
-          <Button type="button" variant="ghost" size="icon" aria-label={copy.clear} title={copy.clear} onClick={onClearContext}>
+          <span>
+            {copy.correlatedLogs}: {contextLabel}
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label={copy.clear}
+            title={copy.clear}
+            onClick={onClearContext}
+          >
             <X data-icon aria-hidden="true" strokeWidth={2.2} />
           </Button>
         </div>
       ) : null}
       <div>
-        <pre className="terminal-surface m-0 max-h-[320px] min-h-[180px] overflow-auto p-4 text-[12px] leading-5 whitespace-pre-wrap text-true-black">{text || copy.noLogs}</pre>
+        <pre className="terminal-surface m-0 max-h-[320px] min-h-[180px] overflow-auto p-4 text-[12px] leading-5 whitespace-pre-wrap text-true-black">
+          {text || copy.noLogs}
+        </pre>
       </div>
     </>
   );
@@ -87,11 +122,7 @@ export function LogViewer({ logs, totalCount, copy, jobId, contextLabel, onClear
     );
   }
 
-  return (
-    <Card>
-      {content}
-    </Card>
-  );
+  return <Card>{content}</Card>;
 }
 
 function formatLine(line: LogLine, copy: AdminCopy): string {

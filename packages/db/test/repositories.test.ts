@@ -22,16 +22,16 @@ describe.skipIf(!connectionString)("Repositories", () => {
       priority: "Normal" as const,
       status: "Progress",
       agentRunRequested: true,
-      rawFields: {}
+      rawFields: {},
     };
     try {
       const first = await repos.createJobFromTicket(ticket, {
         ticketSnapshotId: `ts_${suffix}_1`,
-        jobId: `job_${suffix}_1`
+        jobId: `job_${suffix}_1`,
       });
       const second = await repos.createJobFromTicket(ticket, {
         ticketSnapshotId: `ts_${suffix}_2`,
-        jobId: `job_${suffix}_2`
+        jobId: `job_${suffix}_2`,
       });
       expect(first.created).toBe(true);
       expect(second.created).toBe(false);

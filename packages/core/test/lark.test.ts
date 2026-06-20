@@ -9,7 +9,7 @@ const baseFields = {
   "Target Branch": "main",
   Priority: "Normal",
   Status: "Progress",
-  "Agent Run Requested": true
+  "Agent Run Requested": true,
 };
 
 describe("parseLarkTicket", () => {
@@ -20,17 +20,15 @@ describe("parseLarkTicket", () => {
   });
 
   it("rejects missing definition of done", () => {
-    expect(() =>
-      parseLarkTicket("rec1", "v1", { ...baseFields, "Definition of Done": "" })
-    ).toThrow(/Definition of Done/);
+    expect(() => parseLarkTicket("rec1", "v1", { ...baseFields, "Definition of Done": "" })).toThrow(
+      /Definition of Done/,
+    );
   });
 });
 
 describe("shouldCreateJobFromTicket", () => {
   it("requires Progress and Agent Run Requested", () => {
     expect(shouldCreateJobFromTicket(parseLarkTicket("rec1", "v1", baseFields))).toBe(true);
-    expect(
-      shouldCreateJobFromTicket(parseLarkTicket("rec1", "v1", { ...baseFields, Status: "Todo" }))
-    ).toBe(false);
+    expect(shouldCreateJobFromTicket(parseLarkTicket("rec1", "v1", { ...baseFields, Status: "Todo" }))).toBe(false);
   });
 });

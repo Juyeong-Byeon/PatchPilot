@@ -36,17 +36,17 @@ describe("runE2eSmokeRunner", () => {
           triggerVersion: "README.md only",
           runId: "run_1",
           attempt: 1,
-          workBranch: "ticket-to-pr/job_1"
+          workBranch: "ticket-to-pr/job_1",
         },
         null,
-        2
-      )
+        2,
+      ),
     );
 
     await runE2eSmokeRunner({
       workspaceRoot,
       repoDir,
-      targetBranch: "main"
+      targetBranch: "main",
     });
 
     expect((await run("git", ["diff", "--name-only", "HEAD~1...HEAD"], repoDir)).stdout.trim()).toBe("README.md");
@@ -61,7 +61,7 @@ describe("runE2eSmokeRunner", () => {
       status: "completed",
       changedFiles: ["README.md"],
       failure: null,
-      retryable: false
+      retryable: false,
     });
     expect(await readFile(join(workspaceRoot, "output", "pr-title.txt"), "utf8")).toContain("Lark automation smoke");
     expect(await readFile(join(workspaceRoot, "output", "pr-body.md"), "utf8")).toContain("README.md");

@@ -17,7 +17,7 @@ const completedResult = {
   review: { summary: "ok", risks: [], knownLimitations: [] },
   pullRequestDraft: { title: "Fix login", bodyPath: "PR_BODY.md" },
   failure: null,
-  retryable: false
+  retryable: false,
 };
 
 describe("evaluatePolicyGate", () => {
@@ -26,14 +26,14 @@ describe("evaluatePolicyGate", () => {
       repository: "acme/web",
       repositoryAllowlist: ["acme/web"],
       protectedPathDenylist: ["package.json", "infra/**"],
-      expectedTargetBranch: "main"
+      expectedTargetBranch: "main",
     });
 
     expect(gate.allowed).toBe(true);
     expect(gate.artifact).toMatchObject({
       status: "passed",
       repositoryAllowed: true,
-      deniedFiles: []
+      deniedFiles: [],
     });
   });
 
@@ -44,8 +44,8 @@ describe("evaluatePolicyGate", () => {
         repository: "acme/admin",
         repositoryAllowlist: ["acme/web"],
         protectedPathDenylist: ["infra/**"],
-        expectedTargetBranch: "main"
-      }
+        expectedTargetBranch: "main",
+      },
     );
 
     expect(gate.allowed).toBe(false);
@@ -54,7 +54,7 @@ describe("evaluatePolicyGate", () => {
     expect(gate.artifact).toMatchObject({
       status: "failed",
       repositoryAllowed: false,
-      deniedFiles: ["infra/prod.tf"]
+      deniedFiles: ["infra/prod.tf"],
     });
   });
 
@@ -65,14 +65,14 @@ describe("evaluatePolicyGate", () => {
         targetBranch: "develop",
         commits: [],
         tests: [],
-        pullRequestDraft: undefined
+        pullRequestDraft: undefined,
       },
       {
         repository: "acme/web",
         repositoryAllowlist: ["acme/web"],
         protectedPathDenylist: [],
-        expectedTargetBranch: "main"
-      }
+        expectedTargetBranch: "main",
+      },
     );
 
     expect(gate.allowed).toBe(false);

@@ -20,7 +20,7 @@ describe("parseAgentResult", () => {
       review: { summary: "reviewed", risks: [], knownLimitations: [] },
       pullRequestDraft: { title: "Fix login", bodyPath: "output/pr-body.md" },
       failure: null,
-      retryable: false
+      retryable: false,
     });
     expect(result.status).toBe("completed");
   });
@@ -35,8 +35,8 @@ describe("parseAgentResult", () => {
         triggerVersion: "v1",
         status: "failed",
         failure: null,
-        retryable: true
-      })
+        retryable: true,
+      }),
     ).toThrow();
   });
 
@@ -53,8 +53,8 @@ describe("parseAgentResult", () => {
         commits: [],
         tests: [],
         failure: null,
-        retryable: false
-      })
+        retryable: false,
+      }),
     ).toThrow();
   });
 
@@ -75,7 +75,7 @@ describe("parseAgentResult", () => {
       review: { summary: "reviewed", risks: [], knownLimitations: [] },
       pullRequestDraft: { title: "Fix login", bodyPath: "output/pr-body.md" },
       failure: null,
-      retryable: false
+      retryable: false,
     };
 
     expect(() => parseAgentResult(completed)).toThrow();

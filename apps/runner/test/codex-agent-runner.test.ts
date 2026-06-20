@@ -25,7 +25,7 @@ describe("runCodexAgentRunner", () => {
     await mkdir(inputDir, { recursive: true });
     await mkdir(seedDir, { recursive: true });
     await writeFile(join(seedDir, "auth.json"), "{}\n");
-    await writeFile(join(seedDir, "config.toml"), "model = \"test\"\n");
+    await writeFile(join(seedDir, "config.toml"), 'model = "test"\n');
     await run("git", ["init", repoDir]);
     await run("git", ["config", "user.name", "Test User"], repoDir);
     await run("git", ["config", "user.email", "test@example.com"], repoDir);
@@ -42,8 +42,8 @@ describe("runCodexAgentRunner", () => {
         "Append one short Codex smoke note to README.md.",
         "",
         "## Definition of Done",
-        "README.md contains a Codex smoke note."
-      ].join("\n")
+        "README.md contains a Codex smoke note.",
+      ].join("\n"),
     );
     await writeFile(
       join(inputDir, "context.json"),
@@ -54,11 +54,11 @@ describe("runCodexAgentRunner", () => {
           triggerVersion: "codex real runner",
           runId: "run_1",
           attempt: 1,
-          workBranch: "ticket-to-pr/job_1"
+          workBranch: "ticket-to-pr/job_1",
         },
         null,
-        2
-      )
+        2,
+      ),
     );
     await writeFile(join(inputDir, "policy.json"), JSON.stringify({ repositoryAllowlist: ["owner/repo"] }, null, 2));
     await writeFile(
@@ -74,8 +74,8 @@ describe("runCodexAgentRunner", () => {
         "  spawnSync('git', ['add', 'README.md'], { stdio: 'inherit' });",
         "  spawnSync('git', ['commit', '-m', 'docs: add Codex smoke note'], { stdio: 'inherit' });",
         "});",
-        ""
-      ].join("\n")
+        "",
+      ].join("\n"),
     );
 
     await runCodexAgentRunner({
@@ -86,12 +86,12 @@ describe("runCodexAgentRunner", () => {
       codexArgs: [fakeCodex],
       codexHome,
       codexAuthFile: join(seedDir, "auth.json"),
-      codexConfigFile: join(seedDir, "config.toml")
+      codexConfigFile: join(seedDir, "config.toml"),
     });
 
     expect((await run("git", ["diff", "--name-only", "HEAD~1...HEAD"], repoDir)).stdout.trim()).toBe("README.md");
     expect(await readFile(join(codexHome, "auth.json"), "utf8")).toBe("{}\n");
-    expect(await readFile(join(codexHome, "config.toml"), "utf8")).toBe("model = \"test\"\n");
+    expect(await readFile(join(codexHome, "config.toml"), "utf8")).toBe('model = "test"\n');
 
     const result = parseAgentResult(JSON.parse(await readFile(join(workspaceRoot, "output", "result.json"), "utf8")));
     expect(result).toMatchObject({
@@ -103,9 +103,11 @@ describe("runCodexAgentRunner", () => {
       changedFiles: ["README.md"],
       commits: [{ message: "docs: add Codex smoke note" }],
       failure: null,
-      retryable: false
+      retryable: false,
     });
-    expect(await readFile(join(workspaceRoot, "output", "pr-title.txt"), "utf8")).toContain("docs: add Codex smoke note");
+    expect(await readFile(join(workspaceRoot, "output", "pr-title.txt"), "utf8")).toContain(
+      "docs: add Codex smoke note",
+    );
     expect(await readFile(join(workspaceRoot, "output", "pr-body.md"), "utf8")).toContain("README.md");
   });
 });

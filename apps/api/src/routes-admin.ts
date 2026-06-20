@@ -42,7 +42,7 @@ export async function registerAdminRoutes(
   app: FastifyInstance,
   repos: AdminRepositories,
   queue: AdminQueue,
-  adminToken: string
+  adminToken: string,
 ): Promise<void> {
   app.addHook("preHandler", async (request) => {
     if (request.url.startsWith("/api/jobs")) assertAdminToken(request, adminToken);
@@ -54,14 +54,10 @@ export async function registerAdminRoutes(
     if (!job) return reply.code(404).send({ error: "Job not found" });
     return job;
   });
-  app.get<{ Params: { id: string } }>("/api/jobs/:id/events", async (request) =>
-    repos.getJobEvents(request.params.id)
-  );
-  app.get<{ Params: { id: string } }>("/api/jobs/:id/logs", async (request) =>
-    repos.getJobLogs(request.params.id)
-  );
+  app.get<{ Params: { id: string } }>("/api/jobs/:id/events", async (request) => repos.getJobEvents(request.params.id));
+  app.get<{ Params: { id: string } }>("/api/jobs/:id/logs", async (request) => repos.getJobLogs(request.params.id));
   app.get<{ Params: { id: string } }>("/api/jobs/:id/artifacts", async (request) =>
-    repos.getJobArtifacts(request.params.id)
+    repos.getJobArtifacts(request.params.id),
   );
   app.post<{ Params: { id: string } }>("/api/jobs/:id/cancel", async (request, reply) => {
     const result = await repos.requestCancel(request.params.id, "admin");
@@ -89,7 +85,7 @@ export async function registerAdminRoutes(
       await queue.add(request.params.id, {
         jobId: request.params.id,
         runId: retry.runId,
-        attempt: retry.attempt
+        attempt: retry.attempt,
       });
     } catch (error) {
       const message = getErrorMessage(error);
@@ -101,7 +97,7 @@ export async function registerAdminRoutes(
         phase: "Failed",
         eventType: "job.retry_enqueue_failed",
         source: "api",
-        message
+        message,
       });
       return reply.code(503).send({ error: "Retry enqueue failed" });
     }

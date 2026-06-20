@@ -18,7 +18,7 @@ export function readApiEnv(env: NodeJS.ProcessEnv = process.env): ApiEnv {
     adminToken: requiredEnv(env, "ADMIN_TOKEN"),
     larkWebhookSecret: requiredEnv(env, "LARK_WEBHOOK_SECRET"),
     githubWebhookSecret: optionalEnv(env, "GITHUB_WEBHOOK_SECRET"),
-    larkRecordUpdaterConfig: readLarkRecordUpdaterConfig(env)
+    larkRecordUpdaterConfig: readLarkRecordUpdaterConfig(env),
   };
 }
 

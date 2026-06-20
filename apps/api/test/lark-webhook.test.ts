@@ -5,7 +5,7 @@ describe("handleLarkWebhook", () => {
   it("creates and enqueues a job when trigger conditions match", async () => {
     const repos = {
       createJobFromTicket: vi.fn().mockResolvedValue({ jobId: "job_1", ticketSnapshotId: "ts_1", created: true }),
-      appendEvent: vi.fn()
+      appendEvent: vi.fn(),
     };
     const queue = { add: vi.fn().mockResolvedValue({ id: "bull_1" }) };
 
@@ -21,11 +21,11 @@ describe("handleLarkWebhook", () => {
           "Target Branch": "main",
           Priority: "Normal",
           Status: "Progress",
-          "Agent Run Requested": true
-        }
+          "Agent Run Requested": true,
+        },
       },
       repos as never,
-      queue as never
+      queue as never,
     );
 
     expect(result).toEqual({ action: "enqueued", jobId: "job_1" });
@@ -33,15 +33,15 @@ describe("handleLarkWebhook", () => {
       jobId: "job_1",
       ticketSnapshotId: "ts_1",
       larkRecordId: "rec1",
-      triggerVersion: "v1"
+      triggerVersion: "v1",
     });
     expect(repos.appendEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         jobId: "job_1",
         phase: "Queued",
         eventType: "job.enqueued",
-        source: "api"
-      })
+        source: "api",
+      }),
     );
   });
 });

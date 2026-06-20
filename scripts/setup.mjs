@@ -75,7 +75,7 @@ async function main() {
 
   heading("Run database migrations (host URL)");
   run("npm", ["--workspace", "@ticket-to-pr/db", "run", "migrate"], {
-    env: { ...process.env, DATABASE_URL: hostDatabaseUrl(env) }
+    env: { ...process.env, DATABASE_URL: hostDatabaseUrl(env) },
   });
 
   heading("Build and start API + worker");

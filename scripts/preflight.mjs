@@ -79,7 +79,8 @@ export function runPreflightChecks() {
   // Real GitHub publishing requires real credentials and an allowlist.
   if (publisherMode === "github") {
     if (isPlaceholder(env.GITHUB_TOKEN)) fail("PUBLISHER_MODE=github requires a real GITHUB_TOKEN.");
-    if (isPlaceholder(env.REPOSITORY_ALLOWLIST)) fail("PUBLISHER_MODE=github requires REPOSITORY_ALLOWLIST set to a real owner/repo.");
+    if (isPlaceholder(env.REPOSITORY_ALLOWLIST))
+      fail("PUBLISHER_MODE=github requires REPOSITORY_ALLOWLIST set to a real owner/repo.");
   }
   if (executorMode === "gstack" && !env.GSTACK_COMMAND) {
     warn("EXECUTOR_MODE=gstack but GSTACK_COMMAND is empty — the runner image must define the agent command.");
