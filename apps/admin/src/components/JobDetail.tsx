@@ -6,6 +6,7 @@ import { statusBadgeVariant } from "../lib/status.js";
 import { LogViewer } from "./LogViewer.js";
 import { RunStepGraph } from "./RunStepGraph.js";
 import { RunTimeline, type SpanSelection } from "./RunTimeline.js";
+import { StageNotesPanel, isStageNoteArtifact } from "./StageNotesPanel.js";
 import { Badge } from "./ui/badge.js";
 import { Button } from "./ui/button.js";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
@@ -52,6 +53,7 @@ export function JobDetail({
   );
   const currentLogs = useMemo(() => filterRunScopedRecords(logs, currentRunId), [currentRunId, logs]);
   const currentArtifacts = useMemo(() => filterRunScopedRecords(artifacts, currentRunId), [artifacts, currentRunId]);
+  const stageNotes = useMemo(() => currentArtifacts.filter(isStageNoteArtifact), [currentArtifacts]);
   const runningPhase = useMemo(() => resolveRunningPhase(job), [job]);
   const selectedContext = useMemo(
     () => buildStepContext(selectedSpan, currentEvents, locale),
@@ -62,7 +64,11 @@ export function JobDetail({
     [currentLogs, selectedContext],
   );
   const diagnosticArtifacts = useMemo(
-    () => filterArtifactsForContext(currentArtifacts, selectedContext),
+    () =>
+      filterArtifactsForContext(
+        currentArtifacts.filter((artifact) => !isStageNoteArtifact(artifact)),
+        selectedContext,
+      ),
     [currentArtifacts, selectedContext],
   );
 
@@ -95,6 +101,7 @@ export function JobDetail({
   // of enabling an action that would 409.
   const retryDisabled = Boolean(actionState) || !(job.phase === "Failed" && String(job.outcome) === "FailedInternal");
   const cancelDisabled = Boolean(actionState) || terminal;
+  const isCancelled = String(job.outcome) === "Cancelled" || String(job.phase) === "Cancelled";
 
   return (
     <section className="grid gap-4">
@@ -182,7 +189,12 @@ export function JobDetail({
             </p>
           ) : null}
 
-          {job.failure_reason || job.next_action ? (
+          {isCancelled && job.failure_reason ? (
+            <section className="rounded-xl border border-hairline-gray bg-linen px-4 py-3">
+              <p className="text-[12px] leading-4 text-charcoal">{copy.cancelInfo}</p>
+              <p className="mt-2 break-words text-[13px] leading-5 text-true-black">{job.failure_reason}</p>
+            </section>
+          ) : !isCancelled && (job.failure_reason || job.next_action) ? (
             <section className="status-glow-failed rounded-xl border border-danger bg-danger-wash px-4 py-3">
               <p className="text-[12px] leading-4 text-charcoal">{copy.failureSummary}</p>
               {job.failure_reason ? (
@@ -205,6 +217,8 @@ export function JobDetail({
           </dl>
         </CardContent>
       </Card>
+
+      {stageNotes.length > 0 ? <StageNotesPanel notes={stageNotes} copy={copy} /> : null}
 
       <RunStepGraph
         events={currentEvents}

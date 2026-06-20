@@ -396,6 +396,47 @@ describe("processAgentJob", () => {
     );
   });
 
+  it("cancels mid-run, aborts the executor, and records the cancel phase", async () => {
+    const repos = createRepos();
+    let executing = false;
+    repos.getJobForWorker.mockImplementation(async () =>
+      executing ? { ...job, phase: "CancelRequested", outcome: "Running" } : job,
+    );
+    // Executor never resolves on its own; it rejects only when the cancel signal aborts it.
+    const executor = vi.fn().mockImplementation(
+      (input: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          executing = true;
+          input.signal.addEventListener("abort", () => reject(new Error("runner aborted")), { once: true });
+        }),
+    );
+    const publisher = vi.fn();
+
+    const outcome = await processAgentJob(
+      { jobId: "job_1", ticketSnapshotId: "ts_1" },
+      {
+        repos,
+        executor,
+        publisher,
+        cancelPollMs: 5,
+        policyConfig: { repositoryAllowlist: ["acme/web"], protectedPathDenylist: [] },
+        ids: { runId: () => "run_1", artifactId: (kind) => `artifact_${kind}`, pullRequestId: () => "pr_1" },
+      },
+    );
+
+    expect(outcome).toEqual({ status: "cancelled", runId: "run_1" });
+    expect(publisher).not.toHaveBeenCalled();
+    expect(repos.transitionJob).toHaveBeenLastCalledWith(
+      "job_1",
+      "Cancelled",
+      "Cancelled",
+      "구현 단계 실행 중 취소되었습니다.",
+    );
+    expect(repos.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: "worker.cancelled", metadata: { cancelledPhase: "Implementing" } }),
+    );
+  });
+
   it("stops before execution when cancel was already requested", async () => {
     const repos = createRepos();
     repos.getJobForWorker.mockResolvedValue({ ...job, phase: "CancelRequested", outcome: "Running" });

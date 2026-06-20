@@ -43,7 +43,18 @@ export interface ExecutorInput {
   job: WorkerJobRecord;
   run: WorkerRunRecord;
   appendLog?: (input: AppendExecutorLogInput) => Promise<void>;
+  /** Aborted when a cancel is requested mid-run so the executor can stop the runner. */
+  signal?: AbortSignal;
 }
+
+// How often the worker polls for a cancel request while the runner executes.
+const CANCEL_POLL_MS = 3000;
+// Stage-note files the staged runner leaves in the workspace output dir, surfaced as artifacts.
+const STAGE_NOTE_ARTIFACTS: ReadonlyArray<{ file: string; kind: string }> = [
+  { file: "plan.md", kind: "gstack-plan" },
+  { file: "review.md", kind: "gstack-review" },
+  { file: "qa.md", kind: "gstack-qa" },
+];
 
 export type Executor = (input: ExecutorInput) => Promise<AgentResult>;
 export type Publisher = (input: PublishInput) => Promise<PublishedPullRequest>;
@@ -123,6 +134,8 @@ export interface ProcessAgentJobOptions {
   larkUpdater?: LarkStatusUpdater;
   policyConfig: WorkerPolicyConfig;
   workspaceRoot?: string;
+  /** Cancel-poll cadence while the runner executes (overridable for tests). */
+  cancelPollMs?: number;
   ids?: {
     runId?: () => string;
     artifactId?: (kind: string) => string;
@@ -275,11 +288,40 @@ export async function processAgentJob(
     await transitionJob("Implementing", deriveOutcome("Implementing"));
     await appendEvent("Implementing", "runner.started", "AI runner started", undefined, "gstack");
     await appendProgressLog("Implementing", "gstack", "실행 워크스페이스를 준비하고 AI runner를 시작합니다.");
-    const rawResult = await options.executor({
-      job,
-      run,
-      appendLog: (log) => options.repos.appendLog({ jobId: job.jobId, runId: run.runId, ...log }),
-    });
+
+    // Watch for a cancel request while the (long-running) runner executes and abort it.
+    const abortController = new AbortController();
+    const cancelPoll = setInterval(() => {
+      void isCancelRequested(options.repos, job.jobId)
+        .then((requested) => {
+          if (requested) abortController.abort();
+        })
+        .catch(() => undefined);
+    }, options.cancelPollMs ?? CANCEL_POLL_MS);
+
+    let rawResult: AgentResult;
+    try {
+      rawResult = await options.executor({
+        job,
+        run,
+        appendLog: (log) => options.repos.appendLog({ jobId: job.jobId, runId: run.runId, ...log }),
+        signal: abortController.signal,
+      });
+    } catch (error) {
+      clearInterval(cancelPoll);
+      if (abortController.signal.aborted) {
+        // Cancelled mid-run: record where it stopped and tidy up (the runner container is killed).
+        await transitionJob("Cancelled", "Cancelled", "구현 단계 실행 중 취소되었습니다.", { status: "Cancelled" });
+        await appendEvent("Cancelled", "worker.cancelled", "Runner cancelled during execution", {
+          cancelledPhase: "Implementing",
+        });
+        await appendProgressLog("Cancelled", "worker", "실행 중 취소 요청을 감지해 러너를 중단했습니다.");
+        return { status: "cancelled", runId: run.runId };
+      }
+      throw error;
+    }
+    clearInterval(cancelPoll);
+
     const result = parseAgentResult(rawResult);
     await appendProgressLog("Implementing", "gstack", "AI runner 결과를 수집하고 있습니다.");
     await options.repos.saveArtifact({
@@ -289,6 +331,7 @@ export async function processAgentJob(
       kind: "agent-result",
       content: result,
     });
+    await persistStageNotes(options.repos, artifactId, job.jobId, run);
 
     if (await isCancelRequested(options.repos, job.jobId)) {
       await transitionJob("Cancelled", "Cancelled", undefined, { status: "Cancelled" });
@@ -406,6 +449,24 @@ async function syncLarkStatus(
 async function isCancelRequested(repos: Pick<WorkerRepositories, "getJobForWorker">, jobId: string): Promise<boolean> {
   const latest = await repos.getJobForWorker(jobId);
   return latest?.phase === "CancelRequested" || latest?.phase === "Cancelling";
+}
+
+// Surface the staged runner's plan/review/qa notes (written to the workspace output
+// dir) as admin artifacts. Best-effort: single-pass/mock runs have no notes -> no-op.
+async function persistStageNotes(
+  repos: Pick<WorkerRepositories, "saveArtifact">,
+  artifactId: (kind: string) => string,
+  jobId: string,
+  run: WorkerRunRecord,
+): Promise<void> {
+  const outputDir = getWorkspacePaths(run.workspacePath).outputDir;
+  for (const note of STAGE_NOTE_ARTIFACTS) {
+    const content = await readFile(join(outputDir, note.file), "utf8").catch(() => "");
+    if (!content.trim()) continue;
+    await repos
+      .saveArtifact({ id: artifactId(note.kind), jobId, runId: run.runId, kind: note.kind, path: note.file, content })
+      .catch(() => undefined);
+  }
 }
 
 async function createPublishInput(

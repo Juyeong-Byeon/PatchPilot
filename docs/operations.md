@@ -162,9 +162,9 @@ Use real mode only against a disposable test repository in the allowlist.
    `GSTACK_COMMAND=node` and set
    `GSTACK_ARGS=/opt/runner/apps/runner/dist/gstack-staged-runner.js` instead of
    the single-pass `codex-agent-runner.js`. Staged runs cost ~4× the tokens (four
-   Codex passes), a failing verify stage fails the run, and cancellation does not
-   interrupt a run mid-pass. Roll back by pointing `GSTACK_ARGS` at
-   `codex-agent-runner.js`.
+   Codex passes) and a failing verify stage fails the run. A cancel request stops
+   the running runner container mid-execution and records the cancelled phase.
+   Roll back by pointing `GSTACK_ARGS` at `codex-agent-runner.js`.
    Do not use `EXECUTOR_MODE=gstack` until `docker run --rm
 ticket-to-pr-runner:local sh -lc 'command -v codex'` succeeds, or until
    `GSTACK_COMMAND` points at another compatible executable in the image.

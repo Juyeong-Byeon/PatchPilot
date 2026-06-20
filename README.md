@@ -288,8 +288,9 @@ Stages run sequentially and fail fast (the stage name is included in the failure
    `output/qa.json` (`{passed, command, summary}`). A failing verification **fails
    the run**, and the result is recorded in the policy-gated `tests` field.
 
-Each stage's notes are folded into the PR body, and the platform still derives the
-PR's trusted git evidence after the run. The same `CODEX_*` /
+Each stage's notes are folded into the PR body **and surfaced in the admin
+console** (a "Pipeline stage notes" panel on the job detail), and the platform
+still derives the PR's trusted git evidence after the run. The same `CODEX_*` /
 `GSTACK_SKILL_SOURCE_DIR` mounts apply; the runner image bundles `ripgrep`, which
 gstack skills require.
 
@@ -297,9 +298,9 @@ Operational notes:
 
 - **Cost:** four Codex passes each reload a large gstack skill, so a staged run
   costs roughly 4× the single-pass runner. Prefer it for higher-stakes tickets.
-- **Cancel:** cancellation is checked between platform phases, so it does not
-  interrupt a staged run mid-pass (the container runs to completion). The whole
-  pipeline shares one timeout, split evenly across stages.
+- **Cancel:** a cancel request stops the running runner container mid-execution
+  and records the phase it was cancelled in. The whole pipeline shares one
+  timeout, split evenly across stages.
 - **Rollback:** point `GSTACK_ARGS` back at `codex-agent-runner.js` for single-pass.
 - Browser-based QA via `gstack-qa` needs a headless browser in the runner image
   (not bundled); the verify stage uses test/build checks, not browser QA.
@@ -398,8 +399,10 @@ The admin UI supports:
 - Datadog-style phase spans for `Queued -> Planning -> Implementing ->
 PolicyChecking -> Publishing -> Completed`.
 - Span-to-log correlation by source for faster debugging.
+- Pipeline stage notes (plan / review / verify) rendered from the staged runner.
 - Artifacts, raw logs, retry, and cancel actions. Retry is enabled only for
-  internally-failed jobs, matching the backend retry preflight.
+  internally-failed jobs, matching the backend retry preflight. Cancelling a
+  running job stops the runner container and shows where it was cancelled.
 
 Run it directly during frontend work:
 
