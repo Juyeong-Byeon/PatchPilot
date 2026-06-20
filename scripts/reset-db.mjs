@@ -10,7 +10,8 @@ const rootDir = fileURLToPath(new URL("..", import.meta.url));
 
 function run(command, args, options = {}) {
   console.log(`$ ${command} ${args.join(" ")}`);
-  execFileSync(command, args, { cwd: rootDir, stdio: "inherit", ...options });
+  // On Windows, npm/docker are .cmd shims that only resolve through a shell.
+  execFileSync(command, args, { cwd: rootDir, stdio: "inherit", shell: process.platform === "win32", ...options });
 }
 
 const env = parseEnvFile(`${rootDir}.env`);

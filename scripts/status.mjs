@@ -11,7 +11,7 @@ const port = env.HOST_API_PORT ?? process.env.HOST_API_PORT ?? "3000";
 
 console.log("Containers:");
 try {
-  execFileSync("docker", ["compose", "ps"], { cwd: rootDir, stdio: "inherit" });
+  execFileSync("docker", ["compose", "ps"], { cwd: rootDir, stdio: "inherit", shell: process.platform === "win32" });
 } catch {
   console.error("  Could not read container state (is Docker running?).");
 }

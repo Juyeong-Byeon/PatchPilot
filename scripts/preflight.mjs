@@ -42,15 +42,16 @@ export function runPreflightChecks() {
   const warn = (message) => warnings.push(message);
   const ok = (message) => info.push(message);
 
-  // Toolchain
+  // Toolchain. On Windows, docker is resolved through a shell (.exe/.cmd shims).
+  const useShell = process.platform === "win32";
   try {
-    execFileSync("docker", ["info"], { stdio: "ignore" });
+    execFileSync("docker", ["info"], { stdio: "ignore", shell: useShell });
     ok("Docker daemon is running");
   } catch {
     fail("Docker daemon is not reachable. Start Docker Desktop (or the docker service) and retry.");
   }
   try {
-    execFileSync("docker", ["compose", "version"], { stdio: "ignore" });
+    execFileSync("docker", ["compose", "version"], { stdio: "ignore", shell: useShell });
     ok("Docker Compose v2 is available");
   } catch {
     fail("`docker compose` is not available. Install Docker Compose v2.");

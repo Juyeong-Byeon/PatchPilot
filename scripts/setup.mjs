@@ -29,7 +29,8 @@ function heading(title) {
 
 function run(command, args, options = {}) {
   console.log(`    $ ${command} ${args.join(" ")}`);
-  execFileSync(command, args, { cwd: rootDir, stdio: "inherit", ...options });
+  // On Windows, npm/docker are .cmd shims that only resolve through a shell.
+  execFileSync(command, args, { cwd: rootDir, stdio: "inherit", shell: process.platform === "win32", ...options });
 }
 
 function hostDatabaseUrl(env) {
