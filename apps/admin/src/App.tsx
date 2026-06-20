@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, CheckCircle2, ListChecks } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ListChecks } from "lucide-react";
 import {
   cancelJob,
   fetchJob,
@@ -284,8 +284,8 @@ export default function App() {
             <div className="min-w-0">
               <div className="flex min-w-0 items-start gap-3">
                 {route.page === "detail" ? (
-                  <Button type="button" variant="outline" size="icon" aria-label={copy.backToJobs} title={copy.backToJobs} onClick={openJobList}>
-                    <ArrowLeft aria-hidden="true" size={16} strokeWidth={2.3} />
+                  <Button type="button" variant="ghost" size="icon" aria-label={copy.backToJobs} title={copy.backToJobs} onClick={openJobList}>
+                    <ChevronLeft aria-hidden="true" size={18} strokeWidth={2.3} />
                   </Button>
                 ) : null}
                 <div className="min-w-0">
