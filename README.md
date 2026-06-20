@@ -64,7 +64,9 @@ npm install
 docker compose build
 docker compose up -d postgres redis
 DATABASE_URL=postgres://ticket_to_pr:ticket_to_pr@localhost:5432/ticket_to_pr npm --workspace @ticket-to-pr/db run migrate
-docker compose up -d api worker
+npm run docker:build-runtime
+docker compose up -d api
+npm run docker:recreate-worker
 docker compose logs -f api worker
 ```
 
@@ -139,10 +141,12 @@ before running an E2E smoke. A stale image can keep old GitHub auth behavior eve
 when the checkout has newer code:
 
 ```bash
-docker compose build worker
-docker build -f docker/runner.Dockerfile -t ticket-to-pr-runner:local .
-docker compose up -d --force-recreate worker
+npm run docker:refresh-runtime
 ```
+
+The runner image is registered in Compose as the `runner-image` build target
+under the `build` profile, so the worker image and the runner image can be
+rebuilt from the same checkout in one command.
 
 ## Admin Console
 

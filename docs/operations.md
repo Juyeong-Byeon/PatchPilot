@@ -70,7 +70,9 @@ cp .env.example .env
 docker compose build
 docker compose up -d postgres redis
 DATABASE_URL=postgres://ticket_to_pr:ticket_to_pr@localhost:5432/ticket_to_pr npm --workspace @ticket-to-pr/db run migrate
-docker compose up -d api worker
+npm run docker:build-runtime
+docker compose up -d api
+npm run docker:recreate-worker
 docker compose logs -f api worker
 ```
 
@@ -146,13 +148,16 @@ If worker or runner source changed since the last smoke, rebuild before
 submitting the ticket:
 
 ```bash
-docker compose build worker
-docker build -f docker/runner.Dockerfile -t ticket-to-pr-runner:local .
-docker compose up -d --force-recreate worker
+npm run docker:refresh-runtime
 ```
 
 This matters for GitHub auth fixes because the runner and worker execute from
 Docker image layers, not directly from the live checkout.
+
+Do not fix dubious-ownership errors with `git config --global --add
+safe.directory '*'`. The worker runs trusted Git reads and pushes with a
+command-scoped `safe.directory=<repo>` setting so the exception stays limited to
+the runner workspace being audited.
 
 Do not run real mode against production repositories until the allowlist,
 protected path denylist, and PAT scope have been reviewed.

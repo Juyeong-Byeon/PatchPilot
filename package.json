@@ -15,7 +15,10 @@
     "dev:api": "npm --workspace @ticket-to-pr/api run dev",
     "dev:worker": "npm --workspace @ticket-to-pr/worker run dev",
     "dev:admin": "npm --workspace @ticket-to-pr/admin run dev",
-    "db:migrate": "npm --workspace @ticket-to-pr/db run migrate"
+    "db:migrate": "npm --workspace @ticket-to-pr/db run migrate",
+    "docker:build-runtime": "docker compose --profile build build worker runner-image",
+    "docker:recreate-worker": "docker compose up -d --force-recreate worker",
+    "docker:refresh-runtime": "npm run docker:build-runtime && npm run docker:recreate-worker"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

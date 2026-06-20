@@ -53,5 +53,16 @@ services:
       redis:
         condition: service_healthy
 
+  runner-image:
+    profiles:
+      - build
+    image: ${RUNNER_IMAGE:-ticket-to-pr-runner:local}
+    build:
+      context: .
+      dockerfile: docker/runner.Dockerfile
+      args:
+        GSTACK_INSTALL_COMMAND: ${GSTACK_INSTALL_COMMAND:-}
+    command: ["node", "apps/runner/dist/main.js"]
+
 volumes:
   postgres-data:
