@@ -1,7 +1,7 @@
-# PRonaut
+# PatchPilot
 
 <p align="center">
-  <img src="docs/assets/ticket-to-pr-logo.png" alt="PRonaut alien pet coding mascot" width="520" />
+  <img src="docs/assets/patchpilot-brand.svg" alt="PatchPilot brand mark" width="520" />
 </p>
 
 Lark Base tickets in, audited GitHub pull requests out.

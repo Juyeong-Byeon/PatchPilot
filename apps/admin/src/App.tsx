@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ListChecks } from "lucide-react";
-import adminLogo from "./assets/admin-logo.png";
+import adminLogo from "./assets/patchpilot-logo.svg";
 import {
   cancelJob,
   fetchJob,
@@ -221,7 +221,7 @@ export default function App() {
               src={adminLogo}
               alt=""
               aria-hidden="true"
-              className="status-glow-active size-9 shrink-0 rounded-xl border border-electric-blue/20 bg-mist-blue object-cover"
+              className="status-glow-active size-9 shrink-0 rounded-xl border border-electric-blue/20 bg-mist-blue object-contain p-1"
             />
             <div className="min-w-0">
               <p className="text-[12px] leading-4 text-charcoal">{copy.appEyebrow}</p>
