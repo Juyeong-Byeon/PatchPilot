@@ -53,14 +53,14 @@ export function RunTimeline({ events, copy, locale, selectedSpan, onSelectSpan, 
       </div>
 
       <div className="surface-card-soft overflow-x-auto rounded-lg border border-hairline-gray">
-        <table className="w-full min-w-[680px] border-collapse text-left text-[13px]" aria-label={copy.traceFlow}>
+        <table className="w-full min-w-[720px] table-fixed border-collapse text-left text-[13px]" aria-label={copy.traceFlow}>
           <thead className="bg-linen-white/95 text-[12px] font-medium leading-4 text-charcoal">
             <tr className="border-b border-hairline-gray">
-              <th className="w-[52px] px-3 py-2">{copy.traceColumnIndex}</th>
-              <th className="px-3 py-2">{copy.traceColumnStage}</th>
-              <th className="w-[128px] px-3 py-2">{copy.traceColumnStatus}</th>
-              <th className="w-[136px] px-3 py-2">{copy.traceColumnService}</th>
-              <th className="w-[240px] px-3 py-2 text-right">{copy.traceColumnDuration}</th>
+              <th className="w-[44px] px-3 py-2">{copy.traceColumnIndex}</th>
+              <th className="w-[112px] px-3 py-2">{copy.traceColumnStage}</th>
+              <th className="w-[112px] px-3 py-2">{copy.traceColumnStatus}</th>
+              <th className="w-[112px] px-3 py-2">{copy.traceColumnService}</th>
+              <th className="w-[340px] px-3 py-2 text-right">{copy.traceColumnDuration}</th>
             </tr>
           </thead>
           <tbody>
@@ -93,14 +93,14 @@ export function RunTimeline({ events, copy, locale, selectedSpan, onSelectSpan, 
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex items-center justify-end gap-3">
-                      <div className="h-2 w-32 overflow-hidden rounded-full bg-linen shadow-inner">
+                      <div className="h-2 min-w-[180px] flex-1 overflow-hidden rounded-full bg-linen shadow-inner">
                         <div
                           className={`duration-bar h-full rounded-full ${durationBarClassName(span.status)}`}
                           data-duration-bar
                           style={{ width: `${durationWidth(span.durationMs, totalRunDuration)}%` }}
                         />
                       </div>
-                      <span className="w-12 text-right font-mono text-[12px] text-charcoal">
+                      <span className="w-14 shrink-0 text-right font-mono text-[12px] text-charcoal">
                         {formatDuration(span.durationMs)}
                       </span>
                     </div>
