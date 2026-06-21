@@ -15,8 +15,25 @@ function makeRepos() {
     requestCancel: vi.fn().mockResolvedValue({ status: "requested" }),
     getRetryPreflight: vi.fn().mockResolvedValue({ jobId: "job_1", retryable: true, lastAttempt: 1 }),
     createRetryAttempt: vi.fn().mockResolvedValue({ runId: "run_2", attempt: 2 }),
+    getMetrics: vi.fn().mockResolvedValue(emptyMetrics()),
     transitionJob: vi.fn().mockResolvedValue(undefined),
     appendEvent: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
+function emptyMetrics() {
+  return {
+    periodDays: null,
+    totalJobs: 0,
+    needsReviewJobs: 0,
+    successRate: 0,
+    failureBreakdown: { policy: 0, agent: 0, publish: 0, infra: 0, uncategorized: 0, total: 0 },
+    runtimeSeconds: { p50: null, p95: null, sampleSize: 0 },
+    mergeRate: 0,
+    mergedJobs: 0,
+    retryRate: 0,
+    retriedJobs: 0,
+    executorModeDistribution: { singlePass: 0, staged: 0, unknown: 0 },
   };
 }
 
@@ -88,12 +105,16 @@ describe("admin routes", () => {
     expect(retry.statusCode).toBe(202);
     expect(retry.json()).toEqual({ ok: true, runId: "run_2", attempt: 2 });
     expect(repos.requestCancel).toHaveBeenCalledWith("job_1", "admin");
-    expect(repos.createRetryAttempt).toHaveBeenCalledWith("job_1", "admin");
-    expect(queue.add).toHaveBeenCalledWith("job_1", {
-      jobId: "job_1",
-      runId: "run_2",
-      attempt: 2,
-    });
+    expect(repos.createRetryAttempt).toHaveBeenCalledWith("job_1", "admin", { guidance: null });
+    expect(queue.add).toHaveBeenCalledWith(
+      "job_1",
+      {
+        jobId: "job_1",
+        runId: "run_2",
+        attempt: 2,
+      },
+      { jobId: "job_1:run_2" },
+    );
     await app.close();
   });
 
@@ -236,6 +257,192 @@ describe("admin routes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.body).toContain("Ticket-to-PR");
+    await app.close();
+  });
+});
+
+describe("metrics route (X5)", () => {
+  it("requires the admin bearer token", async () => {
+    const app = await buildServer({
+      adminToken: "secret",
+      larkWebhookSecret: "webhook-secret",
+      repos: makeRepos() as never,
+      queue: { add: vi.fn() },
+    });
+
+    const response = await app.inject({ method: "GET", url: "/api/metrics" });
+
+    expect(response.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it("returns the aggregate for an authorized admin", async () => {
+    const repos = makeRepos();
+    const app = await buildServer({
+      adminToken: "secret",
+      larkWebhookSecret: "webhook-secret",
+      repos: repos as never,
+      queue: { add: vi.fn() },
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/metrics",
+      headers: { authorization: "Bearer secret" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(emptyMetrics());
+    expect(repos.getMetrics).toHaveBeenCalledWith(undefined);
+    await app.close();
+  });
+
+  it("passes a positive ?days window through to the repo", async () => {
+    const repos = makeRepos();
+    const app = await buildServer({
+      adminToken: "secret",
+      larkWebhookSecret: "webhook-secret",
+      repos: repos as never,
+      queue: { add: vi.fn() },
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/metrics?days=7",
+      headers: { authorization: "Bearer secret" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(repos.getMetrics).toHaveBeenCalledWith(7);
+    await app.close();
+  });
+
+  it("rejects a non-positive or non-integer ?days value", async () => {
+    const repos = makeRepos();
+    const app = await buildServer({
+      adminToken: "secret",
+      larkWebhookSecret: "webhook-secret",
+      repos: repos as never,
+      queue: { add: vi.fn() },
+    });
+
+    for (const days of ["0", "-3", "abc", "1.5"]) {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/metrics?days=${days}`,
+        headers: { authorization: "Bearer secret" },
+      });
+      expect(response.statusCode).toBe(400);
+    }
+    expect(repos.getMetrics).not.toHaveBeenCalled();
+    await app.close();
+  });
+});
+
+describe("retry with operator guidance (X4)", () => {
+  it("unlocks a FailedActionable retry when guidance is supplied and persists it", async () => {
+    const repos = makeRepos();
+    repos.getRetryPreflight.mockResolvedValue({
+      jobId: "job_1",
+      retryable: false,
+      phase: "Failed",
+      outcome: "FailedActionable",
+    });
+    const queue = { add: vi.fn().mockResolvedValue({ id: "job_1" }) };
+    const app = await buildServer({
+      adminToken: "secret",
+      larkWebhookSecret: "webhook-secret",
+      repos: repos as never,
+      queue,
+    });
+
+    const retry = await app.inject({
+      method: "POST",
+      url: "/api/jobs/job_1/retry",
+      headers: { authorization: "Bearer secret", "content-type": "application/json" },
+      payload: { guidance: "Scope the change to auth.ts and add a test." },
+    });
+
+    expect(retry.statusCode).toBe(202);
+    expect(repos.createRetryAttempt).toHaveBeenCalledWith("job_1", "admin", {
+      guidance: "Scope the change to auth.ts and add a test.",
+    });
+    await app.close();
+  });
+
+  it("still rejects a FailedActionable retry without guidance", async () => {
+    const repos = makeRepos();
+    repos.getRetryPreflight.mockResolvedValue({
+      jobId: "job_1",
+      retryable: false,
+      phase: "Failed",
+      outcome: "FailedActionable",
+    });
+    const app = await buildServer({
+      adminToken: "secret",
+      larkWebhookSecret: "webhook-secret",
+      repos: repos as never,
+      queue: { add: vi.fn() },
+    });
+
+    const retry = await app.inject({
+      method: "POST",
+      url: "/api/jobs/job_1/retry",
+      headers: { authorization: "Bearer secret" },
+    });
+
+    expect(retry.statusCode).toBe(409);
+    expect(repos.createRetryAttempt).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it("rejects a non-string or over-long guidance with 400", async () => {
+    const repos = makeRepos();
+    const app = await buildServer({
+      adminToken: "secret",
+      larkWebhookSecret: "webhook-secret",
+      repos: repos as never,
+      queue: { add: vi.fn() },
+    });
+
+    const tooLong = await app.inject({
+      method: "POST",
+      url: "/api/jobs/job_1/retry",
+      headers: { authorization: "Bearer secret", "content-type": "application/json" },
+      payload: { guidance: "x".repeat(4001) },
+    });
+    const wrongType = await app.inject({
+      method: "POST",
+      url: "/api/jobs/job_1/retry",
+      headers: { authorization: "Bearer secret", "content-type": "application/json" },
+      payload: { guidance: 42 },
+    });
+
+    expect(tooLong.statusCode).toBe(400);
+    expect(wrongType.statusCode).toBe(400);
+    expect(repos.createRetryAttempt).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it("treats whitespace-only guidance as none (FailedInternal still retries)", async () => {
+    const repos = makeRepos();
+    const queue = { add: vi.fn().mockResolvedValue({ id: "job_1" }) };
+    const app = await buildServer({
+      adminToken: "secret",
+      larkWebhookSecret: "webhook-secret",
+      repos: repos as never,
+      queue,
+    });
+
+    const retry = await app.inject({
+      method: "POST",
+      url: "/api/jobs/job_1/retry",
+      headers: { authorization: "Bearer secret", "content-type": "application/json" },
+      payload: { guidance: "   " },
+    });
+
+    expect(retry.statusCode).toBe(202);
+    expect(repos.createRetryAttempt).toHaveBeenCalledWith("job_1", "admin", { guidance: null });
     await app.close();
   });
 });

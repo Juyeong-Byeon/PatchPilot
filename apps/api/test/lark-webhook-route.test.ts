@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { buildServer } from "../src/server.js";
 
@@ -67,6 +68,57 @@ describe("lark webhook route", () => {
 
     expect(response.statusCode).toBe(202);
     expect(response.json()).toEqual({ action: "enqueued", jobId: "job_1" });
+    await app.close();
+  });
+
+  it("accepts a hardened signed request over the exact raw body (L5)", async () => {
+    const deps = makeDeps();
+    const app = await buildServer({ ...deps, larkWebhookSecret: "secret" });
+
+    // Sign the EXACT JSON bytes Fastify will receive, like a real Lark sender.
+    const rawBody = JSON.stringify(webhookBody);
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const nonce = "route-nonce-1";
+    const signature = `sha256=${createHmac("sha256", "secret")
+      .update(`${timestamp}.${nonce}.${rawBody}`)
+      .digest("hex")}`;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/webhooks/lark",
+      headers: {
+        "content-type": "application/json",
+        "x-lark-signature": signature,
+        "x-lark-timestamp": timestamp,
+        "x-lark-nonce": nonce,
+      },
+      payload: rawBody,
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toEqual({ action: "enqueued", jobId: "job_1" });
+    await app.close();
+  });
+
+  it("rejects a signed request whose signature does not match the body", async () => {
+    const deps = makeDeps();
+    const app = await buildServer({ ...deps, larkWebhookSecret: "secret" });
+
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const response = await app.inject({
+      method: "POST",
+      url: "/webhooks/lark",
+      headers: {
+        "content-type": "application/json",
+        "x-lark-signature": "sha256=deadbeef",
+        "x-lark-timestamp": timestamp,
+        "x-lark-nonce": "route-nonce-2",
+      },
+      payload: JSON.stringify(webhookBody),
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(deps.queue.add).not.toHaveBeenCalled();
     await app.close();
   });
 });

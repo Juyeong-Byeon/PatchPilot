@@ -39,6 +39,15 @@ describe("migrate / listMigrationFiles", () => {
     expect(sql).toMatch(/add column if not exists executor_mode/i);
   });
 
+  it("includes the runs.guidance retry-guidance migration as an idempotent ADD COLUMN (X4)", () => {
+    const files = listMigrationFiles(join(srcDir, "migrations"));
+    const target = files.find((f) => f.fileName.includes("guidance"));
+    expect(target).toMatchObject({ version: "0003" });
+    const sql = readFileSync(join(srcDir, "migrations", target!.fileName), "utf8");
+    expect(sql).toMatch(/alter table runs/i);
+    expect(sql).toMatch(/add column if not exists guidance/i);
+  });
+
   it("returns [] when the migrations directory is missing", () => {
     expect(listMigrationFiles(join(srcDir, "does-not-exist"))).toEqual([]);
   });

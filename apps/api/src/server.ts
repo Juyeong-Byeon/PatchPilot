@@ -7,7 +7,7 @@ import { createPool, Repositories } from "@ticket-to-pr/db";
 import { createAgentQueue } from "@ticket-to-pr/queue";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import { assertGitHubWebhookSignature, assertLarkWebhookSecret } from "./auth.js";
+import { assertGitHubWebhookSignature, createLarkWebhookVerifier } from "./auth.js";
 import { readApiEnv } from "./env.js";
 import { handleGitHubPullRequestWebhook, type GitHubWebhookRepositories } from "./github-webhook.js";
 import { handleLarkWebhook, type AgentQueue, type LarkWebhookInput } from "./lark-webhook.js";
@@ -21,6 +21,8 @@ export interface ApiServerDependencies {
   queue: AgentQueue;
   adminToken?: string;
   larkWebhookSecret?: string;
+  /** Clock-skew / replay window (seconds) for signed Lark webhooks. Default 300. */
+  larkReplayWindowSeconds?: number;
   githubWebhookSecret?: string;
   allowUnauthenticatedLarkWebhook?: boolean;
   allowUnauthenticatedGitHubWebhook?: boolean;
@@ -36,13 +38,25 @@ export async function buildServer(deps: ApiServerDependencies): Promise<FastifyI
   if (!larkWebhookSecret && deps.allowUnauthenticatedLarkWebhook !== true) {
     throw new Error("Lark webhook secret is required");
   }
+  // Built once so the replay/nonce cache (L5) is shared across all requests for
+  // the lifetime of the server. Undefined only in the explicit unauthenticated
+  // test/dev bypass, in which case the route skips verification entirely.
+  const larkVerifier = larkWebhookSecret
+    ? createLarkWebhookVerifier({
+        secret: larkWebhookSecret,
+        replayWindowSeconds: deps.larkReplayWindowSeconds,
+      })
+    : undefined;
 
   await registerHealthRoutes(app, deps.healthProbes);
   if (deps.adminToken && hasAdminRepositories(deps.repos)) {
     await registerAdminRoutes(app, deps.repos, deps.queue, deps.adminToken);
   }
   app.post<{ Body: LarkWebhookInput }>("/webhooks/lark", async (request, reply) => {
-    if (larkWebhookSecret) assertLarkWebhookSecret(request, larkWebhookSecret);
+    // Hardened verifier (L5): prefers signed (HMAC + timestamp + nonce) requests,
+    // falls back to the legacy plain `x-lark-webhook-secret` header for
+    // back-compat. Needs the exact raw body bytes for the HMAC.
+    if (larkVerifier) larkVerifier.verify(request, readRawBody(request));
     const result = await handleLarkWebhook(request.body, deps.repos, deps.queue, deps.larkUpdater);
     const statusCode = result.action === "enqueued" ? 202 : 200;
     return reply.code(statusCode).send(result);
@@ -156,6 +170,7 @@ function hasAdminRepositories(
     typeof repos.requestCancel === "function" &&
     typeof repos.getRetryPreflight === "function" &&
     typeof repos.createRetryAttempt === "function" &&
+    typeof repos.getMetrics === "function" &&
     typeof repos.transitionJob === "function" &&
     typeof repos.appendEvent === "function"
   );

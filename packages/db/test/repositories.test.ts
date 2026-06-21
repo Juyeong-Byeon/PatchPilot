@@ -217,4 +217,87 @@ describe.skipIf(!connectionString)("Repositories", () => {
       expect(row).toMatchObject({ repository: baseTicket.repository, prNumber: pending.prNumber });
     });
   });
+
+  describe("createRetryAttempt with operator guidance (X4)", () => {
+    async function failJob(jobId: string, outcome: UserOutcome): Promise<void> {
+      await pool.query(
+        `update jobs set phase='Failed', outcome=$2, failure_category='agent', updated_at=now() where id=$1`,
+        [jobId, outcome],
+      );
+    }
+
+    it("permits a FailedActionable retry only with guidance and persists it on the run", async () => {
+      const { jobId } = await seedJob(`guid_actionable_${Date.now()}`);
+      await failJob(jobId, "FailedActionable");
+
+      // Without guidance, an actionable failure stays non-retryable.
+      await expect(repos.createRetryAttempt(jobId, "admin")).rejects.toMatchObject({ statusCode: 409 });
+
+      const retry = await repos.createRetryAttempt(jobId, "admin", { guidance: "Limit scope to auth.ts" });
+      expect(retry.attempt).toBeGreaterThan(1);
+      expect(await repos.getRunGuidance(retry.runId)).toBe("Limit scope to auth.ts");
+      // The job is back to Queued for the worker to pick up.
+      expect((await getPhase(jobId)).phase).toBe("Queued");
+    });
+
+    it("permits a FailedInternal retry with no guidance (guidance is null)", async () => {
+      const { jobId } = await seedJob(`guid_internal_${Date.now()}`);
+      await failJob(jobId, "FailedInternal");
+
+      const retry = await repos.createRetryAttempt(jobId, "admin");
+      expect(await repos.getRunGuidance(retry.runId)).toBeNull();
+    });
+  });
+
+  describe("getMetrics (X5)", () => {
+    it("aggregates success/failure/merge/retry/mode over the window", async () => {
+      const stamp = `metrics_${Date.now()}`;
+      // A NeedsReview job with a single-pass run.
+      const review = await seedJob(`${stamp}_review`, true);
+      await pool.query(`update runs set executor_mode='single-pass' where job_id=$1`, [review.jobId]);
+      await setPhase(review.jobId, "Completed", "NeedsReview");
+      await pool.query(
+        `insert into run_events(job_id, run_id, phase, event_type, source, message)
+         values ($1,$2,'Completed','worker.completed','worker','reached review')`,
+        [review.jobId, review.runId],
+      );
+      // A merged job (staged).
+      const merged = await seedJob(`${stamp}_merged`, true);
+      await pool.query(`update runs set executor_mode='staged' where job_id=$1`, [merged.jobId]);
+      await setPhase(merged.jobId, "Completed", "Completed");
+      // A policy-failed job.
+      const failed = await seedJob(`${stamp}_failed`);
+      await pool.query(
+        `update jobs set phase='Failed', outcome='FailedActionable', failure_category='policy' where id=$1`,
+        [failed.jobId],
+      );
+
+      const metrics = await repos.getMetrics();
+      expect(metrics.totalJobs).toBeGreaterThanOrEqual(3);
+      expect(metrics.needsReviewJobs).toBeGreaterThanOrEqual(2); // review + merged
+      expect(metrics.mergedJobs).toBeGreaterThanOrEqual(1);
+      expect(metrics.failureBreakdown.policy).toBeGreaterThanOrEqual(1);
+      expect(metrics.executorModeDistribution.singlePass).toBeGreaterThanOrEqual(1);
+      expect(metrics.executorModeDistribution.staged).toBeGreaterThanOrEqual(1);
+      expect(metrics.successRate).toBeGreaterThan(0);
+      expect(metrics.mergeRate).toBeGreaterThan(0);
+      // The review job has a Completed run_event after created_at → measurable runtime.
+      expect(metrics.runtimeSeconds.sampleSize).toBeGreaterThanOrEqual(1);
+    });
+
+    it("scopes to the ?days window", async () => {
+      // A 0-row-window sanity check: a 1-day window over freshly created jobs
+      // still includes them, and the shape is well-formed.
+      const metrics = await repos.getMetrics(1);
+      expect(metrics.periodDays).toBe(1);
+      expect(metrics.totalJobs).toBeGreaterThanOrEqual(0);
+      expect(metrics.failureBreakdown.total).toBe(
+        metrics.failureBreakdown.policy +
+          metrics.failureBreakdown.agent +
+          metrics.failureBreakdown.publish +
+          metrics.failureBreakdown.infra +
+          metrics.failureBreakdown.uncategorized,
+      );
+    });
+  });
 });

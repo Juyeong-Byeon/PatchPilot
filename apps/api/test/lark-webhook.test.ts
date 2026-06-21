@@ -29,12 +29,17 @@ describe("handleLarkWebhook", () => {
     );
 
     expect(result).toEqual({ action: "enqueued", jobId: "job_1" });
-    expect(queue.add).toHaveBeenCalledWith("job_1", {
-      jobId: "job_1",
-      ticketSnapshotId: "ts_1",
-      larkRecordId: "rec1",
-      triggerVersion: "v1",
-    });
+    expect(queue.add).toHaveBeenCalledWith(
+      "job_1",
+      {
+        jobId: "job_1",
+        ticketSnapshotId: "ts_1",
+        larkRecordId: "rec1",
+        triggerVersion: "v1",
+      },
+      // X6: stable jobId dedup key.
+      { jobId: "job_1" },
+    );
     expect(repos.appendEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         jobId: "job_1",

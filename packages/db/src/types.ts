@@ -58,6 +58,8 @@ export interface RunRecord {
   headSha: string | null;
   exitCode: number | null;
   executorMode: string | null;
+  /** Operator steering note for this attempt (X4); null when none was attached. */
+  guidance: string | null;
 }
 
 export interface AppendLogInput {
@@ -148,6 +150,60 @@ export interface RetryPreflight {
   outcome: string;
   lastAttempt: number | null;
   retryable: boolean;
+}
+
+/**
+ * Operator guidance threaded into a retry (X4). Persisted on the new run so the
+ * worker/runner can inject it as a steering instruction for the next attempt.
+ */
+export interface RetryGuidanceInput {
+  guidance?: string | null;
+}
+
+/**
+ * Aggregate operations metrics (X5). One snapshot over jobs/runs/run_events/
+ * pull_requests, optionally scoped to the last `periodDays`. Rates are 0–1
+ * fractions; `null` durations mean no job reached NeedsReview in the window.
+ */
+export interface MetricsSummary {
+  /** Window the aggregate covers; null `periodDays` means all-time. */
+  periodDays: number | null;
+  /** Total jobs created in the window. */
+  totalJobs: number;
+  /** Jobs that reached NeedsReview (worker parked at phase=Completed). */
+  needsReviewJobs: number;
+  /** needsReviewJobs / totalJobs (0 when no jobs). */
+  successRate: number;
+  /** Count of failed jobs (outcome FailedActionable/FailedInternal) by category. */
+  failureBreakdown: {
+    policy: number;
+    agent: number;
+    publish: number;
+    infra: number;
+    /** Failed jobs whose failure_category was null/unrecognized. */
+    uncategorized: number;
+    total: number;
+  };
+  /** Queued→NeedsReview wall-clock, seconds, over jobs that reached NeedsReview. */
+  runtimeSeconds: {
+    p50: number | null;
+    p95: number | null;
+    /** How many jobs had a measurable Queued→NeedsReview duration. */
+    sampleSize: number;
+  };
+  /** Merged PRs / jobs that reached NeedsReview (the real value signal). */
+  mergeRate: number;
+  mergedJobs: number;
+  /** Jobs with >1 run attempt / total jobs. */
+  retryRate: number;
+  retriedJobs: number;
+  /** Distribution of the latest run's executor_mode across jobs. */
+  executorModeDistribution: {
+    singlePass: number;
+    staged: number;
+    /** Latest run had no executor_mode recorded (legacy / pre-mode runs). */
+    unknown: number;
+  };
 }
 
 export type CancelRequestResult =
