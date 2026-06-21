@@ -8,6 +8,9 @@
     "packages/*",
     "apps/*"
   ],
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "build": "node scripts/build-workspaces-if-source.mjs",
     "test": "vitest run",
