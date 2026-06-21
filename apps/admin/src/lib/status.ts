@@ -39,11 +39,13 @@ export function isStageBannerText(text: string | undefined | null): boolean {
   return Boolean(text && STAGE_BANNER.test(text));
 }
 
-// Ordered keys of the staged runner's internal pipeline. The runner emits one
-// `gstack.stage` event as it enters each stage; the admin renders them as a
-// sub-track nested under the platform "Implementing" phase. (Kept local to the
-// frontend — the browser bundle does not depend on @ticket-to-pr/core.)
-export const GSTACK_STAGE_KEYS = ["plan", "implement", "review", "verify"] as const;
+// Ordered keys of the staged runner's pipeline (engineering stages + the final
+// PR-description stage). The runner emits one `gstack.stage` event as it enters
+// each stage; the admin renders them as a sub-track nested under the platform
+// "Implementing" phase. Used here only as a label fallback — the live key/total
+// come from the event metadata. (Kept local to the frontend — the browser bundle
+// does not depend on @ticket-to-pr/core.)
+export const GSTACK_STAGE_KEYS = ["plan", "implement", "review", "verify", "document"] as const;
 export type GstackStageKey = (typeof GSTACK_STAGE_KEYS)[number];
 
 export type StageStatus = "pending" | "active" | "complete" | "failed" | "skipped";

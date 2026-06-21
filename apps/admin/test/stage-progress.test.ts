@@ -20,7 +20,7 @@ function stageEvent(index: number, key: string, createdAt: string): TestEvent {
   return {
     event_type: "gstack.stage",
     phase: "Implementing",
-    metadata: { stageIndex: index, stageTotal: 4, stageKey: key },
+    metadata: { stageIndex: index, stageTotal: 5, stageKey: key },
     created_at: createdAt,
   };
 }
@@ -41,8 +41,14 @@ describe("deriveStageStates", () => {
       "Implementing",
       "Running",
     );
-    expect(states?.map((s) => s.status)).toEqual<StageStatus[]>(["complete", "complete", "active", "pending"]);
-    expect(states?.map((s) => s.key)).toEqual(["plan", "implement", "review", "verify"]);
+    expect(states?.map((s) => s.status)).toEqual<StageStatus[]>([
+      "complete",
+      "complete",
+      "active",
+      "pending",
+      "pending",
+    ]);
+    expect(states?.map((s) => s.key)).toEqual(["plan", "implement", "review", "verify", "document"]);
   });
 
   it("computes each completed stage's elapsed window from the next stage's start", () => {
@@ -92,7 +98,13 @@ describe("deriveStageStates", () => {
       "Failed",
       "FailedInternal",
     );
-    expect(states?.map((s) => s.status)).toEqual<StageStatus[]>(["complete", "failed", "pending", "pending"]);
+    expect(states?.map((s) => s.status)).toEqual<StageStatus[]>([
+      "complete",
+      "failed",
+      "pending",
+      "pending",
+      "pending",
+    ]);
   });
 
   it("marks the active stage failed when the run was cancelled mid-implementing", () => {
