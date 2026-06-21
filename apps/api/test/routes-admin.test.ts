@@ -15,6 +15,7 @@ function makeRepos() {
     requestCancel: vi.fn().mockResolvedValue({ status: "requested" }),
     getRetryPreflight: vi.fn().mockResolvedValue({ jobId: "job_1", retryable: true, lastAttempt: 1 }),
     createRetryAttempt: vi.fn().mockResolvedValue({ runId: "run_2", attempt: 2 }),
+    answerNeedsInput: vi.fn().mockResolvedValue({ runId: "run_2", attempt: 2 }),
     getMetrics: vi.fn().mockResolvedValue(emptyMetrics()),
     transitionJob: vi.fn().mockResolvedValue(undefined),
     appendEvent: vi.fn().mockResolvedValue(undefined),
@@ -335,6 +336,131 @@ describe("metrics route (X5)", () => {
       expect(response.statusCode).toBe(400);
     }
     expect(repos.getMetrics).not.toHaveBeenCalled();
+    await app.close();
+  });
+});
+
+describe("answer a NeedsInput job (POST /api/jobs/:id/answer)", () => {
+  it("answers a parked job: persists the answer as guidance and re-enqueues the new run", async () => {
+    const repos = makeRepos();
+    const queue = { add: vi.fn().mockResolvedValue({ id: "job_1" }) };
+    const app = await buildServer({
+      adminToken: "secret",
+      larkWebhookSecret: "webhook-secret",
+      repos: repos as never,
+      queue,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/jobs/job_1/answer",
+      headers: { authorization: "Bearer secret", "content-type": "application/json" },
+      payload: { answer: "Target the v2 API." },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toEqual({ ok: true, runId: "run_2", attempt: 2 });
+    expect(repos.answerNeedsInput).toHaveBeenCalledWith("job_1", "Target the v2 API.", "admin");
+    // Re-enqueued exactly like a retry, with the per-attempt dedup jobId.
+    expect(queue.add).toHaveBeenCalledWith(
+      "job_1",
+      { jobId: "job_1", runId: "run_2", attempt: 2 },
+      { jobId: "job_1:run_2" },
+    );
+    await app.close();
+  });
+
+  it("returns 409 when the job is not awaiting input", async () => {
+    const repos = makeRepos();
+    repos.answerNeedsInput.mockRejectedValue(
+      Object.assign(new Error("Job is not awaiting input"), { statusCode: 409 }),
+    );
+    const queue = { add: vi.fn() };
+    const app = await buildServer({
+      adminToken: "secret",
+      larkWebhookSecret: "webhook-secret",
+      repos: repos as never,
+      queue,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/jobs/job_1/answer",
+      headers: { authorization: "Bearer secret", "content-type": "application/json" },
+      payload: { answer: "too late" },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({ error: "Job is not awaiting input" });
+    // Nothing enqueued when the repo rejects.
+    expect(queue.add).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it("rejects an empty, missing, or over-long answer with 400 (no repo call)", async () => {
+    const repos = makeRepos();
+    const app = await buildServer({
+      adminToken: "secret",
+      larkWebhookSecret: "webhook-secret",
+      repos: repos as never,
+      queue: { add: vi.fn() },
+    });
+
+    for (const payload of [{ answer: "   " }, { answer: 42 }, {}, { answer: "x".repeat(4001) }]) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/jobs/job_1/answer",
+        headers: { authorization: "Bearer secret", "content-type": "application/json" },
+        payload,
+      });
+      expect(response.statusCode).toBe(400);
+    }
+    expect(repos.answerNeedsInput).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it("returns the job to Failed when the answer enqueue fails after allocation", async () => {
+    const repos = makeRepos();
+    const queue = { add: vi.fn().mockRejectedValue(new Error("redis unavailable")) };
+    const app = await buildServer({
+      adminToken: "secret",
+      larkWebhookSecret: "webhook-secret",
+      repos: repos as never,
+      queue,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/jobs/job_1/answer",
+      headers: { authorization: "Bearer secret", "content-type": "application/json" },
+      payload: { answer: "Use v2." },
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({ error: "Answer enqueue failed" });
+    expect(repos.transitionJob).toHaveBeenCalledWith("job_1", "Failed", "FailedInternal", "redis unavailable");
+    expect(repos.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: "job.answer_enqueue_failed", source: "api" }),
+    );
+    await app.close();
+  });
+
+  it("requires the admin bearer token", async () => {
+    const app = await buildServer({
+      adminToken: "secret",
+      larkWebhookSecret: "webhook-secret",
+      repos: makeRepos() as never,
+      queue: { add: vi.fn() },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/jobs/job_1/answer",
+      headers: { "content-type": "application/json" },
+      payload: { answer: "hi" },
+    });
+
+    expect(response.statusCode).toBe(401);
     await app.close();
   });
 });

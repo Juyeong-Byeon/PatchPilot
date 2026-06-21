@@ -143,6 +143,16 @@ export interface WorkerRepositories {
     failure?: { category?: string | null; nextAction?: string | null },
     expectedFrom?: InternalPhase | InternalPhase[],
   ): Promise<boolean>;
+  /**
+   * Park the job on a human question (NeedsInput). One atomic, phase-guarded write
+   * that moves the job to phase=AwaitingInput / outcome=NeedsInput AND persists the
+   * agent's `question` to jobs.pending_question. Returns `true` when a row was
+   * updated, `false` when the guard rejected it (already advanced / terminal /
+   * not in `expectedFrom`). Optional so test doubles and older repositories without
+   * it still satisfy the interface — when absent the worker falls back to the
+   * unguarded `transitionJob` (the question is then carried only on the event).
+   */
+  parkAwaitingInput?(jobId: string, question: string, expectedFrom?: InternalPhase | InternalPhase[]): Promise<boolean>;
   appendEvent(input: {
     jobId: string;
     runId?: string;
@@ -292,6 +302,9 @@ export type ProcessAgentJobResult =
   | { status: "failed"; runId: string }
   | { status: "policy_blocked"; runId: string }
   | { status: "cancelled"; runId: string }
+  // NeedsInput: the agent asked a blocking question and the job is PARKED at
+  // AwaitingInput/NeedsInput (no PR). It resumes when an operator answers.
+  | { status: "needs_input"; runId: string }
   // X6 execution dedup: another worker already holds this job's lock, so this
   // (redelivered) delivery did no work. No run is created.
   | { status: "dedup_skipped" };
@@ -572,6 +585,29 @@ async function runAgentJob(payload: AgentJobPayload, options: ProcessAgentJobOpt
       return { status: "cancelled", runId: run.runId };
     }
 
+    // NeedsInput: the agent asked one blocking question only a human can answer.
+    // This is a CLEAN STOP, not a failure — park the job (no PR, no failure
+    // category), persist the question, and surface it to the operator. The answer
+    // (entered in the console) re-queues the job exactly like a retry-with-guidance.
+    if (result.status === "needs_input") {
+      const question = result.question ?? "The agent needs clarification to proceed.";
+      const parked = await parkJobAwaitingInput(options.repos, job.jobId, question);
+      if (!parked) {
+        // A concurrent cancel/terminal write won the race; do not overwrite it.
+        await appendEvent("Implementing", "worker.needs_input_skipped", "Needs-input park rejected by guard", {
+          attempt: run.attempt,
+        });
+        return { status: "failed", runId: run.runId };
+      }
+      await syncLarkStatus(options.larkUpdater, job, {
+        status: "NeedsInput",
+        failureReason: summarizeQuestion(question),
+      });
+      await appendEvent("AwaitingInput", "job.needs_input", question, { attempt: run.attempt }, "worker");
+      await appendProgressLog("AwaitingInput", "worker", "에이전트가 사람의 결정을 요청해 작업을 일시 중지했습니다.");
+      return { status: "needs_input", runId: run.runId };
+    }
+
     if (result.status !== "completed") {
       // X4: honor the runner's STRUCTURED failure when present (output/failure.json →
       // result.failure). Surface its message, category, and nextAction instead of the
@@ -734,6 +770,37 @@ async function guardedTransition(
   return true;
 }
 
+/**
+ * Park a job on a human question (NeedsInput) via the phase-guarded path. Prefers
+ * the dedicated `parkAwaitingInput` repo method (the real one persists the question
+ * to jobs.pending_question atomically with the AwaitingInput/NeedsInput transition,
+ * `expectedFrom` = the running phases so a concurrent cancel/terminal write cannot
+ * be clobbered). Falls back to the unguarded `transitionJob` for legacy test doubles
+ * (the question is then carried only on the emitted event), reporting success so
+ * behavior is unchanged. Returns whether the job was parked.
+ */
+async function parkJobAwaitingInput(
+  repos: Pick<WorkerRepositories, "transitionJob" | "parkAwaitingInput">,
+  jobId: string,
+  question: string,
+): Promise<boolean> {
+  if (repos.parkAwaitingInput) {
+    // Only a still-running job may be parked; a job that already settled
+    // (cancelled/failed) or advanced must not be silently overwritten.
+    return repos.parkAwaitingInput(jobId, question, ["Queued", "Planning", "Implementing", "Reviewing", "Testing"]);
+  }
+  await repos.transitionJob(jobId, "AwaitingInput", "NeedsInput");
+  return true;
+}
+
+// Lark write-back of the question keeps the cell readable; long questions are
+// truncated so the status field stays a one-line summary.
+const QUESTION_SUMMARY_MAX = 280;
+function summarizeQuestion(question: string): string {
+  const trimmed = question.trim();
+  return trimmed.length > QUESTION_SUMMARY_MAX ? `${trimmed.slice(0, QUESTION_SUMMARY_MAX - 1)}…` : trimmed;
+}
+
 // Surface the staged runner's plan/review/qa notes (written to the workspace output
 // dir) as admin artifacts. Best-effort: single-pass/mock runs have no notes -> no-op.
 async function persistStageNotes(
@@ -853,6 +920,8 @@ function phaseLabel(phase: InternalPhase): string {
       return "계획";
     case "Implementing":
       return "구현";
+    case "AwaitingInput":
+      return "입력 대기";
     case "PolicyChecking":
       return "정책 검사";
     case "Publishing":

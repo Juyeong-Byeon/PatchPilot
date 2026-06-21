@@ -266,6 +266,122 @@ describe("runCodexAgentRunner structured failure (X4)", () => {
   });
 });
 
+describe("runCodexAgentRunner needs-input (NeedsInput)", () => {
+  async function setup(): Promise<{ workspaceRoot: string; repoDir: string }> {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "ticket-to-pr-codex-ni-"));
+    tempDirs.push(workspaceRoot);
+    const repoDir = join(workspaceRoot, "repo");
+    const inputDir = join(workspaceRoot, "input");
+    await mkdir(inputDir, { recursive: true });
+    await run("git", ["init", repoDir]);
+    await run("git", ["config", "user.name", "Test User"], repoDir);
+    await run("git", ["config", "user.email", "test@example.com"], repoDir);
+    await writeFile(join(repoDir, "README.md"), "# Test repo\n");
+    await run("git", ["add", "README.md"], repoDir);
+    await run("git", ["commit", "-m", "Initial commit"], repoDir);
+    await writeFile(join(inputDir, "ticket.md"), "# Ambiguous ticket\n");
+    await writeFile(
+      join(inputDir, "context.json"),
+      JSON.stringify({
+        jobId: "job_1",
+        ticketSnapshotId: "ts_1",
+        triggerVersion: "codex real runner",
+        runId: "run_1",
+        attempt: 1,
+        workBranch: "ticket-to-pr/job_1",
+      }),
+    );
+    await writeFile(join(inputDir, "policy.json"), JSON.stringify({ repositoryAllowlist: ["owner/repo"] }));
+    return { workspaceRoot, repoDir };
+  }
+
+  it("emits a needs_input result.json from output/needs-input.json and pushes nothing", async () => {
+    const { workspaceRoot, repoDir } = await setup();
+    const headBefore = (await run("git", ["rev-parse", "HEAD"], repoDir)).stdout.trim();
+    const fakeCodex = join(workspaceRoot, "fake.mjs");
+    // Agent makes no commit/changes (normally throws) and instead asks one question.
+    await writeFile(
+      fakeCodex,
+      [
+        "import { writeFileSync, mkdirSync } from 'node:fs';",
+        "import path from 'node:path';",
+        "let prompt = '';",
+        "process.stdin.on('data', (c) => { prompt += c.toString('utf8'); });",
+        "process.stdin.on('end', () => {",
+        "  const outputDir = path.join(process.cwd(), '..', 'output');",
+        "  mkdirSync(outputDir, { recursive: true });",
+        "  writeFileSync(path.join(outputDir, 'needs-input.json'), JSON.stringify({",
+        "    question: 'Should the export be CSV or XLSX?',",
+        "    details: 'The ticket says spreadsheet without a format.'",
+        "  }));",
+        "});",
+        "",
+      ].join("\n"),
+    );
+
+    // Must NOT reject: the park is carried in result.json.
+    await runCodexAgentRunner({
+      workspaceRoot,
+      repoDir,
+      targetBranch: "main",
+      codexCommand: "node",
+      codexArgs: [fakeCodex],
+      codexHome: join(workspaceRoot, "codex-home"),
+    });
+
+    const result = parseAgentResult(JSON.parse(await readFile(join(workspaceRoot, "output", "result.json"), "utf8")));
+    expect(result.status).toBe("needs_input");
+    expect(result.question).toBe("Should the export be CSV or XLSX?");
+    expect(result.failure).toBeNull();
+    expect(result.changedFiles).toEqual([]);
+    // Nothing committed/pushed: HEAD is unchanged.
+    expect((await run("git", ["rev-parse", "HEAD"], repoDir)).stdout.trim()).toBe(headBefore);
+    const prBody = await readFile(join(workspaceRoot, "output", "pr-body.md"), "utf8");
+    expect(prBody).toContain("Agent needs operator input");
+    expect(prBody).toContain("Should the export be CSV or XLSX?");
+  });
+
+  it("needs-input.json takes PRECEDENCE over a failure.json when both are present", async () => {
+    const { workspaceRoot, repoDir } = await setup();
+    const fakeCodex = join(workspaceRoot, "fake.mjs");
+    await writeFile(
+      fakeCodex,
+      [
+        "import { writeFileSync, mkdirSync } from 'node:fs';",
+        "import path from 'node:path';",
+        "let prompt = '';",
+        "process.stdin.on('data', (c) => { prompt += c.toString('utf8'); });",
+        "process.stdin.on('end', () => {",
+        "  const outputDir = path.join(process.cwd(), '..', 'output');",
+        "  mkdirSync(outputDir, { recursive: true });",
+        "  writeFileSync(path.join(outputDir, 'failure.json'), JSON.stringify({",
+        "    stage: 'implement', category: 'agent', message: 'blocked', nextAction: 'clarify'",
+        "  }));",
+        "  writeFileSync(path.join(outputDir, 'needs-input.json'), JSON.stringify({",
+        "    question: 'Which environment should this target?'",
+        "  }));",
+        "});",
+        "",
+      ].join("\n"),
+    );
+
+    await runCodexAgentRunner({
+      workspaceRoot,
+      repoDir,
+      targetBranch: "main",
+      codexCommand: "node",
+      codexArgs: [fakeCodex],
+      codexHome: join(workspaceRoot, "codex-home"),
+    });
+
+    const result = parseAgentResult(JSON.parse(await readFile(join(workspaceRoot, "output", "result.json"), "utf8")));
+    // Asking the human wins over failing.
+    expect(result.status).toBe("needs_input");
+    expect(result.question).toBe("Which environment should this target?");
+    expect(result.failure).toBeNull();
+  });
+});
+
 describe("runCodexAgentRunner self-review opt-in (L2)", () => {
   async function setupRepo(): Promise<{ workspaceRoot: string; repoDir: string }> {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "ticket-to-pr-codex-sr-"));

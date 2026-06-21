@@ -58,6 +58,72 @@ describe("parseAgentResult", () => {
     ).toThrow();
   });
 
+  it("accepts a needs_input result with a question and no shippable change", () => {
+    const result = parseAgentResult({
+      schemaVersion: "1.0",
+      runId: "run_1",
+      jobId: "job_1",
+      ticketId: "rec1",
+      triggerVersion: "v1",
+      status: "needs_input",
+      question: "Should the new endpoint require admin auth or be public?",
+      changedFiles: [],
+      commits: [],
+      tests: [],
+      failure: null,
+      retryable: false,
+    });
+    expect(result.status).toBe("needs_input");
+    expect(result.question).toBe("Should the new endpoint require admin auth or be public?");
+  });
+
+  it("rejects a needs_input result without a question", () => {
+    expect(() =>
+      parseAgentResult({
+        schemaVersion: "1.0",
+        runId: "run_1",
+        jobId: "job_1",
+        ticketId: "rec1",
+        triggerVersion: "v1",
+        status: "needs_input",
+        failure: null,
+        retryable: false,
+      }),
+    ).toThrow();
+  });
+
+  it("rejects a needs_input result that also carries failure details", () => {
+    expect(() =>
+      parseAgentResult({
+        schemaVersion: "1.0",
+        runId: "run_1",
+        jobId: "job_1",
+        ticketId: "rec1",
+        triggerVersion: "v1",
+        status: "needs_input",
+        question: "Which database should I target?",
+        failure: { stage: "implement", category: "agent", message: "blocked", retryable: false, nextAction: "clarify" },
+        retryable: false,
+      }),
+    ).toThrow();
+  });
+
+  it("rejects a non-needs_input result that carries a stray question", () => {
+    expect(() =>
+      parseAgentResult({
+        schemaVersion: "1.0",
+        runId: "run_1",
+        jobId: "job_1",
+        ticketId: "rec1",
+        triggerVersion: "v1",
+        status: "failed",
+        question: "why am I here?",
+        failure: { stage: "implement", category: "agent", message: "blocked", retryable: false, nextAction: "clarify" },
+        retryable: false,
+      }),
+    ).toThrow();
+  });
+
   it("rejects completed results without a full audited push SHA", () => {
     const completed = {
       schemaVersion: "1.0",

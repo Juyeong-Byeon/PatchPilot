@@ -8,7 +8,7 @@ describe("transition-guard / phasesAllowedToTransitionTo", () => {
     // `where phase = any($expectedFrom)`. Publishing and every terminal/cancel
     // phase must be absent.
     expect([...phasesAllowedToTransitionTo("CancelRequested")].sort()).toEqual(
-      ["Implementing", "Planning", "Queued", "Reviewing", "Testing"].sort(),
+      ["AwaitingInput", "Implementing", "Planning", "Queued", "Reviewing", "Testing"].sort(),
     );
   });
 
@@ -67,6 +67,6 @@ describe("transition-guard / terminal invariant", () => {
 
   it("enumerates every InternalPhase exactly once", () => {
     expect(new Set(ALL_PHASES).size).toBe(ALL_PHASES.length);
-    expect(ALL_PHASES.length).toBe(13);
+    expect(ALL_PHASES.length).toBe(14);
   });
 });

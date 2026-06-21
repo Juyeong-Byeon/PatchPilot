@@ -668,6 +668,117 @@ export class Repositories {
   }
 
   /**
+   * Park a job on a human question (NeedsInput / 입력 대기). One atomic,
+   * phase-guarded write that sets phase='AwaitingInput', outcome='NeedsInput', AND
+   * persists the agent's question to jobs.pending_question. The terminal invariant
+   * (a Completed/Failed/Cancelled job is immutable) and the optional `expectedFrom`
+   * guard compose in the single `update ... where`, so a concurrent cancel or a
+   * stale delivery can never clobber a settled job — they no-op (rowCount 0).
+   * Returns `true` when the job was parked, `false` when the guard rejected it.
+   *
+   * Pass `phasesAllowedToTransitionTo('AwaitingInput')` (the running phases) as
+   * `expectedFrom` to enforce core's whitelist at the DB layer.
+   */
+  async parkAwaitingInput(
+    jobId: string,
+    question: string,
+    expectedFrom?: InternalPhase | InternalPhase[],
+  ): Promise<boolean> {
+    const params: unknown[] = [jobId, question, TERMINAL_PHASES];
+    let guard = `where id=$1 and phase <> all($3::text[])`;
+    if (expectedFrom !== undefined) {
+      params.push(Array.isArray(expectedFrom) ? expectedFrom : [expectedFrom]);
+      guard += ` and phase = any($${params.length}::text[])`;
+    }
+    const result = await this.pool.query(
+      `update jobs
+       set phase='AwaitingInput', outcome='NeedsInput', pending_question=$2,
+           failure_reason=null, failure_category=null, next_action=null, updated_at=now()
+       ${guard}`,
+      params,
+    );
+    return result.rowCount === 1;
+  }
+
+  /**
+   * Resume a parked job by injecting the operator's answer (NeedsInput → Queued).
+   * Reuses the retry-with-guidance plumbing exactly: the answer is persisted as the
+   * NEW run's `guidance`, so the worker reads it back (resolveRetryGuidance) and
+   * seeds the next agent attempt with it — an "answer" IS guidance, just entered
+   * from the parked state instead of from Failed.
+   *
+   * Allowed ONLY when the job is currently parked (outcome='NeedsInput' /
+   * phase='AwaitingInput'); any other state throws 409. Clears pending_question,
+   * re-queues the job, and writes a `job.answer_submitted` audit row (actor,
+   * attempt, hasAnswer:true). The `for update` lock + guarded re-queue make a double
+   * submit impossible: the second caller sees a no-longer-parked job and 409s.
+   */
+  async answerNeedsInput(jobId: string, answer: string, actor: string): Promise<{ runId: string; attempt: number }> {
+    const trimmed = answer.trim();
+    if (!trimmed) throw createHttpError(409, "Answer must not be empty");
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const jobResult = await client.query<{ id: string; phase: InternalPhase; outcome: UserOutcome }>(
+        `select id, phase, outcome
+         from jobs
+         where id=$1
+         for update`,
+        [jobId],
+      );
+      const job = jobResult.rows[0];
+      if (!job) throw createHttpError(404, "Job not found");
+      // Re-park is impossible: only a job that is actually parked on a question may
+      // be answered. A second concurrent submit (or an answer to an already-resumed
+      // job) sees outcome<>NeedsInput and is rejected.
+      if (job.outcome !== "NeedsInput" || job.phase !== "AwaitingInput") {
+        throw createHttpError(409, "Job is not awaiting input");
+      }
+
+      const attemptResult = await client.query<{ attempt: number | null }>(
+        `select max(attempt) as attempt from runs where job_id=$1`,
+        [jobId],
+      );
+      const attempt = (attemptResult.rows[0]?.attempt ?? 0) + 1;
+      const runId = createRunId();
+      const workBranch = createAttemptWorkBranch(jobId, attempt);
+      // The answer is persisted as the new run's guidance — identical to the
+      // retry-with-guidance path — so the worker injects it into this attempt.
+      const runResult = await client.query<RunRow>(
+        `insert into runs
+         (id, job_id, attempt, workspace_path, work_branch, guidance, started_at, heartbeat_at)
+         values ($1,$2,$3,$4,$5,$6,now(),now())
+         returning id, job_id, attempt, container_id, runner_image_digest, workspace_path, base_sha, work_branch, head_sha, exit_code, guidance`,
+        [runId, jobId, attempt, "", workBranch, trimmed],
+      );
+      const run = mapRun(runResult.rows[0]);
+
+      // Resume + clear the pending question. AwaitingInput → Queued is the only
+      // forward edge core's whitelist allows for a parked job.
+      await client.query(
+        `update jobs
+         set phase='Queued', outcome='Queued', pending_question=null,
+             failure_reason=null, failure_category=null, next_action=null, updated_at=now()
+         where id=$1`,
+        [jobId],
+      );
+      await client.query(
+        `insert into audit_events(actor, action, job_id, run_id, metadata)
+         values ($1,$2,$3,$4,$5)`,
+        // Record that an answer was attached (but not its text) for audit.
+        [actor, "job.answer_submitted", jobId, run.runId, JSON.stringify({ attempt, hasAnswer: true })],
+      );
+      await client.query("commit");
+      return { runId: run.runId, attempt: run.attempt };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
    * Reads back the operator guidance persisted on a run (X4). The worker/runner
    * (other tracks) call this for the attempt's runId to fetch the steering note
    * and inject it into the next agent invocation. Returns null when no guidance

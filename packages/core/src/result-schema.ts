@@ -23,7 +23,12 @@ export const agentResultSchema = z
     jobId: z.string().min(1),
     ticketId: z.string().min(1),
     triggerVersion: z.string().min(1),
-    status: z.enum(["completed", "failed", "cancelled"]),
+    status: z.enum(["completed", "failed", "needs_input", "cancelled"]),
+    // NeedsInput: the run produced NO shippable change — instead the agent asked
+    // one specific question only a human can answer (ambiguous requirement /
+    // missing decision). Carried here so the worker can park the job and surface
+    // the question to the operator. Null on every other status.
+    question: z.string().min(1).nullable().default(null),
     targetBranch: z.string().min(1).optional(),
     baseSha: z.string().min(1).optional(),
     headSha: z.string().min(1).optional(),
@@ -53,6 +58,35 @@ export const agentResultSchema = z
         code: z.ZodIssueCode.custom,
         message: "Failed results require failure details",
         path: ["failure"],
+      });
+    }
+
+    // NeedsInput is a clean stop, not a failure: it MUST carry the agent's
+    // question and MUST NOT carry failure details (it parks, it does not fail).
+    // No SHA/PR/test evidence is required — the run shipped nothing.
+    if (result.status === "needs_input") {
+      if (result.question === null) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "NeedsInput results require a question",
+          path: ["question"],
+        });
+      }
+      if (result.failure !== null) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "NeedsInput results must not include failure details",
+          path: ["failure"],
+        });
+      }
+    } else if (result.question !== null) {
+      // `question` is exclusive to needs_input; a stray question on any other
+      // status is a contract violation (e.g. a completed run claiming it is also
+      // blocked).
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Only needs_input results may carry a question",
+        path: ["question"],
       });
     }
 

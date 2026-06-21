@@ -57,6 +57,7 @@ function createRepos() {
       workBranch: input.workBranch,
     })),
     transitionJob: vi.fn().mockResolvedValue(undefined),
+    parkAwaitingInput: vi.fn().mockResolvedValue(true),
     appendEvent: vi.fn().mockResolvedValue(undefined),
     appendLog: vi.fn().mockResolvedValue(undefined),
     saveArtifact: vi.fn().mockResolvedValue(undefined),
@@ -64,6 +65,23 @@ function createRepos() {
     appendAuditEvent: vi.fn().mockResolvedValue(undefined),
   };
 }
+
+const needsInputResult = {
+  ...completedResult,
+  status: "needs_input" as const,
+  question: "Should the export be CSV or XLSX?",
+  targetBranch: undefined,
+  baseSha: undefined,
+  headSha: undefined,
+  pushSha: undefined,
+  review: undefined,
+  pullRequestDraft: undefined,
+  changedFiles: [],
+  commits: [],
+  tests: [],
+  failure: null,
+  retryable: false,
+};
 
 describe("processAgentJob", () => {
   it("executes, stores artifacts, publishes, and completes a mock-safe job", async () => {
@@ -627,6 +645,78 @@ describe("processAgentJob", () => {
         category: "agent-quality",
         nextAction: "DoD 2번 항목을 더 구체화한 뒤 재시도하세요.",
       }),
+    );
+  });
+
+  it("parks the job on NeedsInput, persists the question, emits an event, and never publishes", async () => {
+    const repos = createRepos();
+    const executor = vi.fn().mockResolvedValue(needsInputResult);
+    const publisher = vi.fn();
+    const larkUpdater = vi.fn().mockResolvedValue(undefined);
+
+    const outcome = await processAgentJob(
+      { jobId: "job_1", ticketSnapshotId: "ts_1", larkRecordId: "rec_1", triggerVersion: "v1" },
+      {
+        repos,
+        executor,
+        publisher,
+        larkUpdater,
+        policyConfig: { repositoryAllowlist: ["acme/web"], protectedPathDenylist: [] },
+        ids: { runId: () => "run_1", artifactId: (kind) => `artifact_${kind}`, pullRequestId: () => "pr_1" },
+      },
+    );
+
+    expect(outcome).toEqual({ status: "needs_input", runId: "run_1" });
+    // No PR is created — this is a clean stop, not a completion.
+    expect(publisher).not.toHaveBeenCalled();
+    // The job is parked at AwaitingInput/NeedsInput with the question persisted, guarded
+    // against the running phases so a concurrent terminal write cannot be clobbered.
+    expect(repos.parkAwaitingInput).toHaveBeenCalledWith(
+      "job_1",
+      "Should the export be CSV or XLSX?",
+      expect.arrayContaining(["Implementing"]),
+    );
+    // The question is surfaced on the timeline as a job.needs_input event.
+    expect(repos.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        phase: "AwaitingInput",
+        eventType: "job.needs_input",
+        message: "Should the export be CSV or XLSX?",
+      }),
+    );
+    // Lark write-back reflects the parked state.
+    expect(larkUpdater).toHaveBeenCalledWith(expect.objectContaining({ status: "NeedsInput" }));
+    // It is NOT routed through the failure path.
+    expect(repos.transitionJob).not.toHaveBeenCalledWith(
+      "job_1",
+      "Failed",
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it("does not park (and does not publish) when the guard rejects the NeedsInput transition", async () => {
+    const repos = createRepos();
+    repos.parkAwaitingInput.mockResolvedValue(false); // a concurrent cancel/terminal write won
+    const executor = vi.fn().mockResolvedValue(needsInputResult);
+    const publisher = vi.fn();
+
+    const outcome = await processAgentJob(
+      { jobId: "job_1", ticketSnapshotId: "ts_1" },
+      {
+        repos,
+        executor,
+        publisher,
+        policyConfig: { repositoryAllowlist: ["acme/web"], protectedPathDenylist: [] },
+        ids: { runId: () => "run_1", artifactId: (kind) => `artifact_${kind}`, pullRequestId: () => "pr_1" },
+      },
+    );
+
+    expect(outcome).toEqual({ status: "failed", runId: "run_1" });
+    expect(publisher).not.toHaveBeenCalled();
+    expect(repos.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: "worker.needs_input_skipped" }),
     );
   });
 

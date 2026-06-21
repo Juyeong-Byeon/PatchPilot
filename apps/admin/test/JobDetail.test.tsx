@@ -16,6 +16,7 @@ const baseProps = {
   locale: "ko" as const,
   onRetry: vi.fn(),
   onCancel: vi.fn(),
+  onAnswer: vi.fn(),
 };
 
 describe("JobDetail", () => {
@@ -37,6 +38,42 @@ describe("JobDetail", () => {
     rerender(<JobDetail {...baseProps} job={{ id: "job_1", phase: "Failed", outcome: "FailedActionable" }} />);
 
     expect(screen.getByRole("button", { name: "재시도" })).toBeDisabled();
+  });
+
+  it("renders the NeedsInput panel with the agent's question and submits the answer", () => {
+    const onAnswer = vi.fn();
+    render(
+      <JobDetail
+        {...baseProps}
+        onAnswer={onAnswer}
+        job={{
+          id: "job_1",
+          phase: "AwaitingInput",
+          outcome: "NeedsInput",
+          pending_question: "Should the export be CSV or XLSX?",
+        }}
+      />,
+    );
+
+    // The question is surfaced prominently.
+    expect(screen.getByText("Should the export be CSV or XLSX?")).toBeInTheDocument();
+    expect(screen.getByText(adminCopy.ko.needsInputSummary)).toBeInTheDocument();
+
+    // The submit button is disabled until a non-empty answer is typed.
+    const submit = screen.getByRole("button", { name: adminCopy.ko.needsInputSubmit });
+    expect(submit).toBeDisabled();
+
+    const textarea = screen.getByLabelText(adminCopy.ko.needsInputAnswerLabel);
+    fireEvent.change(textarea, { target: { value: "Use XLSX." } });
+    expect(submit).toBeEnabled();
+
+    fireEvent.click(submit);
+    expect(onAnswer).toHaveBeenCalledWith("Use XLSX.");
+  });
+
+  it("does not render the NeedsInput panel for a non-parked job", () => {
+    render(<JobDetail {...baseProps} job={{ id: "job_1", phase: "Implementing", outcome: "Running" }} />);
+    expect(screen.queryByText(adminCopy.ko.needsInputSummary)).not.toBeInTheDocument();
   });
 
   it("renders a detail-scoped error alert near the detail view", () => {

@@ -25,6 +25,12 @@ create table if not exists jobs (
   failure_category text,
   failure_reason text,
   next_action text,
+  -- The agent's one blocking question while the job is parked at NeedsInput
+  -- (입력 대기). Set when the worker parks the job (phase=AwaitingInput); cleared
+  -- when the operator answers (the answer becomes the new run's guidance). Null
+  -- for every job that is not currently awaiting input. Also added to existing
+  -- databases by migration 0005.
+  pending_question text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (lark_record_id, trigger_version)
