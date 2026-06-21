@@ -30,6 +30,13 @@ describe("LogViewer", () => {
     expect(output.textContent).not.toContain("gstack/progress");
   });
 
+  it("announces the empty state as a status region when no logs match", () => {
+    render(<LogViewer copy={adminCopy.ko} logs={[]} />);
+
+    const empty = screen.getByText(adminCopy.ko.noLogs);
+    expect(empty).toHaveAttribute("role", "status");
+  });
+
   it("confirms with a 'copied' state after the copy button is clicked", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
