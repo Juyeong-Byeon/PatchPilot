@@ -107,15 +107,36 @@ export interface MarkPullRequestMergedInput {
   mergedAt?: string | null;
 }
 
+export interface RecordWebhookDeliveryInput {
+  /** Provider delivery id, e.g. GitHub's `x-github-delivery` header. */
+  deliveryId: string;
+  provider: string;
+  larkRecordId?: string | null;
+  triggerVersion?: string | null;
+  payload?: unknown;
+}
+
+export interface JobAwaitingMergeReconcile {
+  jobId: string;
+  repository: string;
+  prNumber: number;
+  prUrl: string;
+}
+
+export interface MarkPullRequestMergedSuccess {
+  jobId: string;
+  runId: string;
+  larkRecordId: string;
+  prUrl: string;
+  prNumber: number;
+}
+
 export type MarkPullRequestMergedResult =
-  | {
-      status: "updated";
-      jobId: string;
-      runId: string;
-      larkRecordId: string;
-      prUrl: string;
-      prNumber: number;
-    }
+  // The merge moved the job to Completed for the first time.
+  | ({ status: "updated" } & MarkPullRequestMergedSuccess)
+  // The job was already terminal (Completed/Failed/Cancelled): the merge was a
+  // late or duplicate delivery and was intentionally not re-applied.
+  | ({ status: "already_terminal" } & MarkPullRequestMergedSuccess)
   | { status: "not_found" };
 
 export interface RetryPreflight {

@@ -103,6 +103,12 @@ create table if not exists pull_requests (
   created_at timestamptz not null default now()
 );
 
+-- One pull-request row per (repository, pr_number). Guarantees the merge webhook
+-- resolves to a single job and makes savePullRequest collision-safe. Also added by
+-- migration 0001 for databases created before this constraint existed.
+create unique index if not exists pull_requests_repo_number_unique
+  on pull_requests(repository, pr_number);
+
 create table if not exists webhook_events (
   id text primary key,
   provider text not null,
@@ -120,4 +126,12 @@ create table if not exists audit_events (
   run_id text references runs(id),
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
+);
+
+-- Ledger of applied versioned migrations. The schema.sql baseline is always
+-- idempotent and re-runnable; numbered files in migrations/ run exactly once and
+-- record their version here.
+create table if not exists schema_migrations (
+  version text primary key,
+  applied_at timestamptz not null default now()
 );
