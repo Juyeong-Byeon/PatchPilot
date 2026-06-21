@@ -1,9 +1,9 @@
-import { Octokit } from "@octokit/rest";
 import type {
   JobAwaitingMergeReconcile,
   MarkPullRequestMergedInput,
   MarkPullRequestMergedResult,
 } from "@ticket-to-pr/db";
+import { createGitHubOctokit } from "./github-octokit.js";
 
 /**
  * The slice of the repository the reconcile poller needs. Both methods already
@@ -87,7 +87,7 @@ export async function reconcileMergedPullRequestsOnce(
  * forever; any other error propagates and is caught by the caller as an error tick.
  */
 export function createGitHubMergeChecker(token: string): CheckPullRequestMerged {
-  const octokit = new Octokit({ auth: token });
+  const octokit = createGitHubOctokit(token);
   return async (repository, prNumber) => {
     const [owner, repo] = repository.split("/");
     if (!owner || !repo) return undefined;

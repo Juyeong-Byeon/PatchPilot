@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
-import { Octokit } from "@octokit/rest";
 import { maskSecrets } from "@ticket-to-pr/core";
+import { createGitHubOctokit } from "./github-octokit.js";
 import { buildSafeGitArgs } from "./git-safe.js";
 import type { PublishInput, PublishedPullRequest } from "./publisher-mock.js";
 
@@ -37,7 +37,7 @@ interface PullsApiOctokit {
 export type PushBranch = (repoDir: string, workBranch: string, pushSha: string, token?: string) => Promise<void>;
 
 export function createGitHubPublisher(token: string): (input: PublishInput) => Promise<PublishedPullRequest> {
-  const octokit = new Octokit({ auth: token });
+  const octokit = createGitHubOctokit(token);
   return (input) => publishGitHubPullRequest(input, octokit, pushBranchToOrigin, token);
 }
 

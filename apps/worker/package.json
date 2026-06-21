@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@octokit/plugin-throttling": "^9.6.1",
     "@octokit/rest": "^21.0.2",
     "@ticket-to-pr/core": "0.1.0",
     "@ticket-to-pr/db": "0.1.0",
