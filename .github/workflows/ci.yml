@@ -98,3 +98,49 @@ jobs:
 
       - name: Re-apply migrations (idempotency / drift check)
         run: npm run db:migrate
+
+  dockerfile-lint:
+    name: Dockerfile lint (hadolint)
+    runs-on: ubuntu-latest
+    # Lints every Dockerfile for build best-practices. `failure-threshold: error`
+    # means only DLxxxx *errors* fail the job — warnings/info surface in the logs
+    # without blocking, so this is a useful signal without being noisy. Pilot per
+    # docs/library-adoption-plan.md (Tier 2).
+    strategy:
+      fail-fast: false
+      matrix:
+        dockerfile:
+          - docker/api.Dockerfile
+          - docker/worker.Dockerfile
+          - docker/runner.Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lint ${{ matrix.dockerfile }}
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: ${{ matrix.dockerfile }}
+          failure-threshold: error
+
+  gitleaks:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    # Advisory pilot ALONGSIDE the existing zero-install `secret-scan` job, to
+    # compare signal before deciding whether to replace it (Tier 2). `continue-on-
+    # error` keeps it from blocking merges while we evaluate false-positive rate;
+    # findings still surface in the job logs. Allowlisting lives in .gitleaks.toml.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # gitleaks scans commit history, so it needs the full clone.
+          fetch-depth: 0
+
+      # Run the gitleaks CLI via its official image rather than the v2 Action: the
+      # Action drives the GitHub PR API (fetch commits / post a summary) and needs
+      # extra token permissions, which is overkill for an advisory scan and crashes
+      # under the default read-only token. The CLI scans full history directly.
+      - name: Run gitleaks (full history)
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE:/repo" ghcr.io/gitleaks/gitleaks:latest \
+            detect --source=/repo --config=/repo/.gitleaks.toml --redact --no-banner --verbose
