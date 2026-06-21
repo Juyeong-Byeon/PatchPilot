@@ -113,7 +113,7 @@ Workspaces:
 
 ## Requirements
 
-- Node.js 20+
+- Node.js 24 — the version pinned in [`.nvmrc`](.nvmrc) and used by CI (`nvm use` to match)
 - npm
 - Docker and Docker Compose
 - A GitHub personal access token with repository access for target repos
