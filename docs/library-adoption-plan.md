@@ -29,6 +29,40 @@ repo does not already handle, at low risk.
 | `react-router-dom`, `msw`, `knip`, `dive`, cross-platform `pino`                    | Defer         | —      | premature for current scale                        |
 | `@fastify/type-provider-zod`, `@radix-ui/react-select`, `execa`, worker-only `pino` | Reject        | —      | already solved / not worth the churn               |
 
+## Pilot execution outcomes (2026-06-21)
+
+The Tier-2 pilots were taken on the same day, each as its own reviewed PR.
+
+**Shipped:**
+
+- `@octokit/plugin-throttling` + root `.dockerignore` — the Adopt-now pair.
+- `hadolint` (Dockerfile lint, matrix, `failure-threshold: error`) + `gitleaks`
+  (advisory full-history scan run via the official CLI image — the v2 action
+  crashed under the default read-only token; `.gitleaks.toml` allowlists test
+  placeholders; verified 0 leaks over 102 commits).
+- `@vitest/coverage-v8` + `test:coverage` (opt-in; baseline ~74% lines).
+- `zod` for the **API** env (`apps/api/src/env.ts`): fail-fast aggregation of all
+  missing vars + PORT coercion/validation, no new dependency.
+
+**Evaluated → declined** (the narrow first-scope was net-negative):
+
+- `@octokit/rest` `RestEndpointMethodTypes` — the publish path is already
+  octokit-typed; the only hand-written types are the intentional structural
+  `PullsApiOctokit` test seam. Deriving it from the generated types would force
+  `as` casts or large fixtures into the simple mocks
+  (`{ data: { html_url, number } }`) — a test-ergonomics regression (and casts the
+  repo's rules forbid) for zero runtime gain. **Keep the structural seam.**
+- `@tanstack/react-query` **MetricsPanel slice** — MetricsPanel is a one-shot
+  mount fetch (not a poller), so react-query's cache/dedup/refetch benefits barely
+  apply; the slice would add the dependency + a global `QueryClientProvider` + a
+  full rewrite of the panel's test harness (provider wrapper + async settling,
+  flakiness risk) for negligible value. The real win is App.tsx's hand-rolled
+  pollers (adaptive intervals + the 401-freeze boundary). **Recommendation: do
+  react-query as a dedicated, reviewed App.tsx migration — not a low-value slice.**
+
+`zod` for the admin `api-schemas.ts` stays deferred (reverses the intentional
+zero-extra-dep browser bundle).
+
 ## Tier 1 — Adopt now (shipped in this PR)
 
 ### `@octokit/plugin-throttling`
