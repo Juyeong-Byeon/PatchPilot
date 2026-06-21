@@ -364,7 +364,7 @@ function AppInner() {
                 saveToken();
               }}
             >
-              <label className="grid gap-1.5 text-left">
+              <label htmlFor="onboarding-token" className="grid gap-1.5 text-left">
                 <span className="sr-only">{copy.tokenLabel}</span>
                 <Input
                   id="onboarding-token"
@@ -398,6 +398,12 @@ function AppInner() {
 
   return (
     <div className="admin-shell grid min-h-screen text-true-black lg:grid-cols-[236px_minmax(0,1fr)]">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:m-2 focus:rounded-lg focus:bg-cobalt-surface focus:px-3 focus:py-2 focus:text-paper"
+      >
+        {copy.skipToContent}
+      </a>
       <aside className="admin-sidebar border-b border-hairline-gray bg-linen-white/95 lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
         <div className="flex h-full flex-col gap-5 px-4 py-4">
           <div className="flex min-w-0 items-center gap-3">
@@ -508,7 +514,11 @@ function AppInner() {
           </section>
         </header>
 
-        <main className="mx-auto w-full max-w-[var(--page-max-width)] flex-1 px-4 py-5 md:px-6">
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="mx-auto w-full max-w-[var(--page-max-width)] flex-1 px-4 py-5 md:px-6"
+        >
           {route.page === "settings" ? (
             <SettingsPanel
               token={token}
