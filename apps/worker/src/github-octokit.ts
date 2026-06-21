@@ -34,15 +34,16 @@ export function createGitHubOctokit(token: string): Octokit {
   return new ThrottledOctokit({
     auth: token,
     throttle: {
+      // `retryCount` is 0-based; log it 1-based as "retry N/MAX" for operators.
       onRateLimit: (retryAfter, options, octokit, retryCount) => {
         octokit.log.warn(
-          `GitHub rate limit hit for ${options.method} ${options.url} (retryAfter=${retryAfter}s, retry ${retryCount})`,
+          `GitHub rate limit hit for ${options.method} ${options.url} (retryAfter=${retryAfter}s, retry ${retryCount + 1}/${MAX_RATE_LIMIT_RETRIES})`,
         );
         return retryCount < MAX_RATE_LIMIT_RETRIES;
       },
       onSecondaryRateLimit: (retryAfter, options, octokit, retryCount) => {
         octokit.log.warn(
-          `GitHub secondary rate limit hit for ${options.method} ${options.url} (retryAfter=${retryAfter}s, retry ${retryCount})`,
+          `GitHub secondary rate limit hit for ${options.method} ${options.url} (retryAfter=${retryAfter}s, retry ${retryCount + 1}/${MAX_RATE_LIMIT_RETRIES})`,
         );
         return retryCount < MAX_RATE_LIMIT_RETRIES;
       },
