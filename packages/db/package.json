@@ -6,7 +6,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc -p tsconfig.json && cp src/schema.sql dist/schema.sql && cp -R src/migrations dist/migrations",
+    "build": "tsc -p tsconfig.json && cp src/schema.sql dist/schema.sql && rm -rf dist/migrations && cp -R src/migrations dist/migrations",
     "test": "vitest run --root ../.. packages/db/test",
     "migrate": "npm run build && node dist/migrate.js"
   },
