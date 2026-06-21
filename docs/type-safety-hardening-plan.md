@@ -1,6 +1,24 @@
 # TypeScript 타입 안전성 강화 작업계획
 
-> 작성: 2026-06-21 · 상태: 제안(실행 대기) · 범위: monorepo 전체(packages/\*, apps/\*)
+> 작성: 2026-06-21 · 상태: **완료 (shipped)** · 범위: monorepo 전체(packages/\*, apps/\*)
+>
+> **2026-06-22 업데이트:** 본 계획의 모든 단계(G1–G6 / Phase 1–4)가 구현 완료되어 메인에 반영되었다.
+> 아래 §2/§3은 **이력 보존용 기록**이며, 각 항목에 ✅ 구현 위치를 병기했다. 요약은 §0 참고.
+
+## 0. 결과 (Outcome — 전부 shipped)
+
+계획된 갭이 모두 메인에 반영되었다. 착지 지점:
+
+| #   | 항목                                                              | 상태 | 구현 위치                                                                                                     |
+| --- | ----------------------------------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------- |
+| G1  | `noUncheckedIndexedAccess` 활성                                   | ✅   | [tsconfig.base.json](../tsconfig.base.json) (`"noUncheckedIndexedAccess": true`)                              |
+| G6  | `exactOptionalPropertyTypes` 활성                                 | ✅   | [tsconfig.base.json](../tsconfig.base.json) (`"exactOptionalPropertyTypes": true`)                            |
+| G2  | type-aware ESLint + `no-explicit-any:error` + `no-unsafe-*:error` | ✅   | [eslint.config.js](../eslint.config.js) (`projectService: true`, `no-floating-promises:error`)                |
+| G3  | 어드민 fetch 응답 Zod 검증                                        | ✅   | [apps/admin/src/api.ts](../apps/admin/src/api.ts) (`parseRecord`/`parseJobMetrics`/`parseSettingsView` 등)    |
+| G4  | 웹훅 바디 런타임 스키마 검증                                      | ✅   | [apps/api/src/server.ts](../apps/api/src/server.ts) (`parseLarkWebhookInput`/`parseGitHubPullRequestPayload`) |
+| G5  | `RunnerContext` 입력 검증                                         | ✅   | [apps/runner/src/codex-agent-runner.ts](../apps/runner/src/codex-agent-runner.ts) (`parseRunnerContext`)      |
+
+신규 strictness는 머지와 동시에 CI 게이트가 되어 재발을 막는다(§5의 의도대로 실현).
 
 ## 1. 목표
 
@@ -26,23 +44,24 @@
 - DB 숫자 집계는 `Number(row?.x ?? 0)` 강제변환, 대부분의 행 접근은 `if (!row) return null` 가드.
 - GitHub 웹훅 핸들러는 optional-chaining + 가드로 방어적 파싱.
 
-**갭 (이 문서의 작업 대상)**
+**갭 (이 문서의 작업 대상 — 전부 ✅ 구현 완료, 위치는 §0 참고)**
 
-| #   | 갭                                                                           | 위치                                                                 | 영향                                           |
-| --- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------- |
-| G1  | `noUncheckedIndexedAccess` 꺼짐 → 배열/레코드 인덱스 접근이 `T`로 좁혀짐     | `tsconfig.base.json`                                                 | 미가드 인덱스 접근이 컴파일을 통과(잠복)       |
-| G2  | ESLint 비(非)type-aware + `no-explicit-any: warn`                            | `eslint.config.mjs`                                                  | 무검증 `any`/캐스트가 CI 통과                  |
-| G3  | 어드민 fetch 응답 무검증 캐스트                                              | [api.ts:215,249,287,315](../apps/admin/src/api.ts)                   | 클라이언트가 서버 형태를 맹신                  |
-| G4  | 외부 웹훅 바디가 type-only(런타임 스키마 검증 없음), `request.body as never` | [server.ts:84](../apps/api/src/server.ts)                            | HMAC 위 형태검증 부재; 타입 구멍               |
-| G5  | `RunnerContext` 등 신뢰입력 무검증 캐스트                                    | [codex-agent-runner.ts:56](../apps/runner/src/codex-agent-runner.ts) | producer/consumer 드리프트 시 silent undefined |
-| G6  | `exactOptionalPropertyTypes` 꺼짐(선택)                                      | `tsconfig.base.json`                                                 | `x?: T` vs `x?: T \| undefined` 혼동           |
+| #   | 갭                                                                           | 위치(당시)                                                        | 영향                                           | 상태 |
+| --- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------- | ---- |
+| G1  | `noUncheckedIndexedAccess` 꺼짐 → 배열/레코드 인덱스 접근이 `T`로 좁혀짐     | `tsconfig.base.json`                                              | 미가드 인덱스 접근이 컴파일을 통과(잠복)       | ✅   |
+| G2  | ESLint 비(非)type-aware + `no-explicit-any: warn`                            | `eslint.config.js`                                                | 무검증 `any`/캐스트가 CI 통과                  | ✅   |
+| G3  | 어드민 fetch 응답 무검증 캐스트                                              | [api.ts](../apps/admin/src/api.ts)                                | 클라이언트가 서버 형태를 맹신                  | ✅   |
+| G4  | 외부 웹훅 바디가 type-only(런타임 스키마 검증 없음), `request.body as never` | [server.ts](../apps/api/src/server.ts)                            | HMAC 위 형태검증 부재; 타입 구멍               | ✅   |
+| G5  | `RunnerContext` 등 신뢰입력 무검증 캐스트                                    | [codex-agent-runner.ts](../apps/runner/src/codex-agent-runner.ts) | producer/consumer 드리프트 시 silent undefined | ✅   |
+| G6  | `exactOptionalPropertyTypes` 꺼짐(선택)                                      | `tsconfig.base.json`                                              | `x?: T` vs `x?: T \| undefined` 혼동           | ✅   |
 
-## 3. 작업 단계
+## 3. 작업 단계 (전부 ✅ 구현 완료)
 
 각 Phase = **독립 PR 1개**. 순서는 의존성·레버리지 기준(컴파일러 먼저 → 린터 → 경계 검증).
 모든 PR은 `typecheck · lint(0 errors) · format · test · build · CI` green 이어야 머지.
+아래 4개 Phase는 모두 메인에 반영되었다(착지 위치는 §0).
 
-### Phase 1 — `noUncheckedIndexedAccess` 활성화 (G1) · **실측 17개 수정**
+### Phase 1 — `noUncheckedIndexedAccess` 활성화 (G1) · **실측 17개 수정** · ✅ 구현 완료 ([tsconfig.base.json](../tsconfig.base.json))
 
 - **변경:** `tsconfig.base.json`에 `"noUncheckedIndexedAccess": true` 추가.
 - **폴아웃(실측):** 총 **17개** 컴파일 에러 — core 1, db 2, api 3, admin 11 (전체 목록 §부록 A).
@@ -55,10 +74,10 @@
 - **effort:** 0.5d. 동작 변경 없음(전부 방어 코드 추가).
 - **검증:** 전 워크스페이스 typecheck green + 기존 테스트 통과(동작 불변).
 
-### Phase 2 — ESLint type-aware 전환 + `no-explicit-any: error` (G2)
+### Phase 2 — ESLint type-aware 전환 + `no-explicit-any: error` (G2) · ✅ 구현 완료 ([eslint.config.js](../eslint.config.js))
 
 - **변경:**
-  1. `eslint.config.mjs`에 `parserOptions.project`(또는 `projectService: true`) 추가 →
+  1. `eslint.config.js`에 `parserOptions.project`(또는 `projectService: true`) 추가 →
      타입 인식 린팅 활성.
   2. `@typescript-eslint`의 `no-unsafe-assignment / no-unsafe-member-access / no-unsafe-call /
 no-unsafe-return / no-unsafe-argument`, `no-floating-promises`, `await-thenable` 활성.
@@ -71,9 +90,12 @@ no-unsafe-return / no-unsafe-argument`, `no-floating-promises`, `await-thenable`
 - **effort:** 스파이크 결과에 따라 0.5~2d.
 - **검증:** `npm run lint` 0 errors가 CI 게이트가 됨(현재도 0 errors지만 룰 강화 후 유지).
 
-### Phase 3 — 경계 런타임 검증 (G3·G4·G5)
+### Phase 3 — 경계 런타임 검증 (G3·G4·G5) · ✅ 구현 완료
 
 타입 캐스트를 **Zod/스키마 검증**으로 승격. core가 이미 Zod를 쓰므로 의존성 추가 없음.
+구현: G3 → [apps/admin/src/api.ts](../apps/admin/src/api.ts) (`parseRecord`/`parseJobMetrics`/`parseSettingsView` 등),
+G4 → [apps/api/src/server.ts](../apps/api/src/server.ts) (`parseLarkWebhookInput`/`parseGitHubPullRequestPayload`),
+G5 → [apps/runner/src/codex-agent-runner.ts](../apps/runner/src/codex-agent-runner.ts) (`parseRunnerContext`).
 
 - **G3 어드민 fetch 응답:** `JobMetrics`/`SettingsView`/제네릭 `T` 응답을 Zod 스키마로 파싱.
   파싱 실패 시 패널을 "데이터 없음/에러"로 안전 폴백(현재 `api.ts`의 try/catch 폴백과 동일 톤).
@@ -86,7 +108,9 @@ no-unsafe-return / no-unsafe-argument`, `no-floating-promises`, `await-thenable`
 - **effort:** 1~1.5d. 각 항목은 **검증 실패 경로 테스트**(잘못된 형태 입력 → 거부/폴백)를 추가.
 - **검증:** 신규 단위 테스트(스키마 거부 케이스) + 기존 통합 테스트 통과.
 
-### Phase 4 (선택) — `exactOptionalPropertyTypes` (G6) · **실측 35개**
+### Phase 4 (선택) — `exactOptionalPropertyTypes` (G6) · **실측 35개** · ✅ 구현 완료 ([tsconfig.base.json](../tsconfig.base.json))
+
+> 결정 결과: **진행**. §6의 "기본 보류" 권고를 뒤집어 활성화까지 완료했다.
 
 - **폴아웃(실측):** 총 **35개** — api 5, worker 14, runner 9, admin 7.
 - **성격:** `{ x?: T }`와 `{ x?: T | undefined }`를 구분하는 엄격 옵션. 17개(Phase 1)보다 크고,
