@@ -57,9 +57,8 @@ describe("MetricsPanel", () => {
         successRate: 0.85,
         mergeRate: 0.5,
         retryRate: 0.1,
-        runtimeP50Ms: 108_000,
-        runtimeP95Ms: 990_000,
-        executorModeDistribution: { "single-pass": 12, staged: 3 },
+        runtimeSeconds: { p50: 108, p95: 990 },
+        executorModeDistribution: { singlePass: 12, staged: 3 },
       }),
     );
 

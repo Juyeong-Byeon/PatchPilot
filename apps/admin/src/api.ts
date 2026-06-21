@@ -77,17 +77,16 @@ export interface RetryResponse {
   attempt: number;
 }
 
-// Shape of GET /api/metrics. The endpoint is delivered by a separate backend track
-// and may not exist yet, so every field is optional and the consumer renders only
-// what is present. All rates are 0..1 fractions; runtimes are milliseconds.
+// Shape of GET /api/metrics (backend `MetricsSummary`). Every field is optional so
+// the consumer renders only what is present and degrades if the endpoint predates a
+// field. Rates are 0..1 fractions; `runtimeSeconds` durations are in seconds.
 export interface JobMetrics extends JsonRecord {
   totalJobs?: number;
   successRate?: number;
   mergeRate?: number;
   retryRate?: number;
-  runtimeP50Ms?: number;
-  runtimeP95Ms?: number;
-  // Executor/pipeline mode → job count, e.g. { "single-pass": 12, "staged": 3 }.
+  runtimeSeconds?: { p50?: number | null; p95?: number | null; sampleSize?: number };
+  // Executor/pipeline mode → job count, e.g. { singlePass: 12, staged: 3, unknown: 0 }.
   executorModeDistribution?: Record<string, number>;
 }
 

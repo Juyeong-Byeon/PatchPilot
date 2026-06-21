@@ -65,17 +65,14 @@ describe("reconcileMergedPullRequestsOnce", () => {
   it("does not let a markPullRequestMerged failure abort the loop", async () => {
     const repos = {
       listJobsAwaitingMergeReconcile: vi.fn().mockResolvedValue([jobs[0], jobs[1]]),
-      markPullRequestMerged: vi
-        .fn()
-        .mockRejectedValueOnce(new Error("db blip"))
-        .mockResolvedValueOnce({
-          status: "updated",
-          jobId: "x",
-          runId: "r",
-          larkRecordId: "l",
-          prUrl: "u",
-          prNumber: 2,
-        }),
+      markPullRequestMerged: vi.fn().mockRejectedValueOnce(new Error("db blip")).mockResolvedValueOnce({
+        status: "updated",
+        jobId: "x",
+        runId: "r",
+        larkRecordId: "l",
+        prUrl: "u",
+        prNumber: 2,
+      }),
     };
     const checkMerged = vi.fn(async () => ({ merged: true }));
 

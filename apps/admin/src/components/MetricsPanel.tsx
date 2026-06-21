@@ -118,8 +118,8 @@ function buildTiles(metrics: JobMetrics, copy: AdminCopy): MetricTile[] {
   pushRate(tiles, copy.metricsSuccessRate, metrics.successRate);
   pushRate(tiles, copy.metricsMergeRate, metrics.mergeRate);
   pushRate(tiles, copy.metricsRetryRate, metrics.retryRate);
-  pushRuntime(tiles, copy.metricsRuntimeP50, metrics.runtimeP50Ms);
-  pushRuntime(tiles, copy.metricsRuntimeP95, metrics.runtimeP95Ms);
+  pushRuntimeSeconds(tiles, copy.metricsRuntimeP50, metrics.runtimeSeconds?.p50);
+  pushRuntimeSeconds(tiles, copy.metricsRuntimeP95, metrics.runtimeSeconds?.p95);
   return tiles;
 }
 
@@ -130,9 +130,9 @@ function pushRate(tiles: MetricTile[], label: string, value: unknown): void {
   tiles.push({ label, value: `${formatPercent(pct)}%` });
 }
 
-function pushRuntime(tiles: MetricTile[], label: string, ms: unknown): void {
-  if (typeof ms !== "number" || !Number.isFinite(ms) || ms < 0) return;
-  tiles.push({ label, value: formatDuration(ms) });
+function pushRuntimeSeconds(tiles: MetricTile[], label: string, seconds: unknown): void {
+  if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds < 0) return;
+  tiles.push({ label, value: formatDuration(seconds * 1000) });
 }
 
 function formatPercent(pct: number): string {
