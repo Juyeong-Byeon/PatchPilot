@@ -1,0 +1,85 @@
+name: E2E Smoke (mock)
+
+# Mock-mode end-to-end smoke gate. Brings up the real Compose stack with the
+# executor and publisher in MOCK mode (no external AI CLI, no real GitHub PRs),
+# then drives the full "Lark ticket -> NeedsReview -> merge -> Completed" loop
+# via scripts/e2e-smoke.mjs. This is the Wave-0 enabler: it catches dev->merge
+# regressions in the webhook/queue/worker/publish path that unit tests miss.
+#
+# Everything here runs against ephemeral containers on the runner; no secrets and
+# no production systems are touched. Real-mode (gstack/github) smokes belong in a
+# separate, secret-gated nightly workflow — not this PR gate.
+
+on:
+  pull_request:
+  # Allow manual runs for debugging the gate itself.
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-smoke-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e-smoke:
+    name: Mock e2e smoke
+    runs-on: ubuntu-latest
+    # GitHub-hosted Ubuntu runners ship with Docker + Compose v2 preinstalled.
+    env:
+      # Single source of truth for the values the smoke script and the stack share.
+      HOST_API_PORT: "3000"
+      ADMIN_TOKEN: e2e-admin-token
+      LARK_WEBHOOK_SECRET: e2e-lark-secret
+      GITHUB_WEBHOOK_SECRET: e2e-github-secret
+      REPOSITORY_ALLOWLIST: owner/example-repo
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Write mock-mode .env
+        # The Compose api/worker services read .env (env_file, required: false).
+        # Everything here is mock so the stack needs no real credentials. The
+        # in-container DATABASE_URL/REDIS_URL use Compose service hostnames.
+        run: |
+          cat > .env <<EOF
+          NODE_ENV=test
+          HOST_API_PORT=${HOST_API_PORT}
+          ADMIN_TOKEN=${ADMIN_TOKEN}
+          DATABASE_URL=postgres://ticket_to_pr:ticket_to_pr@postgres:5432/ticket_to_pr
+          REDIS_URL=redis://redis:6379
+          LARK_WEBHOOK_SECRET=${LARK_WEBHOOK_SECRET}
+          GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET}
+          REPOSITORY_ALLOWLIST=${REPOSITORY_ALLOWLIST}
+          PROTECTED_PATH_DENYLIST=.env,.env.*,infra/**,terraform/**,secrets/**,migrations/prod/**
+          EXECUTOR_MODE=mock
+          PUBLISHER_MODE=mock
+          EOF
+
+      - name: Start mock stack (postgres, redis, api, worker)
+        # --wait blocks until healthchecks pass; the api healthcheck probes
+        # /api/ready, so this also guarantees Postgres + Redis are usable.
+        run: docker compose up -d --build --wait postgres redis api worker
+
+      - name: Run database migrations (host URL)
+        # @postgres only resolves inside containers; from the host shell the
+        # migration must target localhost (mirrors scripts/setup.mjs).
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: postgres://ticket_to_pr:ticket_to_pr@localhost:5432/ticket_to_pr
+
+      - name: Run mock e2e smoke
+        run: npm run e2e:smoke
+
+      - name: Dump stack logs on failure
+        if: failure()
+        run: docker compose logs --no-color api worker postgres redis
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose down -v

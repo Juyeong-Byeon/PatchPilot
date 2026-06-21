@@ -194,4 +194,82 @@ describe("JobList", () => {
     expect(failurePill).not.toHaveClass("bg-forest-ink");
     expect(within(failedRow).queryByText("실패")).not.toBeInTheDocument();
   });
+
+  it("distinguishes a Queued job from an actively running one (no spinner, own label)", () => {
+    render(
+      <JobList
+        copy={adminCopy.ko}
+        isLoading={false}
+        jobs={[
+          {
+            id: "job_queued_11111111-1111-4111-8111-111111111111",
+            repository: "acme/web",
+            phase: "Queued",
+            outcome: "Running",
+            updated_at: "2026-06-20T00:25:00.000Z",
+          },
+          {
+            id: "job_running_22222222-2222-4222-8222-222222222222",
+            repository: "acme/web",
+            phase: "Implementing",
+            outcome: "Running",
+            updated_at: "2026-06-20T00:26:00.000Z",
+          },
+        ]}
+        locale="ko"
+        selectedJobId=""
+        onOpenJob={vi.fn()}
+      />,
+    );
+
+    const queuedRow = screen.getByRole("button", { name: /11111111-1111-4111-8111-111111111111/ });
+    // Queued is NOT treated as an active run: distinct data-state, its own label,
+    // and crucially NO spinning status role (color/motion-independent).
+    expect(queuedRow).toHaveAttribute("data-state", "queued");
+    expect(within(queuedRow).getByText("대기열")).toBeInTheDocument();
+    expect(within(queuedRow).queryByRole("status")).not.toBeInTheDocument();
+    expect(within(queuedRow).getByLabelText("대기열")).toBeInTheDocument();
+
+    const runningRow = screen.getByRole("button", { name: /22222222-2222-4222-8222-222222222222/ });
+    expect(runningRow).toHaveAttribute("data-state", "running");
+    expect(within(runningRow).getByRole("status", { name: "실행 중" })).toHaveClass("animate-spin");
+  });
+
+  it("falls back to stacked cards on a narrow viewport", () => {
+    const matchMediaMock = vi.fn().mockImplementation((query: string) => ({
+      matches: query.includes("max-width"),
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }));
+    vi.stubGlobal("matchMedia", matchMediaMock);
+
+    try {
+      render(
+        <JobList
+          copy={adminCopy.ko}
+          isLoading={false}
+          jobs={[
+            {
+              id: "job_card_11111111-1111-4111-8111-111111111111",
+              repository: "acme/web",
+              phase: "Implementing",
+              outcome: "Running",
+              updated_at: "2026-06-20T00:25:00.000Z",
+            },
+          ]}
+          locale="ko"
+          selectedJobId=""
+          onOpenJob={vi.fn()}
+        />,
+      );
+
+      // The wide table header columns are gone; the row still renders (as a card),
+      // exactly once (no duplicate table+card trees).
+      expect(screen.queryByText(adminCopy.ko.tableOutcome)).not.toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: /11111111-1111-4111-8111-111111111111/ })).toHaveLength(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });

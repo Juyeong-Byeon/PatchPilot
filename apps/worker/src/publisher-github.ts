@@ -4,7 +4,7 @@ import { maskSecrets } from "@ticket-to-pr/core";
 import { buildSafeGitArgs } from "./git-safe.js";
 import type { PublishInput, PublishedPullRequest } from "./publisher-mock.js";
 
-interface PullsCreateOctokit {
+interface PullsApiOctokit {
   rest: {
     pulls: {
       create(input: {
@@ -15,6 +15,20 @@ interface PullsCreateOctokit {
         head: string;
         base: string;
         draft: boolean;
+      }): Promise<{ data: { html_url: string; number: number } }>;
+      list(input: {
+        owner: string;
+        repo: string;
+        head: string;
+        base: string;
+        state: "open" | "closed" | "all";
+      }): Promise<{ data: Array<{ html_url: string; number: number }> }>;
+      update(input: {
+        owner: string;
+        repo: string;
+        pull_number: number;
+        title: string;
+        body: string;
       }): Promise<{ data: { html_url: string; number: number } }>;
     };
   };
@@ -29,7 +43,7 @@ export function createGitHubPublisher(token: string): (input: PublishInput) => P
 
 export async function publishGitHubPullRequest(
   input: PublishInput,
-  octokit: PullsCreateOctokit,
+  octokit: PullsApiOctokit,
   pushBranch: PushBranch = pushBranchToOrigin,
   githubToken?: string,
 ): Promise<PublishedPullRequest> {
@@ -39,15 +53,33 @@ export async function publishGitHubPullRequest(
 
   await pushBranch(input.localRepoDir, input.workBranch, input.pushSha, githubToken);
 
-  const response = await octokit.rest.pulls.create({
-    owner,
-    repo,
-    title: input.title,
-    body: input.body,
-    head: input.workBranch,
-    base: input.targetBranch,
-    draft: false,
-  });
+  // X2 publish idempotency: a retry (or a prior attempt that pushed the branch but
+  // failed during pulls.create — the "orphan branch" case) must not open a second
+  // PR for the same head→base. Look up an existing open PR for this head first and,
+  // when found, reuse it (refreshing title/body) instead of creating a duplicate.
+  // GitHub's pulls.list `head` filter is owner-qualified.
+  const existing = await findOpenPullRequest(octokit, owner, repo, input.workBranch, input.targetBranch);
+  const data = existing
+    ? (
+        await octokit.rest.pulls.update({
+          owner,
+          repo,
+          pull_number: existing.number,
+          title: input.title,
+          body: input.body,
+        })
+      ).data
+    : (
+        await octokit.rest.pulls.create({
+          owner,
+          repo,
+          title: input.title,
+          body: input.body,
+          head: input.workBranch,
+          base: input.targetBranch,
+          draft: false,
+        })
+      ).data;
 
   return {
     repository: input.repository,
@@ -57,11 +89,39 @@ export async function publishGitHubPullRequest(
     headSha: input.headSha,
     pushSha: input.pushSha,
     commitShas: input.commitShas,
-    prUrl: response.data.html_url,
-    prNumber: response.data.number,
+    prUrl: data.html_url,
+    prNumber: data.number,
     prTitle: input.title,
     prBody: input.body,
   };
+}
+
+/**
+ * Find an existing open PR for `workBranch → targetBranch`, or undefined when none
+ * exists. Best-effort: a transient list failure (e.g. permissions on a fresh repo)
+ * is swallowed so publishing degrades to the create path rather than failing the
+ * whole job — the `(repository, pr_number)` unique constraint remains the final
+ * dedup backstop on savePullRequest.
+ */
+async function findOpenPullRequest(
+  octokit: PullsApiOctokit,
+  owner: string,
+  repo: string,
+  workBranch: string,
+  targetBranch: string,
+): Promise<{ html_url: string; number: number } | undefined> {
+  try {
+    const response = await octokit.rest.pulls.list({
+      owner,
+      repo,
+      head: `${owner}:${workBranch}`,
+      base: targetBranch,
+      state: "open",
+    });
+    return response.data[0];
+  } catch {
+    return undefined;
+  }
 }
 
 export async function pushBranchToOrigin(

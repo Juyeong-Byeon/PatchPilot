@@ -18,6 +18,21 @@ export interface JobRecord extends JsonRecord {
   next_action?: string | null;
   pr_url?: string | null;
   last_event?: string | null;
+  // Ticket context joined in by getJob (ticket_snapshots). Both snake_case (raw
+  // API rows) and camelCase (worker-shaped records) are accepted so callers never
+  // depend on which serializer produced the record.
+  title?: string | null;
+  description?: string | null;
+  definition_of_done?: string | null;
+  definitionOfDone?: string | null;
+  raw_fields?: JsonRecord | null;
+  rawFields?: JsonRecord | null;
+  // Forward-compat: the executor/pipeline mode (single-pass vs staged) is added by
+  // a separate backend track. Rendered only when present; never required.
+  executor_mode?: string | null;
+  executorMode?: string | null;
+  pipeline_mode?: string | null;
+  pipelineMode?: string | null;
 }
 
 export interface RunEvent extends JsonRecord {
@@ -61,6 +76,23 @@ export interface RetryResponse {
   runId: string;
   attempt: number;
 }
+
+// Shape of GET /api/metrics (backend `MetricsSummary`). Every field is optional so
+// the consumer renders only what is present and degrades if the endpoint predates a
+// field. Rates are 0..1 fractions; `runtimeSeconds` durations are in seconds.
+export interface JobMetrics extends JsonRecord {
+  totalJobs?: number;
+  successRate?: number;
+  mergeRate?: number;
+  retryRate?: number;
+  runtimeSeconds?: { p50?: number | null; p95?: number | null; sampleSize?: number };
+  // Executor/pipeline mode → job count, e.g. { singlePass: 12, staged: 3, unknown: 0 }.
+  executorModeDistribution?: Record<string, number>;
+}
+
+// Sentinel thrown when /api/metrics is absent (404). Lets the caller distinguish
+// "feature not deployed → hide the panel silently" from a transient/auth error.
+export const METRICS_UNAVAILABLE = "admin_metrics_unavailable";
 
 const TOKEN_STORAGE_KEY = "ADMIN_TOKEN";
 const API_BASE_URL = (import.meta.env.VITE_ADMIN_API_BASE_URL ?? "").replace(/\/$/, "");
@@ -117,6 +149,45 @@ export async function retryJob(jobId: string, token = getStoredAdminToken()): Pr
     method: "POST",
     token,
   });
+}
+
+/**
+ * Fetch operations metrics. Defensive by design: the endpoint is shipped by a
+ * separate track and may not exist yet. A 404 (or a route that answers with
+ * non-JSON, e.g. an SPA fallback) throws `METRICS_UNAVAILABLE` so the dashboard can
+ * hide itself silently instead of surfacing a broken panel. 401 still maps to the
+ * shared session-expiry sentinel so the re-auth boundary stays centralized.
+ */
+export async function fetchMetrics(token = getStoredAdminToken()): Promise<JobMetrics> {
+  const trimmed = token?.trim();
+  if (!trimmed) throw new Error("admin_access_key_required");
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/metrics`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${trimmed}`,
+        Accept: "application/json",
+      },
+    });
+  } catch {
+    // Network error — treat as unavailable so the panel stays hidden rather than erroring.
+    throw new Error(METRICS_UNAVAILABLE);
+  }
+
+  if (response.status === 401) throw new Error("admin_access_key_invalid");
+  if (response.status === 404) throw new Error(METRICS_UNAVAILABLE);
+  if (!response.ok) throw new Error(METRICS_UNAVAILABLE);
+
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) throw new Error(METRICS_UNAVAILABLE);
+
+  try {
+    return (await response.json()) as JobMetrics;
+  } catch {
+    throw new Error(METRICS_UNAVAILABLE);
+  }
 }
 
 async function adminRequest<T>(path: string, options: { method?: "GET" | "POST"; token?: string } = {}): Promise<T> {

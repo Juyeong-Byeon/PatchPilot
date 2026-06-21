@@ -46,7 +46,16 @@ export interface GstackExecutorOptions {
   workspaceRoot?: string;
   workspaceHostRoot?: string;
   gstackCommand?: string;
+  /**
+   * Explicit GSTACK_ARGS override (back-compat). When set it is used verbatim for
+   * every job regardless of mode. When unset, args are selected per-job from the
+   * executor mode via {@link gstackStagedArgs} / {@link gstackSingleArgs}.
+   */
   gstackArgs?: string;
+  /** GSTACK_ARGS for the staged pipeline (input.executorMode === "staged"). */
+  gstackStagedArgs?: string;
+  /** GSTACK_ARGS for the single-pass pipeline (default). */
+  gstackSingleArgs?: string;
   codexAuthFile?: string;
   codexConfigFile?: string;
   codexSkillsDir?: string;
@@ -123,6 +132,20 @@ export function buildGstackDockerCommand(input: GstackCommandInput): CommandSpec
   };
 }
 
+/**
+ * Pick the GSTACK_ARGS for a job by executor mode (epic D). An explicit
+ * `options.gstackArgs` override wins for every job (back-compat). Otherwise the
+ * staged mode uses `gstackStagedArgs` and everything else uses `gstackSingleArgs`;
+ * either may be undefined, in which case the runner image's own default applies.
+ */
+export function resolveGstackArgs(
+  executorMode: ExecutorInput["executorMode"],
+  options: Pick<GstackExecutorOptions, "gstackArgs" | "gstackStagedArgs" | "gstackSingleArgs">,
+): string | undefined {
+  if (options.gstackArgs !== undefined) return options.gstackArgs;
+  return executorMode === "staged" ? options.gstackStagedArgs : options.gstackSingleArgs;
+}
+
 export async function executeGstack(input: ExecutorInput, options: GstackExecutorOptions): Promise<AgentResult> {
   const repositoryUrl = toRepositoryUrl(input.job.repository);
   const trustedBaseSha = await resolveRemoteTargetSha(repositoryUrl, input.job.targetBranch, options.githubToken);
@@ -136,7 +159,7 @@ export async function executeGstack(input: ExecutorInput, options: GstackExecuto
     workspacePath: input.run.workspacePath,
     workspaceMountSource,
     gstackCommand: options.gstackCommand,
-    gstackArgs: options.gstackArgs,
+    gstackArgs: resolveGstackArgs(input.executorMode, options),
     codexAuthFile: options.codexAuthFile,
     codexConfigFile: options.codexConfigFile,
     codexSkillsDir: options.codexSkillsDir,
@@ -152,6 +175,9 @@ export async function executeGstack(input: ExecutorInput, options: GstackExecuto
     job: input.job,
     run: input.run,
     policy: options.policy ?? { repositoryAllowlist: [], protectedPathDenylist: [] },
+    // X4: thread operator retry-guidance into the runner input context so the agent
+    // reads the steering alongside the ticket. Undefined when there is none.
+    retryGuidance: input.retryGuidance,
   });
   await runCommand(command, input, ((options.timeoutSeconds ?? 3600) + 30) * 1000, 2000, {
     signal: input.signal,
@@ -256,10 +282,13 @@ export async function writeRunnerInputArtifacts(input: {
     repositoryAllowlist: string[];
     protectedPathDenylist: string[];
   };
+  /** X4 operator retry-guidance, written into context.json + a guidance markdown file. */
+  retryGuidance?: string;
 }): Promise<void> {
   const paths = getWorkspacePaths(input.workspacePath);
+  const guidance = input.retryGuidance?.trim();
   await mkdir(paths.inputDir, { recursive: true });
-  await writeFile(paths.ticketMd, renderTicketMarkdown(input.job));
+  await writeFile(paths.ticketMd, renderTicketMarkdown(input.job, guidance));
   await writeFile(
     paths.contextJson,
     `${JSON.stringify(
@@ -271,12 +300,20 @@ export async function writeRunnerInputArtifacts(input: {
         runId: input.run.runId,
         attempt: input.run.attempt,
         workBranch: input.run.workBranch,
+        // Present only on a retry-with-guidance attempt (X4). Forward-compatible:
+        // the runner may read it or ignore it.
+        ...(guidance ? { retryGuidance: guidance } : {}),
       },
       null,
       2,
     )}\n`,
   );
   await writeFile(paths.policyJson, `${JSON.stringify(input.policy, null, 2)}\n`);
+  // Also drop a human/agent-readable steering file next to the ticket so a runner
+  // that only reads markdown still picks up the guidance.
+  if (guidance) {
+    await writeFile(join(paths.inputDir, "retry-guidance.md"), `# Operator Retry Guidance\n\n${guidance}\n`);
+  }
 }
 
 export function maskExecutorOutput(text: string): { text: string; redactionApplied: boolean } {
@@ -284,14 +321,17 @@ export function maskExecutorOutput(text: string): { text: string; redactionAppli
   return { text: masked, redactionApplied: masked !== text || masked.includes("[REDACTED_") };
 }
 
-function renderTicketMarkdown(job: {
-  title: string;
-  description: string;
-  definitionOfDone: string;
-  repository: string;
-  targetBranch: string;
-}): string {
-  return [
+function renderTicketMarkdown(
+  job: {
+    title: string;
+    description: string;
+    definitionOfDone: string;
+    repository: string;
+    targetBranch: string;
+  },
+  retryGuidance?: string,
+): string {
+  const lines = [
     `# ${job.title}`,
     "",
     "## Description",
@@ -306,7 +346,12 @@ function renderTicketMarkdown(job: {
     "## Target Branch",
     job.targetBranch,
     "",
-  ].join("\n");
+  ];
+  if (retryGuidance) {
+    // X4: surface operator steering directly in the ticket the agent reads.
+    lines.push("## Operator Retry Guidance", retryGuidance, "");
+  }
+  return lines.join("\n");
 }
 
 function toRepositoryUrl(repository: string): string {

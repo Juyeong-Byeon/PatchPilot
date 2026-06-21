@@ -1,8 +1,32 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Ban, Check, Copy, ExternalLink, RotateCcw, Undo2, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Ban,
+  Check,
+  ChevronDown,
+  Copy,
+  ExternalLink,
+  FileDiff,
+  GitBranch,
+  GitPullRequest,
+  RotateCcw,
+  ShieldCheck,
+  Undo2,
+  X,
+} from "lucide-react";
 import type { Artifact, JobRecord, LogLine, RunEvent } from "../api.js";
-import { translateFailureCategory, translateState, type AdminCopy, type Locale } from "../i18n.js";
-import { deriveStageStates, statusBadgeVariant } from "../lib/status.js";
+import { executorModeLabel, translateFailureCategory, translateState, type AdminCopy, type Locale } from "../i18n.js";
+import { deriveStageStates, isNeedsReviewJob, resolvePrimaryStatus, statusBadgeVariant } from "../lib/status.js";
+import {
+  extractJobEvidence,
+  normalizeExecutorMode,
+  parseDefinitionOfDone,
+  prFileDeepLink,
+  prFilesUrl,
+  readExecutorMode,
+  type JobEvidence,
+} from "../lib/evidence.js";
+import { usePrFileAnchors } from "../lib/use-pr-file-anchors.js";
 import { LogViewer } from "./LogViewer.js";
 import { RunStepGraph } from "./RunStepGraph.js";
 import { RunTimeline, type SpanSelection } from "./RunTimeline.js";
@@ -107,6 +131,15 @@ export function JobDetail({
   const retryDisabled = Boolean(actionState) || !(job.phase === "Failed" && String(job.outcome) === "FailedInternal");
   const cancelDisabled = Boolean(actionState) || terminal;
   const isCancelled = String(job.outcome) === "Cancelled" || String(job.phase) === "Cancelled";
+  const needsReview = isNeedsReviewJob(job.phase, job.outcome);
+  const primaryStatus = resolvePrimaryStatus(job);
+  const executorMode = readExecutorMode(job);
+  const ticketTitle = stringOrNull(job.title);
+  const ticketDescription = stringOrNull(job.description);
+  const dodText = stringOrNull(job.definition_of_done ?? job.definitionOfDone);
+  const dodItems = parseDefinitionOfDone(dodText);
+  const evidence = extractJobEvidence(currentArtifacts);
+  const expectedTargetBranch = stringOrNull(job.target_branch ?? job.targetBranch);
 
   return (
     <section className="grid gap-4">
@@ -121,8 +154,17 @@ export function JobDetail({
                 <CopyButton value={job.id} copy={copy} />
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <Badge variant={statusBadgeVariant(job.phase)}>{translateState(job.phase, locale)}</Badge>
-                <Badge variant={statusBadgeVariant(job.outcome)}>{translateState(job.outcome, locale)}</Badge>
+                {/* Single operator-facing primary status. The backend (phase, outcome)
+                    pair is collapsed into one canonical state so Completed+NeedsReview
+                    no longer reads as a contradiction; it shows as "PR 리뷰 대기". */}
+                <Badge variant={statusBadgeVariant(primaryStatus)} aria-label={copy.primaryStatus}>
+                  {translateState(primaryStatus, locale)}
+                </Badge>
+                {executorMode ? (
+                  <Badge variant="outline" aria-label={copy.executorMode}>
+                    {executorModeLabel(normalizeExecutorMode(executorMode), executorMode, copy)}
+                  </Badge>
+                ) : null}
               </div>
               <h2 className="mt-3 font-sans text-[22px] font-semibold leading-[1.25] text-forest-ink">
                 {stringValue(job.repository, copy)}
@@ -214,6 +256,33 @@ export function JobDetail({
             </section>
           ) : null}
 
+          {/* NeedsReview is the dominant successful-terminal state: the operator's
+              one job is to review/merge the PR. Surface that next action as a
+              prominent, labeled CTA instead of relying on the bare PR icon button
+              in the action cluster (which has no text and is easy to miss). */}
+          {needsReview ? (
+            <section className="flex flex-col gap-3 rounded-xl border border-amber-border bg-amber-wash px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="m-0 flex items-center gap-1.5 text-[13px] font-semibold leading-5 text-amber-ink">
+                  <GitPullRequest aria-hidden="true" size={15} strokeWidth={2.4} className="shrink-0" />
+                  {copy.reviewSummary}
+                </p>
+                <p className="m-0 mt-1 text-[12px] leading-4 text-charcoal">{copy.reviewHint}</p>
+              </div>
+              {job.pr_url ? (
+                <a
+                  className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-amber-ink bg-amber-ink px-3 py-2 text-[13px] font-medium text-white no-underline shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md"
+                  href={job.pr_url}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  <ExternalLink aria-hidden="true" size={15} strokeWidth={2.4} />
+                  {copy.reviewOpenPr}
+                </a>
+              ) : null}
+            </section>
+          ) : null}
+
           <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Fact label={copy.priority} value={stringValue(job.priority, copy)} />
             <Fact label={copy.attempt} value={stringValue(job.attempt, copy)} />
@@ -222,6 +291,24 @@ export function JobDetail({
           </dl>
         </CardContent>
       </Card>
+
+      <TicketPanel
+        title={ticketTitle}
+        description={ticketDescription}
+        dodText={dodText}
+        dodItems={dodItems}
+        copy={copy}
+      />
+
+      <EvidenceCard
+        evidence={evidence}
+        artifacts={currentArtifacts}
+        totalCount={currentArtifacts.length}
+        expectedTargetBranch={expectedTargetBranch}
+        prUrl={stringOrNull(job.pr_url)}
+        copy={copy}
+        locale={locale}
+      />
 
       <RunStepGraph
         events={currentEvents}
@@ -282,6 +369,352 @@ export function JobDetail({
       </Card>
     </section>
   );
+}
+
+function TicketPanel({
+  title,
+  description,
+  dodText,
+  dodItems,
+  copy,
+}: {
+  title: string | null;
+  description: string | null;
+  dodText: string | null;
+  dodItems: string[];
+  copy: AdminCopy;
+}) {
+  const hasTicket = Boolean(title || description || dodText);
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{copy.ticketPanel}</CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        {!hasTicket ? (
+          <p className="text-[13px] leading-5 text-charcoal">{copy.noTicketContext}</p>
+        ) : (
+          <>
+            {title ? <h3 className="m-0 text-[18px] font-semibold leading-6 text-forest-ink">{title}</h3> : null}
+            {description ? (
+              <div>
+                <p className="mb-1 text-[12px] leading-4 text-charcoal">{copy.ticketDescription}</p>
+                <p className="m-0 whitespace-pre-wrap break-words text-[13px] leading-5 text-true-black">
+                  {description}
+                </p>
+              </div>
+            ) : null}
+            <div>
+              <p className="mb-2 text-[12px] leading-4 text-charcoal">{copy.definitionOfDone}</p>
+              {dodItems.length > 0 ? (
+                <ul className="m-0 grid list-none gap-2 p-0" aria-label={copy.definitionOfDone}>
+                  {dodItems.map((item, index) => (
+                    <li
+                      className="flex items-start gap-2 rounded-lg border border-hairline-gray bg-linen-white px-3 py-2 text-[13px] leading-5 text-true-black"
+                      key={`${index}-${item}`}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border border-hairline-gray text-graphite"
+                      >
+                        <Check size={11} strokeWidth={2.6} />
+                      </span>
+                      <span className="break-words">{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : dodText ? (
+                <p className="m-0 whitespace-pre-wrap break-words text-[13px] leading-5 text-true-black">{dodText}</p>
+              ) : (
+                <p className="m-0 text-[13px] leading-5 text-charcoal">{copy.noDefinitionOfDone}</p>
+              )}
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Cap the inline changed-files list; long diffs fall back to a "+N more" note that
+// points at the PR's Files tab so the card never becomes a wall of paths.
+const MAX_CHANGED_FILES = 20;
+
+function EvidenceCard({
+  evidence,
+  artifacts,
+  totalCount,
+  expectedTargetBranch,
+  prUrl,
+  copy,
+  locale,
+}: {
+  evidence: JobEvidence;
+  artifacts: Artifact[];
+  totalCount?: number;
+  expectedTargetBranch: string | null;
+  prUrl: string | null;
+  copy: AdminCopy;
+  locale: Locale;
+}) {
+  const [rawOpen, setRawOpen] = useState(false);
+
+  const filesUrl = useMemo(() => prFilesUrl(prUrl), [prUrl]);
+  const shownFiles = useMemo(() => evidence.changedFiles.slice(0, MAX_CHANGED_FILES), [evidence.changedFiles]);
+  // Compute GitHub per-file diff anchors only when we actually have a PR to link to.
+  const fileAnchors = usePrFileAnchors(shownFiles, Boolean(filesUrl));
+  const hiddenFileCount = Math.max(0, evidence.changedFiles.length - shownFiles.length);
+
+  // The two trust artifacts the worker records: gate verdict + executor evidence.
+  const evidenceArtifacts = useMemo(
+    () =>
+      artifacts.filter((artifact) => {
+        const kind = String(artifact.kind ?? "").toLowerCase();
+        return kind.includes("policy") || kind.includes("agent-result") || kind === "result";
+      }),
+    [artifacts],
+  );
+
+  const protectedBadge: EvidenceBadgeSpec =
+    evidence.deniedFiles.length === 0
+      ? { tone: "ok", icon: "shield", label: copy.evidenceProtectedClean }
+      : { tone: "danger", icon: "alert", label: copy.evidenceProtectedViolation(evidence.deniedFiles.length) };
+
+  const policyBadge: EvidenceBadgeSpec =
+    evidence.policyStatus === "passed"
+      ? { tone: "ok", icon: "shield", label: copy.evidencePolicyPassed }
+      : evidence.policyStatus === "failed"
+        ? { tone: "danger", icon: "alert", label: copy.evidencePolicyFailed }
+        : { tone: "muted", icon: "alert", label: copy.evidencePolicyUnknown };
+
+  const testsBadge: EvidenceBadgeSpec =
+    evidence.verification === "passed"
+      ? { tone: "ok", icon: "check", label: copy.evidenceTestsPassed }
+      : evidence.verification === "failed"
+        ? { tone: "danger", icon: "alert", label: copy.evidenceTestsFailed }
+        : // skipped or none → explicit "검증 없음" so a fake-green never slips through.
+          { tone: "warning", icon: "alert", label: copy.evidenceTestsSkipped };
+
+  const targetBadge: EvidenceBadgeSpec | null =
+    evidence.targetBranch && expectedTargetBranch
+      ? evidence.targetBranch === expectedTargetBranch
+        ? { tone: "ok", icon: "branch", label: copy.evidenceTargetMatch }
+        : { tone: "danger", icon: "alert", label: copy.evidenceTargetMismatch }
+      : null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <div>
+          <CardTitle>{copy.evidenceTitle}</CardTitle>
+          <span className="mt-1 block text-[12px] leading-4 text-charcoal">{copy.evidenceSubtitle}</span>
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        {!evidence.present ? (
+          <p className="text-[13px] leading-5 text-charcoal">{copy.evidenceNone}</p>
+        ) : (
+          <>
+            <div className="flex flex-wrap gap-2">
+              <EvidenceBadge spec={protectedBadge} />
+              <EvidenceBadge spec={policyBadge} />
+              <EvidenceBadge spec={testsBadge} />
+              {targetBadge ? <EvidenceBadge spec={targetBadge} /> : null}
+            </div>
+
+            <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <Fact
+                label={copy.evidenceChangedFiles}
+                value={copy.evidenceChangedFilesUnit(evidence.changedFileCount)}
+              />
+              <Fact
+                label={copy.evidenceTargetBranch}
+                value={evidence.targetBranch ?? expectedTargetBranch ?? copy.empty}
+              />
+              <div className="min-w-0 rounded-xl border border-hairline-gray bg-linen-white p-3 sm:col-span-2">
+                <dt className="mb-2 text-[12px] leading-4 text-charcoal">{copy.evidenceBaseHead}</dt>
+                <dd className="m-0 break-all font-mono text-[12px] leading-5 text-true-black">
+                  {evidence.baseSha || evidence.headSha
+                    ? `${shortSha(evidence.baseSha) ?? "—"}..${shortSha(evidence.headSha) ?? "—"}`
+                    : copy.empty}
+                </dd>
+              </div>
+            </dl>
+
+            {/* Changed-file deeplinks (L3): each file links to its diff on the PR's
+                Files tab. When pr_url is absent or unparseable, files render as plain
+                paths (no broken links). */}
+            {shownFiles.length > 0 ? (
+              <div>
+                <p className="mb-2 text-[12px] leading-4 text-charcoal">{copy.evidenceChangedFilesList}</p>
+                <ul className="m-0 grid list-none gap-1.5 p-0" aria-label={copy.evidenceChangedFilesList}>
+                  {shownFiles.map((file) => {
+                    const href = filesUrl ? prFileDeepLink(filesUrl, fileAnchors[file]) : null;
+                    return (
+                      <li key={file}>
+                        {href ? (
+                          <a
+                            className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-hairline-gray bg-linen-white px-3 py-1.5 font-mono text-[12px] leading-5 text-cobalt-surface no-underline shadow-sm transition-colors hover:border-electric-blue hover:bg-mist-blue"
+                            href={href}
+                            rel="noreferrer"
+                            target="_blank"
+                            title={`${copy.evidenceOpenChangedFile} · ${file}`}
+                          >
+                            <FileDiff aria-hidden="true" size={13} strokeWidth={2.2} className="shrink-0" />
+                            <span className="truncate">{file}</span>
+                            <ExternalLink aria-hidden="true" size={12} strokeWidth={2.2} className="shrink-0" />
+                          </a>
+                        ) : (
+                          <span className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-hairline-gray bg-linen-white px-3 py-1.5 font-mono text-[12px] leading-5 text-true-black">
+                            <FileDiff aria-hidden="true" size={13} strokeWidth={2.2} className="shrink-0" />
+                            <span className="truncate">{file}</span>
+                          </span>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+                {hiddenFileCount > 0 ? (
+                  filesUrl ? (
+                    <a
+                      className="mt-2 inline-block text-[12px] leading-4 text-cobalt-surface"
+                      href={filesUrl}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      {copy.evidenceChangedFilesMore(hiddenFileCount)}
+                    </a>
+                  ) : (
+                    <p className="m-0 mt-2 text-[12px] leading-4 text-charcoal">
+                      {copy.evidenceChangedFilesMore(hiddenFileCount)}
+                    </p>
+                  )
+                ) : null}
+              </div>
+            ) : null}
+
+            {evidence.tests.length > 0 ? (
+              <ul className="m-0 grid list-none gap-2 p-0" aria-label={copy.evidenceTests}>
+                {evidence.tests.map((test, index) => (
+                  <li
+                    className="flex flex-wrap items-center gap-2 rounded-lg border border-hairline-gray bg-linen-white px-3 py-2"
+                    key={`${index}-${test.command}`}
+                  >
+                    <Badge variant={testStatusVariant(test.status)}>{translateTestStatus(test.status, copy)}</Badge>
+                    <code className="break-all font-mono text-[12px] leading-5 text-true-black">{test.command}</code>
+                    {test.summary ? (
+                      <span className="text-[12px] leading-4 text-charcoal">· {test.summary}</span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
+            {evidence.deniedFiles.length > 0 ? (
+              <div className="rounded-lg border border-danger bg-danger-wash px-3 py-2">
+                <p className="m-0 text-[12px] leading-4 text-danger">{copy.evidenceProtectedList}</p>
+                <ul className="m-0 mt-1 list-disc pl-5 text-[12px] leading-5 text-danger">
+                  {evidence.deniedFiles.map((file) => (
+                    <li className="break-all" key={file}>
+                      {file}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {evidenceArtifacts.length > 0 ? (
+              <div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  aria-expanded={rawOpen}
+                  className="h-8 gap-1 px-2 text-[12px] text-graphite"
+                  onClick={() => setRawOpen((open) => !open)}
+                >
+                  <ChevronDown
+                    data-icon
+                    aria-hidden="true"
+                    strokeWidth={2.2}
+                    className={rawOpen ? "rotate-180 transition-transform" : "transition-transform"}
+                  />
+                  {rawOpen ? copy.evidenceHideRaw : copy.evidenceShowRaw}
+                </Button>
+                {rawOpen ? (
+                  <div className="mt-2" data-testid="evidence-raw">
+                    <ArtifactPanel
+                      artifacts={evidenceArtifacts}
+                      totalCount={totalCount}
+                      copy={copy}
+                      locale={locale}
+                      variant="embedded"
+                    />
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+type EvidenceTone = "ok" | "warning" | "danger" | "muted";
+type EvidenceIcon = "shield" | "check" | "alert" | "branch" | "diff";
+interface EvidenceBadgeSpec {
+  tone: EvidenceTone;
+  icon: EvidenceIcon;
+  label: string;
+}
+
+function EvidenceBadge({ spec }: { spec: EvidenceBadgeSpec }) {
+  // Color-independent: every badge carries an icon + text, so meaning survives for
+  // color-blind operators and in grayscale.
+  const Icon =
+    spec.icon === "shield"
+      ? ShieldCheck
+      : spec.icon === "check"
+        ? Check
+        : spec.icon === "branch"
+          ? GitBranch
+          : spec.icon === "diff"
+            ? FileDiff
+            : AlertTriangle;
+  const toneClass =
+    spec.tone === "ok"
+      ? "border-transparent bg-mist-blue text-forest-ink"
+      : spec.tone === "danger"
+        ? "border-danger bg-danger-wash text-danger"
+        : spec.tone === "warning"
+          ? "border-amber-border bg-amber-wash text-amber-ink"
+          : "border-hairline-gray bg-linen-white text-charcoal";
+  return (
+    <span
+      className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] font-medium leading-4 shadow-sm ${toneClass}`}
+    >
+      <Icon aria-hidden="true" size={13} strokeWidth={2.4} className="shrink-0" />
+      <span className="truncate">{spec.label}</span>
+    </span>
+  );
+}
+
+function testStatusVariant(status: string): "default" | "warning" | "danger" | "dark" {
+  if (status === "passed") return "dark";
+  if (status === "failed") return "danger";
+  return "warning";
+}
+
+function translateTestStatus(status: string, copy: AdminCopy): string {
+  if (status === "passed") return copy.evidenceTestsPassed;
+  if (status === "failed") return copy.evidenceTestsFailed;
+  return copy.evidenceTestsSkipped;
+}
+
+function shortSha(value: string | undefined): string | null {
+  if (!value) return null;
+  return value.length > 10 ? value.slice(0, 10) : value;
 }
 
 function ArtifactPanel({

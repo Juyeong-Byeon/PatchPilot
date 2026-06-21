@@ -232,4 +232,38 @@ describe("buildGstackDockerCommand", () => {
       protectedPathDenylist: ["infra/**"],
     });
   });
+
+  it("injects operator retry guidance into ticket, context, and a guidance file (X4)", async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), "ticket-to-pr-runner-guidance-"));
+    tempDirs.push(workspacePath);
+
+    await writeRunnerInputArtifacts({
+      workspacePath,
+      job: {
+        jobId: "job_1",
+        ticketSnapshotId: "ts_1",
+        larkRecordId: "rec_1",
+        triggerVersion: "v1",
+        title: "Fix login",
+        description: "Login fails",
+        definitionOfDone: "Users can log in",
+        repository: "acme/web",
+        targetBranch: "main",
+      },
+      run: { runId: "run_1", attempt: 2, workBranch: "ticket-to-pr/job_1-attempt-2" },
+      policy: { repositoryAllowlist: ["acme/web"], protectedPathDenylist: [] },
+      retryGuidance: "Edit src/auth.ts instead of src/login.ts this time.",
+    });
+
+    const ticket = await readFile(join(workspacePath, "input", "ticket.md"), "utf8");
+    expect(ticket).toContain("## Operator Retry Guidance");
+    expect(ticket).toContain("Edit src/auth.ts instead");
+
+    const context = JSON.parse(await readFile(join(workspacePath, "input", "context.json"), "utf8"));
+    expect(context.retryGuidance).toBe("Edit src/auth.ts instead of src/login.ts this time.");
+
+    const guidance = await readFile(join(workspacePath, "input", "retry-guidance.md"), "utf8");
+    expect(guidance).toContain("Operator Retry Guidance");
+    expect(guidance).toContain("Edit src/auth.ts instead");
+  });
 });

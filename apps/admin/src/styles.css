@@ -12,6 +12,13 @@
   --color-danger-hover: #ef4444;
   --color-danger-wash: #fef2f2;
 
+  /* Amber "needs attention / waiting" ramp. Distinct from both the blue info ramp
+     (mist-blue) and the red danger ramp, so a warning state never collides with a
+     neutral running/info state. amber-ink on amber-wash is 6.37:1 (WCAG AA). */
+  --color-amber-ink: #92400e;
+  --color-amber-wash: #fef3c7;
+  --color-amber-border: #fcd34d;
+
   --color-forest-ink: #091135;
   --color-sage-wash: #dbeaff;
   --color-mist-blue: #edf5ff;
@@ -38,6 +45,142 @@
   --font-suisse-intl: "Inter", "Helvetica Neue", Arial, ui-sans-serif, system-ui, sans-serif;
   --font-space-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --page-max-width: 1200px;
+
+  /* Page chrome tokens, themed so .admin-shell / html-body / terminal surfaces
+     follow the active palette instead of hardcoding light hex values below. */
+  --page-bg: #f5f3ff;
+  --page-text: #091135;
+  --shell-gradient:
+    radial-gradient(circle at 20% 0%, rgba(15, 119, 255, 0.08), transparent 26rem),
+    linear-gradient(180deg, #ffffff 0%, #f5f3ff 34%, #edf5ff 100%);
+  --terminal-bg: linear-gradient(180deg, rgba(9, 17, 53, 0.04), rgba(9, 17, 53, 0.01)), #ffffff;
+  --terminal-inset: inset 0 1px 0 rgba(255, 255, 255, 0.76);
+  --shimmer-base: #edf5ff;
+  --shimmer-sheen: rgba(255, 255, 255, 0.72);
+  --link-color: #0f77ff;
+  --link-decoration: #e1e9f0;
+  --link-hover: #091135;
+}
+
+/*
+ * Dark palette. Tailwind v4 utilities resolve to `var(--color-*)`, so redefining
+ * those custom properties under a dark scope re-themes every component without any
+ * component-level color changes (no hardcoded hex in components — tokens only).
+ *
+ * Two activation paths kept in sync via a shared declaration block:
+ *  - explicit operator choice  → html[data-theme="dark"]
+ *  - OS preference (no choice)  → @media (prefers-color-scheme: dark), guarded to
+ *    html[data-theme="system"] and the unset default so an explicit light choice wins.
+ *
+ * Every semantic ramp (neutral / blue / amber / red) has an AA-contrast dark
+ * equivalent. Contrast notes are inline next to each text-on-surface pairing.
+ */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Neutral surfaces — layered from page (darkest) to raised cards. */
+  --color-paper: #0b1020;
+  --color-linen-white: #141b30;
+  --color-linen: #1b2238;
+  --color-lavender-wash: #11182b;
+  --color-mist-blue: #1d2a44;
+  --color-mint-veil: #16243c;
+  --color-sage-wash: #1f3252;
+
+  /* Borders / hairlines — light enough to read as separators on dark surfaces. */
+  --color-frost-border: #2c3554;
+  --color-hairline-gray: #2c3554;
+
+  /* Text ramp on dark surfaces.
+       e9eefb on #141b30 ≈ 14.8:1, on #0b1020 ≈ 16.7:1 (AA/AAA).
+       a8b3cf (charcoal/secondary) on #141b30 ≈ 7.4:1, on #1b2238 ≈ 6.3:1 (AA).
+       8794b3 (graphite/muted) on #141b30 ≈ 4.9:1 (AA for ≥normal text). */
+  --color-forest-ink: #e9eefb;
+  --color-true-black: #e9eefb;
+  --color-midnight-ink: #e9eefb;
+  --color-charcoal: #a8b3cf;
+  --color-graphite: #8794b3;
+  --color-slate: #a8b3cf;
+
+  /* Blue ramp — brighter so it stays legible/active on dark.
+       66a9ff on #141b30 ≈ 6.6:1; used for links + cobalt accents (AA). */
+  --color-electric-blue: #4d9bff;
+  --color-cobalt-surface: #66a9ff;
+
+  /* Amber "needs attention / waiting" ramp.
+       fcd34d (amber-ink) on #2e2206 (amber-wash) ≈ 9.0:1 (AA/AAA). Border lighter. */
+  --color-amber-ink: #fcd34d;
+  --color-amber-wash: #2e2206;
+  --color-amber-border: #6b531a;
+
+  /* Red danger ramp.
+       fca5a5 (danger text/border) on #2a1314 (danger-wash) ≈ 7.6:1 (AA). */
+  --color-danger: #fca5a5;
+  --color-danger-hover: #f87171;
+  --color-danger-wash: #2a1314;
+
+  /* Page chrome. */
+  --page-bg: #0b1020;
+  --page-text: #e9eefb;
+  --shell-gradient:
+    radial-gradient(circle at 20% 0%, rgba(77, 155, 255, 0.1), transparent 26rem),
+    linear-gradient(180deg, #0e1426 0%, #0b1020 40%, #0c1322 100%);
+  --terminal-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01)), #0e1426;
+  --terminal-inset: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --shimmer-base: #1d2a44;
+  --shimmer-sheen: rgba(255, 255, 255, 0.08);
+  --link-color: #66a9ff;
+  --link-decoration: #2c3554;
+  --link-hover: #e9eefb;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"],
+  :root:not([data-theme]) {
+    color-scheme: dark;
+
+    --color-paper: #0b1020;
+    --color-linen-white: #141b30;
+    --color-linen: #1b2238;
+    --color-lavender-wash: #11182b;
+    --color-mist-blue: #1d2a44;
+    --color-mint-veil: #16243c;
+    --color-sage-wash: #1f3252;
+
+    --color-frost-border: #2c3554;
+    --color-hairline-gray: #2c3554;
+
+    --color-forest-ink: #e9eefb;
+    --color-true-black: #e9eefb;
+    --color-midnight-ink: #e9eefb;
+    --color-charcoal: #a8b3cf;
+    --color-graphite: #8794b3;
+    --color-slate: #a8b3cf;
+
+    --color-electric-blue: #4d9bff;
+    --color-cobalt-surface: #66a9ff;
+
+    --color-amber-ink: #fcd34d;
+    --color-amber-wash: #2e2206;
+    --color-amber-border: #6b531a;
+
+    --color-danger: #fca5a5;
+    --color-danger-hover: #f87171;
+    --color-danger-wash: #2a1314;
+
+    --page-bg: #0b1020;
+    --page-text: #e9eefb;
+    --shell-gradient:
+      radial-gradient(circle at 20% 0%, rgba(77, 155, 255, 0.1), transparent 26rem),
+      linear-gradient(180deg, #0e1426 0%, #0b1020 40%, #0c1322 100%);
+    --terminal-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01)), #0e1426;
+    --terminal-inset: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    --shimmer-base: #1d2a44;
+    --shimmer-sheen: rgba(255, 255, 255, 0.08);
+    --link-color: #66a9ff;
+    --link-decoration: #2c3554;
+    --link-hover: #e9eefb;
+  }
 }
 
 * {
@@ -48,8 +191,8 @@ html,
 body {
   margin: 0;
   min-width: 0;
-  background: #f5f3ff;
-  color: #091135;
+  background: var(--page-bg);
+  color: var(--page-text);
   font-family: var(--font-suisse-intl);
   font-weight: 400;
   letter-spacing: 0;
@@ -75,15 +218,15 @@ button:disabled {
 }
 
 a {
-  color: #0f77ff;
+  color: var(--link-color);
   text-decoration: underline;
-  text-decoration-color: #e1e9f0;
+  text-decoration-color: var(--link-decoration);
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
 }
 
 a:hover {
-  color: #091135;
+  color: var(--link-hover);
 }
 
 pre,
@@ -113,9 +256,7 @@ code,
 }
 
 .admin-shell {
-  background:
-    radial-gradient(circle at 20% 0%, rgba(15, 119, 255, 0.08), transparent 26rem),
-    linear-gradient(180deg, #ffffff 0%, #f5f3ff 34%, #edf5ff 100%);
+  background: var(--shell-gradient);
 }
 
 .admin-sidebar {
@@ -190,14 +331,14 @@ code,
 }
 
 .terminal-surface {
-  background: linear-gradient(180deg, rgba(9, 17, 53, 0.04), rgba(9, 17, 53, 0.01)), #ffffff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.76);
+  background: var(--terminal-bg);
+  box-shadow: var(--terminal-inset);
 }
 
 .shimmer-line {
   position: relative;
   overflow: hidden;
-  background: #edf5ff;
+  background: var(--shimmer-base);
 }
 
 .shimmer-line::after {
@@ -205,7 +346,7 @@ code,
   inset: 0;
   content: "";
   transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.72), transparent);
+  background: linear-gradient(90deg, transparent, var(--shimmer-sheen), transparent);
   animation: shimmer-sweep 1.4s infinite;
 }
 

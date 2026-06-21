@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ListChecks } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronLeft, ListChecks, Monitor, Moon, Sun } from "lucide-react";
 import adminLogo from "./assets/patchpilot-logo.svg";
 import {
   cancelJob,
@@ -21,11 +21,25 @@ import { JobList } from "./components/JobList.js";
 import { Button } from "./components/ui/button.js";
 import { Input } from "./components/ui/input.js";
 import { cn } from "./lib/utils.js";
-import { isCompletedJob, isFailedJob, isRunningPhase, type StatusFilter } from "./lib/status.js";
+import { isCompletedJob, isFailedJob, isNeedsReviewJob, isRunningPhase, type StatusFilter } from "./lib/status.js";
+import { applyTheme, getInitialTheme, storeTheme, type ThemePreference } from "./lib/theme.js";
+import { MetricsPanel } from "./components/MetricsPanel.js";
 import { adminCopy, getInitialLocale, localeNames, storeLocale, type AdminCopy, type Locale } from "./i18n.js";
 
 const LIST_REFRESH_RUNNING_MS = 2000;
 const LIST_REFRESH_IDLE_MS = 5000;
+
+// Light / dark / system toggle. Labels come from i18n; icons keep the control
+// compact in the sidebar. labelKey is a string-valued AdminCopy key.
+const THEME_OPTIONS: ReadonlyArray<{
+  value: ThemePreference;
+  Icon: typeof Sun;
+  labelKey: "themeLight" | "themeDark" | "themeSystem";
+}> = [
+  { value: "light", Icon: Sun, labelKey: "themeLight" },
+  { value: "dark", Icon: Moon, labelKey: "themeDark" },
+  { value: "system", Icon: Monitor, labelKey: "themeSystem" },
+];
 
 interface DetailState {
   job: JobRecord | null;
@@ -39,10 +53,18 @@ type AdminRoute = { page: "list" } | { page: "detail"; jobId: string };
 type StatusState =
   | { kind: "ready" }
   | { kind: "enterToken" }
+  | { kind: "sessionExpired" }
   | { kind: "loadedJobs"; count: number }
   | { kind: "refreshFailed" }
   | { kind: "retryQueued"; attempt: number }
   | { kind: "cancelRequested"; phase: string };
+
+// A 401 / invalid-key response means the session is no longer authenticated. We
+// centralize this so every request path (foreground, silent poll, action) reacts
+// the same way: stop polling, surface one re-auth state, focus the token form.
+function isSessionExpiredError(error: unknown): boolean {
+  return error instanceof Error && error.message === "admin_access_key_invalid";
+}
 
 const emptyDetail: DetailState = {
   job: null,
@@ -54,6 +76,7 @@ const emptyDetail: DetailState = {
 export default function App() {
   const [route, setRoute] = useState<AdminRoute>(() => readRoute());
   const [locale, setLocale] = useState<Locale>(() => getInitialLocale());
+  const [theme, setTheme] = useState<ThemePreference>(() => getInitialTheme());
   const copy = adminCopy[locale];
   const [token, setToken] = useState(() => getStoredAdminToken());
   const [jobs, setJobs] = useState<JobRecord[]>([]);
@@ -66,7 +89,21 @@ export default function App() {
   const [detailError, setDetailError] = useState<string>("");
   const [actionState, setActionState] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  // Once a 401 lands, all polling is frozen until the operator re-authenticates.
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const tokenInputRef = useRef<HTMLInputElement | null>(null);
   const selectedJobId = route.page === "detail" ? route.jobId : "";
+
+  // Single re-auth boundary: stop polling, surface one state, focus the token form.
+  function handleSessionExpiry() {
+    setSessionExpired(true);
+    setStatus({ kind: "sessionExpired" });
+    setListError(copy.tokenInvalid);
+    setIsLoadingJobs(false);
+    setIsLoadingDetail(false);
+    // Defer focus until after the re-render that re-enables the form.
+    window.setTimeout(() => tokenInputRef.current?.focus(), 0);
+  }
 
   const selectedJob = useMemo(
     () => (route.page === "detail" ? (detail.job ?? jobs.find((job) => job.id === route.jobId) ?? null) : null),
@@ -77,8 +114,12 @@ export default function App() {
     () => ({
       total: jobs.length,
       running: jobs.filter((job) => isRunningPhase(job.phase)).length,
+      needsReview: jobs.filter((job) => isNeedsReviewJob(job.phase, job.outcome)).length,
       failed: jobs.filter((job) => isFailedJob(job.phase, job.outcome)).length,
-      completed: jobs.filter((job) => isCompletedJob(job.phase, job.outcome)).length,
+      // "완료" excludes jobs still parked on PR review so the chip mirrors the filter.
+      completed: jobs.filter(
+        (job) => isCompletedJob(job.phase, job.outcome) && !isNeedsReviewJob(job.phase, job.outcome),
+      ).length,
     }),
     [jobs],
   );
@@ -109,6 +150,10 @@ export default function App() {
   }, [copy.documentTitle, locale]);
 
   useEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
+
+  useEffect(() => {
     if (!selectedJobId || !token) {
       setDetail(emptyDetail);
       return;
@@ -118,14 +163,14 @@ export default function App() {
   }, [selectedJobId, token]);
 
   useEffect(() => {
-    if (!selectedJobId || !token) return;
+    if (!selectedJobId || !token || sessionExpired) return;
 
     const intervalId = window.setInterval(() => {
       void refreshDetail(selectedJobId, token, { silent: true });
     }, detailRefreshMs);
 
     return () => window.clearInterval(intervalId);
-  }, [detailRefreshMs, selectedJobId, token]);
+  }, [detailRefreshMs, selectedJobId, token, sessionExpired]);
 
   useEffect(() => {
     if (!selectedJobId) return;
@@ -135,7 +180,7 @@ export default function App() {
   }, [selectedJobId]);
 
   useEffect(() => {
-    if (route.page !== "list" || !token) return;
+    if (route.page !== "list" || !token || sessionExpired) return;
 
     const intervalId = window.setInterval(() => {
       if (document.visibilityState === "hidden") return;
@@ -150,7 +195,7 @@ export default function App() {
       window.clearInterval(intervalId);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [route.page, token, listRefreshMs]);
+  }, [route.page, token, listRefreshMs, sessionExpired]);
 
   async function refreshJobs(activeToken = token, options: { silent?: boolean } = {}) {
     if (!activeToken.trim()) {
@@ -165,6 +210,12 @@ export default function App() {
       setJobs(nextJobs);
       if (!options.silent) setStatus({ kind: "loadedJobs", count: nextJobs.length });
     } catch (caught) {
+      // A 401 freezes polling and routes to the single re-auth boundary — even on
+      // the silent path, so an expired session never silently stalls the screen.
+      if (isSessionExpiredError(caught)) {
+        handleSessionExpiry();
+        return;
+      }
       setListError(errorMessage(caught, copy));
       if (!options.silent) setStatus({ kind: "refreshFailed" });
     } finally {
@@ -184,6 +235,10 @@ export default function App() {
       ]);
       setDetail({ job, events, logs, artifacts });
     } catch (caught) {
+      if (isSessionExpiredError(caught)) {
+        handleSessionExpiry();
+        return;
+      }
       setDetailError(errorMessage(caught, copy));
     } finally {
       if (!options.silent) setIsLoadingDetail(false);
@@ -192,6 +247,10 @@ export default function App() {
 
   function saveToken() {
     storeAdminToken(token);
+    // Re-authentication clears the expiry boundary and resumes polling.
+    setSessionExpired(false);
+    setListError("");
+    setStatus(token.trim() ? { kind: "ready" } : { kind: "enterToken" });
     void refreshJobs(token);
   }
 
@@ -211,6 +270,10 @@ export default function App() {
       await refreshJobs(token);
       await refreshDetail(selectedJobId, token);
     } catch (caught) {
+      if (isSessionExpiredError(caught)) {
+        handleSessionExpiry();
+        return;
+      }
       setDetailError(errorMessage(caught, copy));
     } finally {
       setActionState("");
@@ -220,6 +283,11 @@ export default function App() {
   function changeLocale(nextLocale: Locale) {
     setLocale(nextLocale);
     storeLocale(nextLocale);
+  }
+
+  function changeTheme(nextTheme: ThemePreference) {
+    setTheme(nextTheme);
+    storeTheme(nextTheme);
   }
 
   function openJob(jobId: string) {
@@ -283,10 +351,12 @@ export default function App() {
                 </label>
                 <Input
                   id="admin-token"
+                  ref={tokenInputRef}
                   value={token}
                   type="password"
                   autoComplete="off"
                   placeholder={copy.tokenPlaceholder}
+                  aria-invalid={sessionExpired || undefined}
                   onChange={(event) => setToken(event.target.value)}
                 />
                 <div className="grid grid-cols-2 gap-2">
@@ -296,11 +366,20 @@ export default function App() {
                   </Button>
                 </div>
               </form>
+              {sessionExpired ? (
+                <div
+                  role="alert"
+                  className="mt-2 rounded-lg border border-danger bg-danger-wash px-2.5 py-2 text-danger"
+                >
+                  <strong className="block text-[12px] font-semibold leading-4">{copy.sessionExpired}</strong>
+                  <span className="mt-1 block text-[11px] font-normal leading-4">{copy.sessionExpiredHint}</span>
+                </div>
+              ) : null}
               <div className="mt-2">
                 <span className="block text-[12px] leading-4 text-charcoal" aria-live="polite">
                   {renderStatus(status, copy)}
                 </span>
-                {listError ? (
+                {listError && !sessionExpired ? (
                   <strong
                     role="alert"
                     className="mt-2 block rounded-lg bg-danger px-2.5 py-1.5 text-xs font-normal leading-4 text-white"
@@ -311,19 +390,42 @@ export default function App() {
               </div>
             </section>
 
-            <div className="flex items-center gap-1 rounded-lg bg-mist-blue p-1">
-              {(["ko", "en"] as Locale[]).map((entry) => (
-                <Button
-                  key={entry}
-                  type="button"
-                  size="sm"
-                  variant={locale === entry ? "default" : "ghost"}
-                  className="h-8 flex-1"
-                  onClick={() => changeLocale(entry)}
-                >
-                  {localeNames[entry]}
-                </Button>
-              ))}
+            <div className="grid gap-2">
+              <div
+                className="flex items-center gap-1 rounded-lg bg-mist-blue p-1"
+                role="group"
+                aria-label={copy.themeLabel}
+              >
+                {THEME_OPTIONS.map(({ value, Icon, labelKey }) => (
+                  <Button
+                    key={value}
+                    type="button"
+                    size="sm"
+                    variant={theme === value ? "default" : "ghost"}
+                    className="h-8 flex-1 px-0"
+                    aria-pressed={theme === value}
+                    aria-label={copy[labelKey]}
+                    title={copy[labelKey]}
+                    onClick={() => changeTheme(value)}
+                  >
+                    <Icon data-icon aria-hidden="true" strokeWidth={2.2} />
+                  </Button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1 rounded-lg bg-mist-blue p-1">
+                {(["ko", "en"] as Locale[]).map((entry) => (
+                  <Button
+                    key={entry}
+                    type="button"
+                    size="sm"
+                    variant={locale === entry ? "default" : "ghost"}
+                    className="h-8 flex-1"
+                    onClick={() => changeLocale(entry)}
+                  >
+                    {localeNames[entry]}
+                  </Button>
+                ))}
+              </div>
             </div>
             <footer className="border-t border-hairline-gray pt-4 text-[12px] leading-5 text-charcoal">
               <p className="m-0 font-medium text-forest-ink">{copy.appTitle}</p>
@@ -372,6 +474,12 @@ export default function App() {
                     onClick={() => setStatusFilter("running")}
                   />
                   <MetricPill
+                    label={copy.needsReviewJobs}
+                    value={jobStats.needsReview}
+                    active={statusFilter === "needsReview"}
+                    onClick={() => setStatusFilter("needsReview")}
+                  />
+                  <MetricPill
                     label={copy.failedJobs}
                     value={jobStats.failed}
                     active={statusFilter === "failed"}
@@ -391,15 +499,23 @@ export default function App() {
 
         <main className="mx-auto w-full max-w-[var(--page-max-width)] flex-1 px-4 py-5 md:px-6">
           {route.page === "list" ? (
-            <JobList
-              jobs={jobs}
-              selectedJobId={selectedJobId}
-              isLoading={isLoadingJobs}
-              copy={copy}
-              locale={locale}
-              statusFilter={statusFilter}
-              onOpenJob={openJob}
-            />
+            <div className="grid gap-4">
+              <MetricsPanel
+                token={token}
+                copy={copy}
+                sessionExpired={sessionExpired}
+                onSessionExpired={handleSessionExpiry}
+              />
+              <JobList
+                jobs={jobs}
+                selectedJobId={selectedJobId}
+                isLoading={isLoadingJobs}
+                copy={copy}
+                locale={locale}
+                statusFilter={statusFilter}
+                onOpenJob={openJob}
+              />
+            </div>
           ) : (
             <JobDetail
               job={selectedJob}
@@ -451,6 +567,7 @@ function errorMessage(error: unknown, copy: AdminCopy): string {
 function renderStatus(status: StatusState, copy: AdminCopy): string {
   if (status.kind === "ready") return copy.ready;
   if (status.kind === "enterToken") return copy.enterToken;
+  if (status.kind === "sessionExpired") return copy.sessionExpired;
   if (status.kind === "loadedJobs") return copy.loadedJobs(status.count);
   if (status.kind === "refreshFailed") return copy.refreshFailed;
   if (status.kind === "retryQueued") return copy.retryQueued(status.attempt);

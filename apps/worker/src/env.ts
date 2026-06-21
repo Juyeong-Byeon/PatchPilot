@@ -14,13 +14,30 @@ export interface WorkerEnv {
   workspaceRoot: string;
   workspaceHostRoot?: string;
   gstackCommand?: string;
+  /**
+   * Explicit GSTACK_ARGS override. When set, it wins for every job regardless of
+   * priority (back-compat) and forces the recorded executor mode. When unset, the
+   * worker derives args per-job from priority via the staged/single args below.
+   */
   gstackArgs?: string;
+  /** GSTACK_ARGS used for the staged pipeline (High priority). */
+  gstackStagedArgs: string;
+  /** GSTACK_ARGS used for the single-pass pipeline (default). */
+  gstackSingleArgs: string;
   codexAuthFile?: string;
   codexConfigFile?: string;
   codexSkillsDir?: string;
   gstackSkillSourceDir?: string;
   jobTimeoutSeconds: number;
   githubToken?: string;
+  /** Reconcile poller cadence in ms. 0 disables the poller. */
+  reconcileIntervalMs: number;
+  /** Days to keep a FAILED job's workspace before the sweep GCs it (L1). */
+  failedWorkspaceRetentionDays: number;
+  /** Heartbeat write cadence in ms while a runner executes (L1). 0 disables. */
+  runHeartbeatIntervalMs: number;
+  /** Workspace sweep + orphan-container reap cadence in ms (L1). 0 disables. */
+  workspaceSweepIntervalMs: number;
   larkRecordUpdaterConfig?: LarkRecordUpdaterConfig;
 }
 
@@ -47,12 +64,24 @@ export function readWorkerEnv(source: NodeJS.ProcessEnv = process.env): WorkerEn
     workspaceHostRoot: parseOptional(source.WORKER_WORKSPACE_HOST_ROOT ?? source.JOB_WORKSPACE_HOST_ROOT),
     gstackCommand: parseOptional(source.GSTACK_COMMAND),
     gstackArgs: parseOptional(source.GSTACK_ARGS),
+    // GSTACK_ARGS is the runner JS entrypoint path (run as `node <path>`), not a CLI string.
+    gstackStagedArgs:
+      parseOptional(source.GSTACK_STAGED_ARGS) ?? "/opt/runner/apps/runner/dist/gstack-staged-runner.js",
+    gstackSingleArgs: parseOptional(source.GSTACK_SINGLE_ARGS) ?? "/opt/runner/apps/runner/dist/codex-agent-runner.js",
     codexAuthFile: parseOptional(source.CODEX_AUTH_FILE),
     codexConfigFile: parseOptional(source.CODEX_CONFIG_FILE),
     codexSkillsDir: parseOptional(source.CODEX_SKILLS_DIR),
     gstackSkillSourceDir: parseOptional(source.GSTACK_SKILL_SOURCE_DIR),
     jobTimeoutSeconds: parsePositiveInteger(source.WORKER_JOB_TIMEOUT_SECONDS ?? source.JOB_TIMEOUT_SECONDS, 3600),
     githubToken,
+    // 0 disables the reconcile poller; default 60s recovers from missed merge webhooks.
+    reconcileIntervalMs: parseNonNegativeInteger(source.WORKER_RECONCILE_INTERVAL_MS, 60_000),
+    // L1 workspace lifecycle. Failed workspaces kept 7 days for post-mortem by default.
+    failedWorkspaceRetentionDays: parseNonNegativeInteger(source.FAILED_WORKSPACE_RETENTION_DAYS, 7),
+    // 0 disables; default 30s heartbeat keeps a long run visibly alive.
+    runHeartbeatIntervalMs: parseNonNegativeInteger(source.WORKER_RUN_HEARTBEAT_INTERVAL_MS, 30_000),
+    // 0 disables; default hourly workspace sweep + orphan-container reap.
+    workspaceSweepIntervalMs: parseNonNegativeInteger(source.WORKER_WORKSPACE_SWEEP_INTERVAL_MS, 3_600_000),
     larkRecordUpdaterConfig: readLarkRecordUpdaterConfig(source),
   };
 }
@@ -85,5 +114,13 @@ function parsePositiveInteger(value: string | undefined, fallback: number): numb
   if (!value) return fallback;
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) throw new Error(`Invalid positive integer: ${value}`);
+  return parsed;
+}
+
+// Like parsePositiveInteger but allows 0 (used as the "disable" sentinel).
+function parseNonNegativeInteger(value: string | undefined, fallback: number): number {
+  if (value === undefined || value.trim() === "") return fallback;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) throw new Error(`Invalid non-negative integer: ${value}`);
   return parsed;
 }

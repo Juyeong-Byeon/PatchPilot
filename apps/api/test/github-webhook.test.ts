@@ -97,6 +97,48 @@ describe("github webhook route", () => {
     await app.close();
   });
 
+  it("passes the x-github-delivery id through for exactly-once dedup", async () => {
+    const repos = {
+      createJobFromTicket: vi.fn(),
+      appendEvent: vi.fn(),
+      // Second delivery of the same id is dropped before any state change.
+      recordWebhookDelivery: vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false),
+      markPullRequestMerged: vi.fn().mockResolvedValue({
+        status: "updated",
+        jobId: "job_1",
+        runId: "run_1",
+        larkRecordId: "rec_1",
+        prUrl: "https://github.com/acme/web/pull/42",
+        prNumber: 42,
+      }),
+    };
+    const app = await buildServer({
+      repos: repos as never,
+      queue: { add: vi.fn() },
+      larkWebhookSecret: "lark-secret",
+      githubWebhookSecret: "github-secret",
+    });
+    const body = JSON.stringify(pullRequestMergedPayload);
+    const headers = {
+      "content-type": "application/json",
+      "x-github-event": "pull_request",
+      "x-github-delivery": "delivery-abc",
+      "x-hub-signature-256": signatureFor("github-secret", body),
+    };
+
+    const first = await app.inject({ method: "POST", url: "/webhooks/github", headers, payload: body });
+    const second = await app.inject({ method: "POST", url: "/webhooks/github", headers, payload: body });
+
+    expect(repos.recordWebhookDelivery).toHaveBeenCalledWith(
+      expect.objectContaining({ deliveryId: "delivery-abc", provider: "github" }),
+    );
+    expect(first.json()).toEqual({ action: "completed", jobId: "job_1" });
+    expect(second.json()).toEqual({ action: "duplicate" });
+    // The redelivery never reached the state-change path.
+    expect(repos.markPullRequestMerged).toHaveBeenCalledTimes(1);
+    await app.close();
+  });
+
   it("ignores closed pull requests that were not merged", async () => {
     const repos = {
       createJobFromTicket: vi.fn(),

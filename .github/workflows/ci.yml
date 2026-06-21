@@ -39,3 +39,43 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  db-migrate:
+    name: DB migrate dry-run (schema drift)
+    runs-on: ubuntu-latest
+    # Applies the schema to a throwaway Postgres, then re-applies it. The schema
+    # is fully idempotent (create ... if not exists), so a second apply must be a
+    # no-op. A non-idempotent change (or schema drift) fails the second run and
+    # blocks the PR before it reaches a real database.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ticket_to_pr
+          POSTGRES_USER: ticket_to_pr
+          POSTGRES_PASSWORD: ticket_to_pr
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ticket_to_pr -d ticket_to_pr"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://ticket_to_pr:ticket_to_pr@localhost:5432/ticket_to_pr
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply migrations
+        run: npm run db:migrate
+
+      - name: Re-apply migrations (idempotency / drift check)
+        run: npm run db:migrate

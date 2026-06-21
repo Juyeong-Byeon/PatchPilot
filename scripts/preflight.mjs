@@ -32,6 +32,39 @@ function isPlaceholder(value) {
   return /change-me|xxx|owner\/repo|^secret_|^cli_|^base_app_token|^table_|github_pat_xxx/i.test(value);
 }
 
+// Real (gstack) runs mount Codex/gstack seed inputs into each runner container. .env is read
+// WITHOUT shell expansion, so a `$HOME/...` (or `~/...`) value is taken literally and the mount
+// silently resolves to nothing. Validate each mount so the failure surfaces here, not mid-run as
+// an opaque "auth.json not found" inside the container. Returns { problems, warnings } messages.
+export function checkRunnerMounts(env, { existsSync: exists = existsSync } = {}) {
+  const problems = [];
+  const warnings = [];
+  const mounts = [
+    { key: "CODEX_AUTH_FILE", kind: "file", hint: "Codex auth (e.g. /Users/you/.codex/auth.json)" },
+    { key: "CODEX_CONFIG_FILE", kind: "file", hint: "Codex config (e.g. /Users/you/.codex/config.toml)" },
+    { key: "CODEX_SKILLS_DIR", kind: "dir", hint: "Codex skills directory (e.g. /Users/you/.codex/skills)" },
+    { key: "GSTACK_SKILL_SOURCE_DIR", kind: "dir", hint: "gstack checkout root (e.g. /Users/you/gstack)" },
+  ];
+  for (const { key, kind, hint } of mounts) {
+    const value = env[key];
+    if (!value) {
+      problems.push(`EXECUTOR_MODE=gstack requires ${key} — ${hint}.`);
+      continue;
+    }
+    if (/^~|\$HOME|\$\{HOME\}/.test(value)) {
+      warnings.push(`${key}="${value}" uses $HOME/~ which is NOT expanded in .env — use an absolute path (${hint}).`);
+      continue;
+    }
+    if (!exists(value)) {
+      problems.push(`${key}="${value}" does not exist on this host — point it at a real ${kind} (${hint}).`);
+    }
+  }
+  if (!env.GSTACK_COMMAND) {
+    warnings.push("EXECUTOR_MODE=gstack but GSTACK_COMMAND is empty — the runner image must define the agent command.");
+  }
+  return { problems, warnings };
+}
+
 // Runs all preflight checks. Returns { problems, warnings, info } so callers can
 // decide how to report; the CLI entrypoint below prints and sets the exit code.
 export function runPreflightChecks() {
@@ -82,8 +115,15 @@ export function runPreflightChecks() {
     if (isPlaceholder(env.REPOSITORY_ALLOWLIST))
       fail("PUBLISHER_MODE=github requires REPOSITORY_ALLOWLIST set to a real owner/repo.");
   }
-  if (executorMode === "gstack" && !env.GSTACK_COMMAND) {
-    warn("EXECUTOR_MODE=gstack but GSTACK_COMMAND is empty — the runner image must define the agent command.");
+  // Real-mode runner mounts: only meaningful for the gstack executor. Validates that the
+  // Codex/gstack seed paths resolve and warns when a non-expanding $HOME slipped into .env.
+  if (executorMode === "gstack") {
+    const mountCheck = checkRunnerMounts(env);
+    for (const message of mountCheck.problems) fail(message);
+    for (const message of mountCheck.warnings) warn(message);
+    if (mountCheck.problems.length === 0 && mountCheck.warnings.length === 0) {
+      ok("Codex/gstack runner mounts resolve");
+    }
   }
 
   return { problems, warnings, info };

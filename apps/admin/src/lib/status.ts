@@ -8,6 +8,25 @@ export function isRunningPhase(phase: unknown): boolean {
   return RUNNING_PHASES.includes(String(phase));
 }
 
+/**
+ * A job that is in the running set but has not actually started executing — it is
+ * still parked in the queue. Visually this must be distinguishable from an active
+ * run: a queued job is not "doing work" yet, so it should not show the same active
+ * spinner/treatment as Planning/Implementing/etc. (accessibility: color- and
+ * motion-independent, the caller pairs this with a distinct icon + label).
+ */
+export function isQueuedPhase(phase: unknown): boolean {
+  return String(phase) === "Queued";
+}
+
+/**
+ * Actively executing: in the running set AND past the queue. This is the set that
+ * earns the live spinner + "running" affordance; Queued is deliberately excluded.
+ */
+export function isActiveRunningPhase(phase: unknown): boolean {
+  return isRunningPhase(phase) && !isQueuedPhase(phase);
+}
+
 export function isFailedJob(phase: unknown, outcome: unknown): boolean {
   return String(phase).startsWith("Failed") || String(outcome).startsWith("Failed");
 }
@@ -28,6 +47,44 @@ export function isCompletedJob(phase: unknown, outcome: unknown): boolean {
 }
 
 /**
+ * A job that finished its pipeline (phase Completed) but is parked at outcome
+ * NeedsReview, waiting on a human to review/merge the PR. This is the dominant
+ * terminal state of a successful run, so it gets its own operator-facing label
+ * ("PR 리뷰 대기") and list chip instead of being collapsed under "완료".
+ */
+export function isNeedsReviewJob(phase: unknown, outcome: unknown): boolean {
+  return String(outcome) === "NeedsReview" || String(phase) === "NeedsReview";
+}
+
+/**
+ * The single operator-facing primary status for a job. The backend models status
+ * as a (phase, outcome) pair, which previously surfaced as two badges that could
+ * read as a contradiction (phase=Completed + outcome=NeedsReview). This collapses
+ * the pair into one canonical state code so the UI shows ONE primary badge.
+ *
+ * Returned `code` is a state token translatable via `translateState`; callers map
+ * it to a badge variant with `statusBadgeVariant`.
+ */
+export function resolvePrimaryStatus(job: { phase?: unknown; outcome?: unknown }): string {
+  const phase = String(job.phase ?? "");
+  const outcome = String(job.outcome ?? "");
+
+  // A requested-but-not-finalized cancel keeps outcome="Running"; surface the
+  // cancel intent so the badge never reads "Running" after a cancel. Both in-flight
+  // cancel phases (CancelRequested / Cancelling) collapse to one operator-facing
+  // state ("취소 중") — the distinction is internal, not operator-relevant.
+  if (isCancellingPhase(phase)) return "Cancelling";
+
+  // Successful pipeline completion parked on human review → one dedicated state.
+  if (isNeedsReviewJob(phase, outcome)) return "NeedsReview";
+
+  // Failures and explicit terminal outcomes win over the running phase.
+  if (outcome && outcome !== "Running") return outcome;
+  if (phase) return phase;
+  return outcome || "";
+}
+
+/**
  * Single source of truth for status badge color. Keeps the taxonomy distinct so
  * a Completed job never looks like a Cancelled one (the previous logic collapsed
  * both to the neutral blue badge).
@@ -37,7 +94,11 @@ export function statusBadgeVariant(value: unknown): StatusBadgeVariant {
   if (normalized.includes("failed")) return "danger"; // FailedActionable / FailedInternal / CancelFailed
   if (normalized.includes("cancel")) return "outline"; // Cancelled / CancelRequested — muted, intentional stop
   if (normalized === "completed") return "dark"; // sealed / done
-  if (normalized.includes("review") || normalized === "queued") return "warning"; // needs attention / waiting
+  // Queued is a passive "not started yet" wait → muted neutral, deliberately
+  // distinct from the amber "needs human attention" of NeedsReview and from the
+  // blue active-running phases, so the three never read alike.
+  if (normalized === "queued") return "outline";
+  if (normalized.includes("review")) return "warning"; // needs attention / waiting
   return "default"; // Running / in-flight phases
 }
 
@@ -202,16 +263,20 @@ export function deriveStageStates(
   return states;
 }
 
-export type StatusFilter = "all" | "running" | "failed" | "completed";
+export type StatusFilter = "all" | "running" | "needsReview" | "failed" | "completed";
 
 export function matchesStatusFilter(job: { phase?: unknown; outcome?: unknown }, filter: StatusFilter): boolean {
   switch (filter) {
     case "running":
       return isRunningPhase(job.phase);
+    case "needsReview":
+      return isNeedsReviewJob(job.phase, job.outcome);
     case "failed":
       return isFailedJob(job.phase, job.outcome);
     case "completed":
-      return isCompletedJob(job.phase, job.outcome);
+      // "완료" means merged/sealed — exclude jobs still parked on PR review so the
+      // two chips stay mutually exclusive and the operator can tell them apart.
+      return isCompletedJob(job.phase, job.outcome) && !isNeedsReviewJob(job.phase, job.outcome);
     default:
       return true;
   }

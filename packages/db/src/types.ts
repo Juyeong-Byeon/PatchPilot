@@ -42,6 +42,8 @@ export interface CreateRunInput {
   workspacePath?: string | null;
   baseSha?: string | null;
   workBranch?: string | null;
+  /** Pipeline that ran this attempt: 'single-pass' | 'staged' (epic D). Persisted to runs.executor_mode. */
+  executorMode?: string | null;
 }
 
 export interface RunRecord {
@@ -55,6 +57,9 @@ export interface RunRecord {
   workBranch: string;
   headSha: string | null;
   exitCode: number | null;
+  executorMode: string | null;
+  /** Operator steering note for this attempt (X4); null when none was attached. */
+  guidance: string | null;
 }
 
 export interface AppendLogInput {
@@ -107,15 +112,36 @@ export interface MarkPullRequestMergedInput {
   mergedAt?: string | null;
 }
 
+export interface RecordWebhookDeliveryInput {
+  /** Provider delivery id, e.g. GitHub's `x-github-delivery` header. */
+  deliveryId: string;
+  provider: string;
+  larkRecordId?: string | null;
+  triggerVersion?: string | null;
+  payload?: unknown;
+}
+
+export interface JobAwaitingMergeReconcile {
+  jobId: string;
+  repository: string;
+  prNumber: number;
+  prUrl: string;
+}
+
+export interface MarkPullRequestMergedSuccess {
+  jobId: string;
+  runId: string;
+  larkRecordId: string;
+  prUrl: string;
+  prNumber: number;
+}
+
 export type MarkPullRequestMergedResult =
-  | {
-      status: "updated";
-      jobId: string;
-      runId: string;
-      larkRecordId: string;
-      prUrl: string;
-      prNumber: number;
-    }
+  // The merge moved the job to Completed for the first time.
+  | ({ status: "updated" } & MarkPullRequestMergedSuccess)
+  // The job was already terminal (Completed/Failed/Cancelled): the merge was a
+  // late or duplicate delivery and was intentionally not re-applied.
+  | ({ status: "already_terminal" } & MarkPullRequestMergedSuccess)
   | { status: "not_found" };
 
 export interface RetryPreflight {
@@ -124,6 +150,60 @@ export interface RetryPreflight {
   outcome: string;
   lastAttempt: number | null;
   retryable: boolean;
+}
+
+/**
+ * Operator guidance threaded into a retry (X4). Persisted on the new run so the
+ * worker/runner can inject it as a steering instruction for the next attempt.
+ */
+export interface RetryGuidanceInput {
+  guidance?: string | null;
+}
+
+/**
+ * Aggregate operations metrics (X5). One snapshot over jobs/runs/run_events/
+ * pull_requests, optionally scoped to the last `periodDays`. Rates are 0–1
+ * fractions; `null` durations mean no job reached NeedsReview in the window.
+ */
+export interface MetricsSummary {
+  /** Window the aggregate covers; null `periodDays` means all-time. */
+  periodDays: number | null;
+  /** Total jobs created in the window. */
+  totalJobs: number;
+  /** Jobs that reached NeedsReview (worker parked at phase=Completed). */
+  needsReviewJobs: number;
+  /** needsReviewJobs / totalJobs (0 when no jobs). */
+  successRate: number;
+  /** Count of failed jobs (outcome FailedActionable/FailedInternal) by category. */
+  failureBreakdown: {
+    policy: number;
+    agent: number;
+    publish: number;
+    infra: number;
+    /** Failed jobs whose failure_category was null/unrecognized. */
+    uncategorized: number;
+    total: number;
+  };
+  /** Queued→NeedsReview wall-clock, seconds, over jobs that reached NeedsReview. */
+  runtimeSeconds: {
+    p50: number | null;
+    p95: number | null;
+    /** How many jobs had a measurable Queued→NeedsReview duration. */
+    sampleSize: number;
+  };
+  /** Merged PRs / jobs that reached NeedsReview (the real value signal). */
+  mergeRate: number;
+  mergedJobs: number;
+  /** Jobs with >1 run attempt / total jobs. */
+  retryRate: number;
+  retriedJobs: number;
+  /** Distribution of the latest run's executor_mode across jobs. */
+  executorModeDistribution: {
+    singlePass: number;
+    staged: number;
+    /** Latest run had no executor_mode recorded (legacy / pre-mode runs). */
+    unknown: number;
+  };
 }
 
 export type CancelRequestResult =

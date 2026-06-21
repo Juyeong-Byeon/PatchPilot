@@ -112,6 +112,12 @@ describe("runGstackStagedRunner", () => {
     });
 
     const prBody = await readFile(join(workspaceRoot, "output", "pr-body.md"), "utf8");
+    // N9: the body is composed from agent content ONLY. The legacy hardcoded platform preamble
+    // is gone, and there is no fabricated "git diff --name-only" verification line contradicting
+    // the real qa.json result. The agent description leads the body.
+    expect(prBody.startsWith("## 아키텍처 변경점")).toBe(true);
+    expect(prBody).not.toContain("Implemented by Codex CLI through the Ticket-to-PR runner.");
+    expect(prBody).not.toContain("git diff --name-only");
     // Agent-authored description: the six structured sections lead the detailed stage notes.
     for (const header of [
       "## 아키텍처 변경점",
@@ -153,8 +159,12 @@ describe("runGstackStagedRunner", () => {
     });
 
     const prBody = await readFile(join(workspaceRoot, "output", "pr-body.md"), "utf8");
-    expect(prBody).toContain("## Implementation plan (gstack-autoplan)");
+    // Body is the stage-notes appendix only, with no agent description and — N9 — still no
+    // legacy fake verification line or platform preamble.
+    expect(prBody.startsWith("## Implementation plan (gstack-autoplan)")).toBe(true);
     expect(prBody).not.toContain("## 아키텍처 변경점");
+    expect(prBody).not.toContain("git diff --name-only");
+    expect(prBody).not.toContain("Implemented by Codex CLI through the Ticket-to-PR runner.");
   });
 
   it("fails the run when the verify stage reports failing verification", async () => {
@@ -206,6 +216,62 @@ describe("runGstackStagedRunner", () => {
     expect(tracked).not.toContain("plan.md");
     // implement commit + review-fix commit.
     expect(Number((await run("git", ["rev-list", "--count", "HEAD"], repoDir)).stdout.trim())).toBe(3);
+  });
+
+  it("points the review and document stages at the trusted base SHA, never a fetched remote ref (L9)", async () => {
+    const { workspaceRoot, repoDir } = await setupWorkspace();
+    const baseSha = (await run("git", ["rev-parse", "HEAD"], repoDir)).stdout.trim();
+    const fakeCodex = join(workspaceRoot, "fake.mjs");
+    // Each stage records the prompt it received so the test can assert the diff base.
+    const promptLog = join(workspaceRoot, "prompts.log");
+    await writeFakeCodex(fakeCodex, {
+      "STAGE 1 of 5": PLAN,
+      "STAGE 2 of 5": IMPLEMENT,
+      "STAGE 3 of 5": `appendFileSync(${JSON.stringify(promptLog)}, '===REVIEW===\\n' + prompt + '\\n'); ${REVIEW}`,
+      "STAGE 4 of 5": VERIFY_PASS,
+      "STAGE 5 of 5": `appendFileSync(${JSON.stringify(promptLog)}, '===DOCUMENT===\\n' + prompt + '\\n'); ${DOCUMENT}`,
+    });
+
+    await runGstackStagedRunner({
+      workspaceRoot,
+      repoDir,
+      targetBranch: "main",
+      codexCommand: "node",
+      codexArgs: [fakeCodex],
+      codexHome: join(workspaceRoot, "codex-home"),
+    });
+
+    const prompts = await readFile(promptLog, "utf8");
+    // The review/document stages diff against the explicit, platform-trusted base SHA...
+    expect(prompts).toContain(`git --no-pager diff ${baseSha}...HEAD`);
+    // ...and are told not to fetch the remote (which would request GitHub creds and risk a stale ref).
+    expect(prompts).toContain("do NOT fetch the remote");
+    // The review stage no longer diffs against the bare `main` ref.
+    expect(prompts).not.toContain("review the diff against main");
+  });
+
+  it("emits a structured failed result from output/failure.json when a stage drops one (X4)", async () => {
+    const { workspaceRoot, repoDir } = await setupWorkspace();
+    const fakeCodex = join(workspaceRoot, "fake.mjs");
+    // Plan stage reports a structured failure and exits non-zero; the runner converts it.
+    await writeFakeCodex(fakeCodex, {
+      "STAGE 1 of 5":
+        "writeFileSync(path.join(outputDir, 'failure.json'), JSON.stringify({ stage: 'plan', category: 'agent', message: 'Ticket scope is unclear.', nextAction: 'Refine the ticket and retry.' })); process.exit(5);",
+    });
+
+    // Must NOT reject — the failure is carried in result.json.
+    await runGstackStagedRunner({
+      workspaceRoot,
+      repoDir,
+      targetBranch: "main",
+      codexCommand: "node",
+      codexArgs: [fakeCodex],
+      codexHome: join(workspaceRoot, "codex-home"),
+    });
+
+    const result = parseAgentResult(JSON.parse(await readFile(join(workspaceRoot, "output", "result.json"), "utf8")));
+    expect(result.status).toBe("failed");
+    expect(result.failure).toMatchObject({ stage: "plan", category: "agent", retryable: false });
   });
 
   it("fails fast and names the stage when a stage errors", async () => {
