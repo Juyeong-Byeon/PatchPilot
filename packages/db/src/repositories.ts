@@ -415,7 +415,7 @@ export class Repositories {
   }
 
   async listJobs(): Promise<Array<Record<string, unknown>>> {
-    const result = await this.pool.query(
+    const result = await this.pool.query<Record<string, unknown>>(
       `select
          j.id,
          j.outcome,
@@ -463,7 +463,7 @@ export class Repositories {
   }
 
   async getJob(jobId: string): Promise<Record<string, unknown> | null> {
-    const result = await this.pool.query(
+    const result = await this.pool.query<Record<string, unknown>>(
       `select
          j.*,
          ts.title,
@@ -501,7 +501,7 @@ export class Repositories {
   }
 
   async getJobEvents(jobId: string): Promise<Array<Record<string, unknown>>> {
-    const result = await this.pool.query(
+    const result = await this.pool.query<Record<string, unknown>>(
       `select *
        from run_events
        where job_id=$1
@@ -512,7 +512,7 @@ export class Repositories {
   }
 
   async getJobLogs(jobId: string): Promise<Array<Record<string, unknown>>> {
-    const result = await this.pool.query(
+    const result = await this.pool.query<Record<string, unknown>>(
       `select *
        from job_logs
        where job_id=$1
@@ -523,7 +523,7 @@ export class Repositories {
   }
 
   async getJobArtifacts(jobId: string): Promise<Array<Record<string, unknown>>> {
-    const result = await this.pool.query(
+    const result = await this.pool.query<Record<string, unknown>>(
       `select *
        from artifacts
        where job_id=$1
