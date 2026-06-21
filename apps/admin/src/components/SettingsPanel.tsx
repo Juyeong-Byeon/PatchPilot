@@ -175,6 +175,7 @@ export function SettingsPanel({
         title={copy.settingsGroupOperations}
         hint={copy.settingsGroupOperationsHint}
         ariaLabel={copy.settingsGroupOperations}
+        ariaBusy={isLoading && !view}
       >
         {unavailable ? (
           <Card>
@@ -183,7 +184,9 @@ export function SettingsPanel({
             </CardContent>
           </Card>
         ) : isLoading && !view ? (
-          <p className="text-[13px] text-charcoal">{copy.settingsLoading}</p>
+          <p className="text-[13px] text-charcoal" aria-live="polite">
+            {copy.settingsLoading}
+          </p>
         ) : (
           <>
             {editableSections.map((section) => (
@@ -229,20 +232,24 @@ export function SettingsPanel({
   );
 }
 
-// Group header (label + hint) shared by every Settings group.
+// Group header (label + hint) shared by every Settings group. `ariaBusy` is opt-in:
+// only the Operations group passes it, to announce the async config loading→loaded
+// swap to assistive tech (mirrors the JobList aria-busy pattern).
 function SettingsGroup({
   title,
   hint,
   ariaLabel,
+  ariaBusy,
   children,
 }: {
   title: string;
   hint: string;
   ariaLabel: string;
+  ariaBusy?: boolean;
   children: ReactNode;
 }) {
   return (
-    <section className="grid gap-4" aria-label={ariaLabel}>
+    <section className="grid gap-4" aria-label={ariaLabel} aria-busy={ariaBusy}>
       <div>
         <h2 className="text-[15px] font-semibold uppercase tracking-[0.08em] text-cobalt-surface">{title}</h2>
         <p className="mt-1 text-[12px] leading-4 text-charcoal">{hint}</p>

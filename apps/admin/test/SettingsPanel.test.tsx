@@ -229,6 +229,21 @@ describe("SettingsPanel", () => {
     expect(onChangeLocale).toHaveBeenCalledWith("en");
   });
 
+  it("exposes loading semantics to assistive tech while the config fetch is pending", async () => {
+    // A fetch that never resolves keeps the panel in the loading state so we can
+    // assert the additive a11y cues on the loading→loaded swap.
+    vi.spyOn(globalThis, "fetch").mockReturnValue(new Promise<Response>(() => {}));
+    renderPanel();
+
+    // The Operations group container is marked busy while config loads...
+    const operations = screen.getByRole("region", { name: copy.settingsGroupOperations });
+    expect(operations).toHaveAttribute("aria-busy", "true");
+
+    // ...and the loading text is a polite live region so the transition is announced.
+    const loading = screen.getByText(copy.settingsLoading);
+    expect(loading).toHaveAttribute("aria-live", "polite");
+  });
+
   it("degrades the config groups gracefully when the endpoint 404s (older backend)", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: false,
