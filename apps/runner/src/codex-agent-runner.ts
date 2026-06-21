@@ -27,7 +27,7 @@ export interface StructuredAgentFailure {
   category: string;
   message: string;
   nextAction: string;
-  retryable?: boolean;
+  retryable?: boolean | undefined;
 }
 
 /**
@@ -111,9 +111,9 @@ export async function runCodexAgentRunner(input: CodexAgentRunnerInput): Promise
 
 export async function prepareCodexHome(input: {
   codexHome: string;
-  codexAuthFile?: string;
-  codexConfigFile?: string;
-  codexSkillsDir?: string;
+  codexAuthFile?: string | undefined;
+  codexConfigFile?: string | undefined;
+  codexSkillsDir?: string | undefined;
 }): Promise<string> {
   await mkdir(input.codexHome, { recursive: true });
   if (input.codexAuthFile) {
@@ -300,8 +300,8 @@ export async function maybeRunSelfReview(input: {
 
 interface SelfReviewQa {
   passed: boolean;
-  command?: string;
-  summary?: string;
+  command?: string | undefined;
+  summary?: string | undefined;
 }
 
 function isSelfReviewEnabled(): boolean {
@@ -327,7 +327,7 @@ async function readSelfReviewQa(outputDir: string): Promise<SelfReviewQa | null>
  */
 async function readSelfReviewTests(
   outputDir: string,
-): Promise<Array<{ command: string; status: "passed" | "skipped"; summary?: string }> | undefined> {
+): Promise<Array<{ command: string; status: "passed" | "skipped"; summary?: string | undefined }> | undefined> {
   if (!isSelfReviewEnabled()) return undefined;
   const qa = await readSelfReviewQa(outputDir);
   if (!qa) return undefined;
@@ -341,11 +341,11 @@ export async function writeResultArtifacts(input: {
   baseSha: string;
   context: RunnerContext;
   /** Overrides the default review summary recorded in result.json. */
-  reviewSummary?: string;
+  reviewSummary?: string | undefined;
   /** Extra markdown sections appended to pr-body.md (e.g. staged plan/review/qa output). */
-  prBodySections?: string[];
+  prBodySections?: string[] | undefined;
   /** Real verification results to record in result.json (gated by the policy gate). */
-  tests?: Array<{ command: string; status: "passed" | "failed" | "skipped"; summary?: string }>;
+  tests?: Array<{ command: string; status: "passed" | "failed" | "skipped"; summary?: string | undefined }> | undefined;
 }): Promise<void> {
   const paths = getWorkspacePaths(input.workspaceRoot);
   const headSha = await gitStdout(["rev-parse", "HEAD"], input.repoDir);
@@ -613,7 +613,7 @@ export async function runWithStructuredFailure(workspaceRoot: string, body: () =
  * - Single-pass has no rich sections yet, so we emit a minimal, honest `## Summary` listing the
  *   changed files — and nothing claiming verification ran.
  */
-export function composePrBody(input: { changedFiles: string[]; prBodySections?: string[] }): string {
+export function composePrBody(input: { changedFiles: string[]; prBodySections?: string[] | undefined }): string {
   const sections = (input.prBodySections ?? []).filter((section) => section.trim().length > 0);
   if (sections.length > 0) {
     return sections.join("\n\n");

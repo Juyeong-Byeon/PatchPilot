@@ -15,7 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
 
 interface RunStepGraphProps {
   events: RunEvent[];
-  currentPhase?: string;
+  currentPhase?: string | undefined;
   copy: AdminCopy;
   locale: Locale;
   selectedStep?: SpanSelection | null;

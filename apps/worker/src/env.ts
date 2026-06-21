@@ -12,24 +12,24 @@ export interface WorkerEnv {
   protectedPathDenylist: string[];
   runnerImage: string;
   workspaceRoot: string;
-  workspaceHostRoot?: string;
-  gstackCommand?: string;
+  workspaceHostRoot?: string | undefined;
+  gstackCommand?: string | undefined;
   /**
    * Explicit GSTACK_ARGS override. When set, it wins for every job regardless of
    * priority (back-compat) and forces the recorded executor mode. When unset, the
    * worker derives args per-job from priority via the staged/single args below.
    */
-  gstackArgs?: string;
+  gstackArgs?: string | undefined;
   /** GSTACK_ARGS used for the staged pipeline (High priority). */
   gstackStagedArgs: string;
   /** GSTACK_ARGS used for the single-pass pipeline (default). */
   gstackSingleArgs: string;
-  codexAuthFile?: string;
-  codexConfigFile?: string;
-  codexSkillsDir?: string;
-  gstackSkillSourceDir?: string;
+  codexAuthFile?: string | undefined;
+  codexConfigFile?: string | undefined;
+  codexSkillsDir?: string | undefined;
+  gstackSkillSourceDir?: string | undefined;
   jobTimeoutSeconds: number;
-  githubToken?: string;
+  githubToken?: string | undefined;
   /** Reconcile poller cadence in ms. 0 disables the poller. */
   reconcileIntervalMs: number;
   /** Days to keep a FAILED job's workspace before the sweep GCs it (L1). */
@@ -38,7 +38,7 @@ export interface WorkerEnv {
   runHeartbeatIntervalMs: number;
   /** Workspace sweep + orphan-container reap cadence in ms (L1). 0 disables. */
   workspaceSweepIntervalMs: number;
-  larkRecordUpdaterConfig?: LarkRecordUpdaterConfig;
+  larkRecordUpdaterConfig?: LarkRecordUpdaterConfig | undefined;
 }
 
 export function readWorkerEnv(source: NodeJS.ProcessEnv = process.env): WorkerEnv {

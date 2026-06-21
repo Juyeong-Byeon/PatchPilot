@@ -10,13 +10,13 @@ interface RunTimelineProps {
   selectedSpan?: SpanSelection | null;
   onSelectSpan?(selection: SpanSelection): void;
   variant?: "card" | "embedded";
-  currentPhase?: string;
+  currentPhase?: string | undefined;
   nowMs?: number;
 }
 
 export interface SpanSelection {
   phase: string;
-  source?: string;
+  source?: string | undefined;
 }
 
 const standardPhaseFlow = ["Queued", "Planning", "Implementing", "PolicyChecking", "Publishing", "Completed"];

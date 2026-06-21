@@ -42,7 +42,7 @@ export interface ReconcileOnceResult {
 export async function reconcileMergedPullRequestsOnce(
   repos: ReconcileRepositories,
   checkMerged: CheckPullRequestMerged,
-  options: { limit?: number } = {},
+  options: { limit?: number | undefined } = {},
 ): Promise<ReconcileOnceResult> {
   const jobs = await repos.listJobsAwaitingMergeReconcile(options.limit);
   const result: ReconcileOnceResult = { scanned: jobs.length, merged: 0, pending: 0, errors: 0 };

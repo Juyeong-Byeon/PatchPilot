@@ -87,7 +87,7 @@ export interface ExecutorInput {
    * it into the runner input context so the agent reads it alongside the ticket.
    * Undefined on first attempts / retries without guidance.
    */
-  retryGuidance?: string;
+  retryGuidance?: string | undefined;
   /**
    * EFFECTIVE per-job runner timeout in seconds (env ⊕ DB override; Settings page).
    * When set, the gstack executor uses it for THIS job so an operator's live override
@@ -222,7 +222,7 @@ export interface ProcessAgentJobOptions {
   repos: WorkerRepositories;
   executor: Executor;
   publisher: Publisher;
-  larkUpdater?: LarkStatusUpdater;
+  larkUpdater?: LarkStatusUpdater | undefined;
   policyConfig: WorkerPolicyConfig;
   workspaceRoot?: string;
   /** Cancel-poll cadence while the runner executes (overridable for tests). */
@@ -233,7 +233,7 @@ export interface ProcessAgentJobOptions {
    * explicit pipeline choice still wins. When omitted, mode is derived from the
    * job's priority via {@link resolveExecutorMode}.
    */
-  executorModeOverride?: ExecutorMode;
+  executorModeOverride?: ExecutorMode | undefined;
   /**
    * Execution dedup hook (X6). When provided, the worker acquires a per-job lock
    * before doing any work; if the lock is already held (a redelivered/duplicate
@@ -403,7 +403,7 @@ async function runAgentJob(payload: AgentJobPayload, options: ProcessAgentJobOpt
     phase: InternalPhase,
     outcome: UserOutcome,
     reason?: string,
-    lark?: { status: string; prUrl?: string; prNumber?: number; failureReason?: string },
+    lark?: { status: string; prUrl?: string; prNumber?: number; failureReason?: string | undefined },
     // `category` widened to string so a runner's STRUCTURED failure category (X4)
     // passes through unchanged; the underlying repo column is free-form text.
     failure?: { category: FailureCategory | string; nextAction: string },
@@ -728,7 +728,7 @@ async function runAgentJob(payload: AgentJobPayload, options: ProcessAgentJobOpt
 async function syncLarkStatus(
   larkUpdater: LarkStatusUpdater | undefined,
   job: WorkerJobRecord,
-  update: { status: string; prUrl?: string; prNumber?: number; failureReason?: string },
+  update: { status: string; prUrl?: string; prNumber?: number; failureReason?: string | undefined },
 ): Promise<void> {
   if (!larkUpdater) return;
   try {

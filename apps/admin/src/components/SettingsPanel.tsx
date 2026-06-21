@@ -495,7 +495,7 @@ function SettingRow({
   edits: EditState;
   copy: AdminCopy;
   locale: Locale;
-  onEdit?: (key: string, value: unknown) => void;
+  onEdit?: ((key: string, value: unknown) => void) | undefined;
 }) {
   const label = settingsFieldLabel(field.key, locale);
   const editedValue = field.key in edits ? edits[field.key] : field.value;

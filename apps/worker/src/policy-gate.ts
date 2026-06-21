@@ -75,7 +75,7 @@ export function summarizeVerification(tests: AgentResult["tests"]): Verification
 
 export interface PolicyGateResult {
   allowed: boolean;
-  reason?: string;
+  reason?: string | undefined;
   artifact: PolicyGateArtifact;
 }
 

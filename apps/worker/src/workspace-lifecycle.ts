@@ -144,7 +144,7 @@ export function startWorkspaceLifecyclePoller(
      * page) so a live `failedWorkspaceRetentionDays` override applies without a
      * worker restart. Optional: when absent the static `failedRetentionDays` is used.
      */
-    resolveRetentionDays?: ResolveRetentionDays;
+    resolveRetentionDays?: ResolveRetentionDays | undefined;
   },
 ): WorkspaceLifecyclePollerHandle | null {
   if (config.intervalMs <= 0) return null;

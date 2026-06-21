@@ -29,10 +29,10 @@ export interface ApiServerDependencies {
   larkWebhookSecret?: string;
   /** Clock-skew / replay window (seconds) for signed Lark webhooks. Default 300. */
   larkReplayWindowSeconds?: number;
-  githubWebhookSecret?: string;
+  githubWebhookSecret?: string | undefined;
   allowUnauthenticatedLarkWebhook?: boolean;
   allowUnauthenticatedGitHubWebhook?: boolean;
-  larkUpdater?: LarkStatusUpdater;
+  larkUpdater?: LarkStatusUpdater | undefined;
   adminStaticRoot?: string;
   healthProbes?: HealthProbes;
 }

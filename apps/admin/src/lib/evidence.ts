@@ -8,7 +8,7 @@ import type { Artifact, JobRecord } from "../api.js";
 export interface TestEvidence {
   command: string;
   status: "passed" | "failed" | "skipped" | "unknown";
-  summary?: string;
+  summary?: string | undefined;
 }
 
 export interface JobEvidence {
@@ -23,10 +23,10 @@ export interface JobEvidence {
   tests: TestEvidence[];
   /** Overall verification verdict derived from the tests array. */
   verification: "passed" | "skipped" | "failed" | "none";
-  baseSha?: string;
-  headSha?: string;
+  baseSha?: string | undefined;
+  headSha?: string | undefined;
   /** Target branch recorded by the executor (audited), if any. */
-  targetBranch?: string;
+  targetBranch?: string | undefined;
 }
 
 function kindOf(artifact: Artifact): string {

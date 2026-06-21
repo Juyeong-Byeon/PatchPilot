@@ -6,8 +6,8 @@ export interface ApiEnv {
   port: number;
   adminToken: string;
   larkWebhookSecret: string;
-  githubWebhookSecret?: string;
-  larkRecordUpdaterConfig?: LarkRecordUpdaterConfig;
+  githubWebhookSecret?: string | undefined;
+  larkRecordUpdaterConfig?: LarkRecordUpdaterConfig | undefined;
 }
 
 export function readApiEnv(env: NodeJS.ProcessEnv = process.env): ApiEnv {

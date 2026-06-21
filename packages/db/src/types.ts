@@ -108,8 +108,8 @@ export interface AppendAuditEventInput {
 export interface MarkPullRequestMergedInput {
   repository: string;
   prNumber: number;
-  prUrl?: string;
-  mergedAt?: string | null;
+  prUrl?: string | undefined;
+  mergedAt?: string | null | undefined;
 }
 
 export interface RecordWebhookDeliveryInput {
