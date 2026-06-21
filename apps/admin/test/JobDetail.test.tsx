@@ -40,6 +40,23 @@ describe("JobDetail", () => {
     expect(screen.getByRole("button", { name: "재시도" })).toBeDisabled();
   });
 
+  it("announces the in-flight action to screen readers via a polite live region", () => {
+    const job = { id: "job_1", phase: "Failed", outcome: "FailedInternal" };
+    const { rerender } = render(<JobDetail {...baseProps} job={job} />);
+
+    // Idle: no action in flight → the live region carries no announcement.
+    const idleRegions = screen.getAllByRole("status");
+    expect(idleRegions.some((region) => region.textContent === adminCopy.ko.retrying)).toBe(false);
+
+    // A retry is dispatched → the header live region voices the retrying copy.
+    rerender(<JobDetail {...baseProps} actionState="retry" job={job} />);
+    const liveRegions = screen.getAllByRole("status");
+    const announced = liveRegions.find((region) => region.textContent === adminCopy.ko.retrying);
+    expect(announced).toBeInTheDocument();
+    expect(announced).toHaveClass("sr-only");
+    expect(announced).toHaveAttribute("aria-live", "polite");
+  });
+
   it("renders the NeedsInput panel with the agent's question and submits the answer", () => {
     const onAnswer = vi.fn();
     render(

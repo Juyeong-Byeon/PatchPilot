@@ -159,6 +159,13 @@ export function JobDetail({
         <CardContent className="grid gap-4">
           <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
             <div className="min-w-0">
+              {/* Announce the in-flight action (retry/cancel/answer) to screen readers.
+                  The action buttons themselves only change their accessible name, which
+                  isn't reliably announced, so this polite live region voices the result.
+                  Mirrors the sr-only live-region pattern in LogViewer.tsx. */}
+              <span className="sr-only" role="status" aria-live="polite">
+                {actionAnnouncement(actionState, copy)}
+              </span>
               <div className="flex min-w-0 items-center gap-1">
                 <p className="truncate font-mono text-[12px] leading-4 text-graphite" title={job.id}>
                   {job.id}
@@ -947,6 +954,22 @@ function parseAttempt(value: unknown): number | null {
 
 function stringOrNull(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+// Map the in-flight action to its existing in-flight copy for the live region.
+// Reuses the same strings the action buttons swap to ("재시도 중"/"취소 중") and the
+// answer-resume copy, so the announcement matches the visible UI. Empty when idle.
+function actionAnnouncement(actionState: string, copy: AdminCopy): string {
+  switch (actionState) {
+    case "retry":
+      return copy.retrying;
+    case "cancel":
+      return copy.cancelling;
+    case "answer":
+      return copy.needsInputSubmitting;
+    default:
+      return "";
+  }
 }
 
 function resolveRunningPhase(job: JobRecord | null): string | null {
