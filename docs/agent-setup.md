@@ -11,7 +11,7 @@ the default `.env` is enough to get a working local stack and admin console.
 ## 0. Prerequisites (verify, do not assume)
 
 ```bash
-node --version      # expect v20 or newer
+node --version      # expect v24 (pinned in .nvmrc; nvm use to match)
 docker info         # must succeed (Docker daemon running)
 docker compose version
 ```
