@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { parseAgentResult } from "@ticket-to-pr/core";
-import { runCodexAgentRunner } from "../src/codex-agent-runner.js";
+import { composePrBody, runCodexAgentRunner } from "../src/codex-agent-runner.js";
 
 const tempDirs: string[] = [];
 
@@ -105,10 +105,53 @@ describe("runCodexAgentRunner", () => {
       failure: null,
       retryable: false,
     });
+    // N2: single-pass runs no project verification, so tests must be honestly skipped — never a
+    // fabricated "passed". The platform/policy layer surfaces "skipped" as "no verification".
+    expect(result.tests).toEqual([
+      {
+        command: "project verification",
+        status: "skipped",
+        summary: "Single-pass runner did not run project verification.",
+      },
+    ]);
     expect(await readFile(join(workspaceRoot, "output", "pr-title.txt"), "utf8")).toContain(
       "docs: add Codex smoke note",
     );
-    expect(await readFile(join(workspaceRoot, "output", "pr-body.md"), "utf8")).toContain("README.md");
+    const prBody = await readFile(join(workspaceRoot, "output", "pr-body.md"), "utf8");
+    // Honest minimal Summary lists the changed files.
+    expect(prBody).toContain("## Summary");
+    expect(prBody).toContain("README.md");
+    // N9: the legacy fake "## Verification\n- git diff --name-only" block is gone — the runner
+    // must not emit a fabricated verification line that contradicts the platform's real evidence.
+    expect(prBody).not.toContain("## Verification");
+    expect(prBody).not.toContain("git diff --name-only");
+  });
+});
+
+describe("composePrBody", () => {
+  it("emits a minimal honest Summary (no fake verification) when there are no agent sections", () => {
+    const body = composePrBody({ changedFiles: ["src/a.ts", "src/b.ts"] });
+    expect(body).toContain("## Summary");
+    expect(body).toContain("src/a.ts, src/b.ts");
+    // No fabricated verification block / line.
+    expect(body).not.toContain("## Verification");
+    expect(body).not.toContain("git diff --name-only");
+  });
+
+  it("composes the body from agent sections only, with no platform preamble", () => {
+    const sections = ["## 아키텍처 변경점\n- 변경", "## Verification (gstack verify)\n- npm run ci passed"];
+    const body = composePrBody({ changedFiles: ["src/a.ts"], prBodySections: sections });
+    // Agent content is preserved verbatim; the legacy hardcoded Summary preamble is gone.
+    expect(body).toBe(sections.join("\n\n"));
+    expect(body.startsWith("## 아키텍처 변경점")).toBe(true);
+    expect(body).not.toContain("Implemented by Codex CLI");
+    expect(body).not.toContain("git diff --name-only");
+  });
+
+  it("falls back to the honest Summary when all agent sections are blank", () => {
+    const body = composePrBody({ changedFiles: ["src/a.ts"], prBodySections: ["", "   "] });
+    expect(body).toContain("## Summary");
+    expect(body).toContain("src/a.ts");
   });
 });
 

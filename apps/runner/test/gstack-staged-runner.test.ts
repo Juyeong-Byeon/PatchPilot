@@ -112,6 +112,12 @@ describe("runGstackStagedRunner", () => {
     });
 
     const prBody = await readFile(join(workspaceRoot, "output", "pr-body.md"), "utf8");
+    // N9: the body is composed from agent content ONLY. The legacy hardcoded platform preamble
+    // is gone, and there is no fabricated "git diff --name-only" verification line contradicting
+    // the real qa.json result. The agent description leads the body.
+    expect(prBody.startsWith("## 아키텍처 변경점")).toBe(true);
+    expect(prBody).not.toContain("Implemented by Codex CLI through the Ticket-to-PR runner.");
+    expect(prBody).not.toContain("git diff --name-only");
     // Agent-authored description: the six structured sections lead the detailed stage notes.
     for (const header of [
       "## 아키텍처 변경점",
@@ -153,8 +159,12 @@ describe("runGstackStagedRunner", () => {
     });
 
     const prBody = await readFile(join(workspaceRoot, "output", "pr-body.md"), "utf8");
-    expect(prBody).toContain("## Implementation plan (gstack-autoplan)");
+    // Body is the stage-notes appendix only, with no agent description and — N9 — still no
+    // legacy fake verification line or platform preamble.
+    expect(prBody.startsWith("## Implementation plan (gstack-autoplan)")).toBe(true);
     expect(prBody).not.toContain("## 아키텍처 변경점");
+    expect(prBody).not.toContain("git diff --name-only");
+    expect(prBody).not.toContain("Implemented by Codex CLI through the Ticket-to-PR runner.");
   });
 
   it("fails the run when the verify stage reports failing verification", async () => {
