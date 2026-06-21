@@ -268,10 +268,17 @@ Codex skills directory can contain symlinks to gstack helper binaries.
 
 ### gstack staged pipeline (plan → implement → review → verify → document)
 
-`codex-agent-runner.js` runs the agent in a single pass. To run the agent through
-gstack's staged workflow instead — a separate Codex pass per stage (plan and
-review use gstack skills) — point `GSTACK_ARGS` at the staged runner (keep
-`GSTACK_COMMAND=node`):
+`codex-agent-runner.js` runs the agent in a single pass. By default it runs no
+project verification, so its `tests` evidence is honestly `skipped`. Set
+`CODEX_SELF_REVIEW=1` to add one optional lightweight self-review/verify pass
+(the agent re-reads its own diff, fixes obvious defects, runs the project's quick
+checks, and records the result as real `tests` evidence via `output/qa.json`). It
+is off by default and is **not** the full staged pipeline — just one extra pass;
+a failing self-review check fails the run.
+
+To run the agent through gstack's staged workflow instead — a separate Codex pass
+per stage (plan and review use gstack skills) — point `GSTACK_ARGS` at the staged
+runner (keep `GSTACK_COMMAND=node`):
 
 ```env
 GSTACK_COMMAND=node
@@ -311,6 +318,18 @@ Operational notes:
 - **Rollback:** point `GSTACK_ARGS` back at `codex-agent-runner.js` for single-pass.
 - Browser-based QA via `gstack-qa` needs a headless browser in the runner image
   (not bundled); the verify stage uses test/build checks, not browser QA.
+
+### Structured agent failures
+
+When the agent (single-pass or any staged stage) cannot complete a ticket, it
+writes `output/failure.json` (`{stage, category, message, nextAction}`) instead
+of crashing opaquely. The runner converts that into a schema-valid result with
+`status: failed` and the structured failure, so Admin's `Failure`/`Next Action`
+fields carry the agent's own explanation. `category` drives retry policy: `infra`
+(also `internal`/`transient`/`timeout`) is treated as retryable; `agent` and
+`policy` are actionable and need the ticket or rules changed before retry. An
+optional `retryable` boolean in the file overrides the category default. If no
+valid `failure.json` is present, the original error still propagates unchanged.
 
 ## Lark Webhook
 

@@ -171,7 +171,18 @@ Use real mode only against a disposable test repository in the allowlist.
 ticket-to-pr-runner:local sh -lc 'command -v codex'` succeeds, or until
    `GSTACK_COMMAND` points at another compatible executable in the image.
 
-2. Set `EXECUTOR_MODE=gstack` and `PUBLISHER_MODE=github`.
+2. Set `EXECUTOR_MODE=gstack` and `PUBLISHER_MODE=github`. Then run
+   `npm run doctor` — in gstack mode it validates that the Codex/gstack mounts
+   (`CODEX_AUTH_FILE`, `CODEX_CONFIG_FILE`, `CODEX_SKILLS_DIR`,
+   `GSTACK_SKILL_SOURCE_DIR`) resolve to real paths, and warns when a value
+   still uses `$HOME`/`~` (which `.env` does not expand). Fix any reported
+   problem before launching a run so a bad mount fails here, not opaquely inside
+   the runner container.
+   To make the single-pass runner add one lightweight self-review/verify pass
+   (review its own diff and run quick project checks, recorded as real `tests`
+   evidence instead of `skipped`), set `CODEX_SELF_REVIEW=1`. It is off by
+   default and is not the full staged pipeline; a failing self-review check
+   fails the run.
 3. Set `GITHUB_TOKEN` to a fine-grained PAT scoped to the test repository.
 4. Set `REPOSITORY_ALLOWLIST` to that test repository only.
 5. Confirm the worker service has `/var/run/docker.sock:/var/run/docker.sock`
@@ -226,6 +237,15 @@ Failure triage should start in Admin:
 - Review artifacts, especially `result_json`, policy reports, and PR text
   drafts.
 
+When the agent cannot complete a ticket (ambiguous request, missing dependency,
+environment block) it writes `output/failure.json`
+(`{stage, category, message, nextAction}`) instead of crashing. The runner turns
+that into a schema-valid result with `status: failed` and structured failure
+details, so the `Failure`/`Next Action` fields in Admin carry the agent's own
+explanation. `category` drives retry policy: `infra` (or `internal`/`transient`/
+`timeout`) failures are marked retryable; `agent` and `policy` failures are
+actionable and need the ticket or rules changed before retrying.
+
 ## Retry and Cancel
 
 `POST /api/jobs/:id/retry` creates a new run attempt and records `admin` as the
@@ -252,3 +272,72 @@ Both routes require `Authorization: Bearer <ADMIN_TOKEN>`.
   persisting worker output and retained runner logs.
 - Real executor smoke should use disposable repositories and least-privilege
   GitHub credentials.
+
+## Secret Rotation
+
+Rotate on a schedule and immediately on any suspected exposure (a secret printed
+to logs, committed to git, or shared outside the operator group). All secrets
+live in `.env`, which is never committed. After editing `.env`, the API and
+worker must be restarted to pick up new values — they read the environment at
+boot, not per request:
+
+```bash
+docker compose up -d --force-recreate api
+npm run docker:recreate-worker
+```
+
+Validate the new values before restarting traffic:
+
+```bash
+npm run doctor
+```
+
+`doctor` rejects placeholder secrets and, in real mode, checks the runner
+mounts; it does not call Lark/GitHub, so also confirm the live checks noted per
+secret below.
+
+### Admin console — `ADMIN_TOKEN`
+
+1. Generate a new high-entropy token, e.g. `openssl rand -hex 32`.
+2. Set `ADMIN_TOKEN` in `.env` and recreate `api`.
+3. Re-authenticate the Admin UI and update any scripts that send
+   `Authorization: Bearer <ADMIN_TOKEN>` to `/api/jobs*`. Old sessions stop
+   working immediately — there is no grace window.
+
+### Lark — `LARK_APP_SECRET`, `LARK_WEBHOOK_SECRET`, `LARK_BASE_APP_TOKEN`
+
+1. `LARK_APP_SECRET`: rotate in the Lark developer console (app credentials),
+   then copy the new value into `.env`. This token mints tenant access tokens
+   for status write-back, so a stale value breaks Lark updates, not ingestion.
+2. `LARK_WEBHOOK_SECRET`: choose a new shared secret, set it in `.env`, and
+   update the Lark automation/webhook caller to send the matching
+   `x-lark-webhook-secret` header. Until both sides match, inbound webhooks are
+   rejected with `401` — rotate the caller and `.env` together.
+3. `LARK_BASE_APP_TOKEN`: regenerate in Lark Base, set in `.env`. Required only
+   for source-record write-back.
+4. Recreate `api` and `worker`. Confirm by sending one signed test webhook and
+   watching a job reach `NeedsReview` with Lark status write-back, per the Mock
+   Executor Smoke steps.
+
+### GitHub — `GITHUB_TOKEN`, `GITHUB_WEBHOOK_SECRET`
+
+1. `GITHUB_TOKEN` (fine-grained PAT): mint a replacement with the same minimal
+   scopes (see GitHub PAT Scopes — `Contents` and `Pull requests`,
+   read/write, selected repositories only), set it in `.env`, recreate the
+   `worker`, then revoke the old PAT in GitHub settings. Mint-then-revoke avoids
+   a publish gap. The token belongs to the platform publisher, never the agent
+   process or the runner container.
+2. `GITHUB_WEBHOOK_SECRET`: set the new secret in `.env` and in the repository
+   webhook settings (the same value verifies `x-hub-signature-256`). A mismatch
+   makes merge webhooks fail signature checks and jobs stay `NeedsReview`;
+   rotate `.env` and the GitHub webhook together, then recreate `api`.
+3. After rotating, merge a PR on a disposable repository and confirm the webhook
+   marks the job `Completed`, per the Real Executor Smoke steps.
+
+### Post-rotation hygiene
+
+- Scrub the exposed value from any logs or chat history.
+- If a secret reached git history, rotating is necessary but not sufficient —
+  treat the old value as permanently compromised and revoke it at the source.
+- Never weaken masking to debug a rotation; token masking runs before worker
+  output and retained runner logs are persisted and must stay on.

@@ -11,6 +11,7 @@ import {
   gitStdout,
   prepareCodexHome,
   runCodexCommand,
+  runWithStructuredFailure,
   writeResultArtifacts,
   type RunnerContext,
 } from "./codex-agent-runner.js";
@@ -70,6 +71,11 @@ function untrustedTicketBlock(ticket: string): string {
 export async function runGstackStagedRunner(input: GstackStagedRunnerInput): Promise<void> {
   const paths = getWorkspacePaths(input.workspaceRoot);
   await mkdir(paths.outputDir, { recursive: true });
+  await runWithStructuredFailure(input.workspaceRoot, () => runGstackStagedPipeline(input));
+}
+
+async function runGstackStagedPipeline(input: GstackStagedRunnerInput): Promise<void> {
+  const paths = getWorkspacePaths(input.workspaceRoot);
   const context = JSON.parse(await readFile(paths.contextJson, "utf8")) as RunnerContext;
   const ticket = await readFile(paths.ticketMd, "utf8");
   const baseSha = await gitStdout(["rev-parse", "HEAD"], input.repoDir);
@@ -147,7 +153,11 @@ export async function runGstackStagedRunner(input: GstackStagedRunnerInput): Pro
     [
       "You are STAGE 3 of 5 (REVIEW) in the Ticket-to-PR gstack pipeline.",
       "Step 1 (required, do this first): load the `gstack-review` skill from your skills directory and run its preamble exactly as written.",
-      `Step 2: review the diff against ${input.targetBranch} for correctness, trust-boundary violations, conditional side effects, and structural issues, relative to the ticket and the plan.`,
+      // L9: the platform already checked out the trusted base; review against that exact SHA.
+      // Do NOT `git fetch` the remote — this container has no GitHub credentials, and a failed
+      // fetch silently leaves a STALE base ref that makes the review compare against the wrong tree.
+      `Step 2: review the diff for THIS change with: git --no-pager diff ${baseSha}...HEAD (run it; do not guess, and do NOT fetch the remote — ${baseSha} is the platform-trusted base of ${input.targetBranch}).`,
+      "Check correctness, trust-boundary violations, conditional side effects, and structural issues, relative to the ticket and the plan.",
       `Step 3: WRITE your findings to the absolute path ${path.join(paths.outputDir, "review.md")} (outside the repo; do not commit it).`,
       "Step 4: if you find blocking issues, fix them in the repository and commit the fixes.",
       "",
@@ -196,7 +206,8 @@ export async function runGstackStagedRunner(input: GstackStagedRunnerInput): Pro
       "document",
       [
         "You are STAGE 5 of 5 (DOCUMENT) in the Ticket-to-PR gstack pipeline.",
-        `Inspect the full change by running: git --no-pager diff ${input.targetBranch}...HEAD (run it; do not guess the diff).`,
+        // L9: diff against the platform-trusted base SHA, never a fetched (and possibly stale) remote ref.
+        `Inspect the full change by running: git --no-pager diff ${baseSha}...HEAD (run it; do not guess the diff, and do NOT fetch the remote — ${baseSha} is the trusted base of ${input.targetBranch}).`,
         `Read these stage notes if present for extra context: ${path.join(paths.outputDir, "plan.md")}, ${path.join(paths.outputDir, "review.md")}, ${path.join(paths.outputDir, "qa.md")}.`,
         `WRITE a reviewer-facing PR description to the absolute path ${path.join(paths.outputDir, "pr-description.md")} (outside the repo; do not commit it).`,
         "The file MUST contain exactly these six second-level Markdown headers, in this order, written in Korean:",
