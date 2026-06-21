@@ -24,7 +24,22 @@ export interface StructuredAgentFailure {
   retryable?: boolean;
 }
 
+/**
+ * Agent-authored "I am blocked on a human decision" report dropped at
+ * `output/needs-input.json` when the only way forward is a clarification the
+ * agent cannot invent (ambiguous requirement / missing decision). The runner
+ * turns it into a schema-valid `result.json` with `status: "needs_input"` so the
+ * worker PARKS the job (no PR, no failure) and surfaces the question to the
+ * operator. PRECEDENCE: a valid needs-input.json wins over failure.json — asking
+ * the human is strictly better than failing when both files are present.
+ */
+export interface AgentNeedsInput {
+  question: string;
+  details?: string;
+}
+
 const FAILURE_FILE = "failure.json";
+const NEEDS_INPUT_FILE = "needs-input.json";
 // Categories that describe an environment/transport problem the platform can retry
 // as-is. Everything else (agent quality, policy) needs a human to change the input.
 const RETRYABLE_FAILURE_CATEGORIES = new Set(["infra", "infrastructure", "internal", "transient", "timeout"]);
@@ -142,8 +157,15 @@ async function buildCodexPrompt(input: {
     "- Run lightweight verification appropriate for the change.",
     "- Create at least one local git commit on the current branch.",
     "",
-    "If you genuinely cannot complete the ticket (ambiguous/contradictory request, missing dependency,",
-    `blocked by the environment), do NOT fake a change. Instead WRITE ${path.join(input.outputDir, "failure.json")}`,
+    "If you are genuinely BLOCKED on a decision only a human can make — an ambiguous or contradictory requirement,",
+    "a missing product/design decision, two equally valid interpretations you cannot choose between — do NOT guess,",
+    `fabricate, or hard-fail. Instead WRITE ${path.join(input.outputDir, "needs-input.json")} as JSON:`,
+    '{"question":"<ONE specific, answerable question>","details":"<optional: the options you are weighing>"}',
+    "and make/push NOTHING. The runner parks the job and the operator answers; their answer seeds your next run.",
+    "Reserve this for TRUE blockers — not routine implementation choices you can reasonably make yourself.",
+    "",
+    "If instead you genuinely cannot complete the ticket for a NON-question reason (missing dependency,",
+    `blocked by the environment, contradictory rules), do NOT fake a change. Instead WRITE ${path.join(input.outputDir, "failure.json")}`,
     'as JSON: {"stage":"implement","category":"agent","message":"<what blocked you>","nextAction":"<what a human should change>"}',
     "(category: agent = needs a clearer ticket; infra = environment/transport problem; policy = blocked by rules).",
     "The runner turns that file into a structured, actionable failure instead of an opaque crash.",
@@ -418,6 +440,71 @@ export async function readStructuredFailure(outputDir: string): Promise<Structur
 }
 
 /**
+ * Reads and validates an agent-authored `output/needs-input.json`. Returns
+ * `null` when the file is absent or malformed (a malformed file must NOT mask the
+ * normal result/failure path — the caller falls back as if it were not present).
+ * `details` is optional context; only a non-empty `question` makes the file valid.
+ */
+export async function readNeedsInput(outputDir: string): Promise<AgentNeedsInput | null> {
+  const raw = await readFile(path.join(outputDir, NEEDS_INPUT_FILE), "utf8").catch(() => "");
+  if (!raw.trim()) return null;
+  let parsed: Partial<AgentNeedsInput>;
+  try {
+    parsed = JSON.parse(raw) as Partial<AgentNeedsInput>;
+  } catch {
+    console.warn(`runner: ${NEEDS_INPUT_FILE} present but not valid JSON; ignoring`);
+    return null;
+  }
+  const question = typeof parsed.question === "string" ? parsed.question.trim() : "";
+  if (!question) {
+    console.warn(`runner: ${NEEDS_INPUT_FILE} missing required field (question); ignoring`);
+    return null;
+  }
+  const details = typeof parsed.details === "string" ? parsed.details.trim() : "";
+  return details ? { question, details } : { question };
+}
+
+/**
+ * Emits a schema-valid `result.json` with `status: "needs_input"`: the run made
+ * and pushed NOTHING, it carries only the agent's one blocking question (plus
+ * optional details folded into the human-readable body). The worker reads this as
+ * a clean PARK (not a failure) and asks the operator to answer.
+ */
+export async function writeNeedsInputResult(input: {
+  workspaceRoot: string;
+  context: RunnerContext;
+  needsInput: AgentNeedsInput;
+}): Promise<void> {
+  const paths = getWorkspacePaths(input.workspaceRoot);
+  const result = parseAgentResult({
+    schemaVersion: "1.0",
+    runId: input.context.runId,
+    jobId: input.context.jobId,
+    ticketId: input.context.ticketSnapshotId,
+    triggerVersion: input.context.triggerVersion,
+    status: "needs_input",
+    question: input.needsInput.question,
+    changedFiles: [],
+    commits: [],
+    tests: [],
+    failure: null,
+    retryable: false,
+  });
+  await writeJsonArtifact(paths.resultJson, result);
+  await writeTextArtifact(paths.prTitle, `Agent needs operator input\n`);
+  await writeTextArtifact(
+    paths.prBody,
+    [
+      "## Agent needs operator input",
+      "The agent paused because it hit a decision only a human can make.",
+      "",
+      `- Question: ${input.needsInput.question}`,
+      ...(input.needsInput.details ? [`- Details: ${input.needsInput.details}`] : []),
+    ].join("\n"),
+  );
+}
+
+/**
  * Emits a schema-valid `result.json` with `status: "failed"` and structured
  * failure details, plus a human-readable `pr-body.md`/`pr-title.txt` for parity.
  * The worker reads this as an actionable (or retryable) failure instead of an
@@ -464,24 +551,51 @@ export async function writeFailureResult(input: {
 }
 
 /**
- * Runs the agent body, and if it throws, gives the agent's `output/failure.json`
- * a chance to convert the crash into a structured `status: "failed"` result.
- * When a valid failure file exists the run exits cleanly (the failure is carried
- * in result.json); otherwise the original error is rethrown unchanged.
+ * Runs the agent body, then resolves the run's outcome with a fixed precedence:
+ *
+ *   needs-input.json  >  failure.json  >  (success | rethrow)
+ *
+ * 1. If the agent wrote a valid `output/needs-input.json`, the run is a clean
+ *    PARK regardless of whether the body succeeded or threw: we emit a
+ *    `status: "needs_input"` result and DISCARD the body's success/error (the
+ *    agent deliberately produced no shippable change). Asking the human always
+ *    wins over both a "completed" claim and a failure.
+ * 2. Else, if the body threw and the agent wrote a valid `output/failure.json`,
+ *    convert the crash into a structured `status: "failed"` result.
+ * 3. Else, the body's own result stands (success: it already wrote result.json;
+ *    failure with no failure.json: rethrow unchanged).
  */
 export async function runWithStructuredFailure(workspaceRoot: string, body: () => Promise<void>): Promise<void> {
+  const paths = getWorkspacePaths(workspaceRoot);
+  let bodyError: unknown;
+  let threw = false;
   try {
     await body();
   } catch (error) {
-    const paths = getWorkspacePaths(workspaceRoot);
-    const failure = await readStructuredFailure(paths.outputDir);
-    if (!failure) throw error;
-    const context = JSON.parse(await readFile(paths.contextJson, "utf8")) as RunnerContext;
-    console.warn(
-      `runner: agent reported structured failure (${failure.category}/${failure.stage}); emitting result.failure`,
-    );
-    await writeFailureResult({ workspaceRoot, context, failure });
+    bodyError = error;
+    threw = true;
   }
+
+  // Precedence (1): a blocking question wins over everything — even a body that
+  // otherwise "succeeded" (e.g. a stray commit) or one that threw.
+  const needsInput = await readNeedsInput(paths.outputDir);
+  if (needsInput) {
+    const context = JSON.parse(await readFile(paths.contextJson, "utf8")) as RunnerContext;
+    console.warn("runner: agent requested operator input (needs-input.json); emitting result.needs_input (no push)");
+    await writeNeedsInputResult({ workspaceRoot, context, needsInput });
+    return;
+  }
+
+  if (!threw) return;
+
+  // Precedence (2): structured failure converts a crash into an actionable result.
+  const failure = await readStructuredFailure(paths.outputDir);
+  if (!failure) throw bodyError;
+  const context = JSON.parse(await readFile(paths.contextJson, "utf8")) as RunnerContext;
+  console.warn(
+    `runner: agent reported structured failure (${failure.category}/${failure.stage}); emitting result.failure`,
+  );
+  await writeFailureResult({ workspaceRoot, context, failure });
 }
 
 /**

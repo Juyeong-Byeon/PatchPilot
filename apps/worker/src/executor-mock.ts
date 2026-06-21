@@ -42,6 +42,7 @@ export async function executeMock(input: ExecutorInput): Promise<AgentResult> {
       bodyPath: "PR_BODY.md",
     },
     failure: null,
+    question: null,
     retryable: false,
   };
 }

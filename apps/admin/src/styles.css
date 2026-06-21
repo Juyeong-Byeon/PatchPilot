@@ -19,6 +19,13 @@
   --color-amber-wash: #fef3c7;
   --color-amber-border: #fcd34d;
 
+  /* Violet "awaiting human input" (NeedsInput) ramp. A distinct info tone, NOT the
+     amber of NeedsReview and NOT the red of danger, so "parked on a question" never
+     reads as a warning or a failure. info-ink on info-wash is ~7.3:1 (WCAG AA). */
+  --color-info-ink: #6d28d9;
+  --color-info-wash: #f5f3ff;
+  --color-info-border: #ddd6fe;
+
   --color-forest-ink: #091135;
   --color-sage-wash: #dbeaff;
   --color-mist-blue: #edf5ff;
@@ -113,6 +120,12 @@
   --color-amber-wash: #2e2206;
   --color-amber-border: #6b531a;
 
+  /* Violet "awaiting human input" ramp on dark.
+       c4b5fd (info-ink) on #1e1633 (info-wash) ≈ 7.4:1 (AA). Border lighter. */
+  --color-info-ink: #c4b5fd;
+  --color-info-wash: #1e1633;
+  --color-info-border: #4c3a82;
+
   /* Red danger ramp.
        fca5a5 (danger text/border) on #2a1314 (danger-wash) ≈ 7.6:1 (AA). */
   --color-danger: #fca5a5;
@@ -163,6 +176,10 @@
     --color-amber-ink: #fcd34d;
     --color-amber-wash: #2e2206;
     --color-amber-border: #6b531a;
+
+    --color-info-ink: #c4b5fd;
+    --color-info-wash: #1e1633;
+    --color-info-border: #4c3a82;
 
     --color-danger: #fca5a5;
     --color-danger-hover: #f87171;

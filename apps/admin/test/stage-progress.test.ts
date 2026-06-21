@@ -1,5 +1,47 @@
 import { describe, expect, it } from "vitest";
-import { deriveStageStates, isCancellingPhase, isStageBannerText, type StageStatus } from "../src/lib/status.js";
+import {
+  deriveStageStates,
+  isCancellingPhase,
+  isNeedsInputJob,
+  isStageBannerText,
+  matchesStatusFilter,
+  resolvePrimaryStatus,
+  statusBadgeVariant,
+  type StageStatus,
+} from "../src/lib/status.js";
+
+describe("NeedsInput (입력 대기) status", () => {
+  it("recognizes a parked job from either the outcome or the phase", () => {
+    expect(isNeedsInputJob("AwaitingInput", "NeedsInput")).toBe(true);
+    expect(isNeedsInputJob("Implementing", "NeedsInput")).toBe(true);
+    expect(isNeedsInputJob("AwaitingInput", "Running")).toBe(true);
+    expect(isNeedsInputJob("Implementing", "Running")).toBe(false);
+    expect(isNeedsInputJob("Completed", "NeedsReview")).toBe(false);
+  });
+
+  it("resolves the primary status to NeedsInput", () => {
+    expect(resolvePrimaryStatus({ phase: "AwaitingInput", outcome: "NeedsInput" })).toBe("NeedsInput");
+  });
+
+  it("maps NeedsInput to the distinct info variant (not amber warning, not danger)", () => {
+    expect(statusBadgeVariant("NeedsInput")).toBe("info");
+    expect(statusBadgeVariant("AwaitingInput")).toBe("info");
+    // It is deliberately different from NeedsReview (amber) and from a failure (danger).
+    expect(statusBadgeVariant("NeedsReview")).toBe("warning");
+    expect(statusBadgeVariant("FailedInternal")).toBe("danger");
+  });
+
+  it("matches the needsInput filter and is mutually exclusive with the others", () => {
+    const parked = { phase: "AwaitingInput", outcome: "NeedsInput" };
+    expect(matchesStatusFilter(parked, "needsInput")).toBe(true);
+    expect(matchesStatusFilter(parked, "running")).toBe(false);
+    expect(matchesStatusFilter(parked, "needsReview")).toBe(false);
+    expect(matchesStatusFilter(parked, "failed")).toBe(false);
+    expect(matchesStatusFilter(parked, "completed")).toBe(false);
+    // A normal running job does not match the needsInput chip.
+    expect(matchesStatusFilter({ phase: "Implementing", outcome: "Running" }, "needsInput")).toBe(false);
+  });
+});
 
 describe("isCancellingPhase", () => {
   it("flags only the in-flight cancel phases (outcome still reads Running)", () => {

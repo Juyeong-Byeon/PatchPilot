@@ -9,6 +9,7 @@ import {
   FileDiff,
   GitBranch,
   GitPullRequest,
+  MessageCircleQuestion,
   RotateCcw,
   ShieldCheck,
   Undo2,
@@ -16,7 +17,13 @@ import {
 } from "lucide-react";
 import type { Artifact, JobRecord, LogLine, RunEvent } from "../api.js";
 import { executorModeLabel, translateFailureCategory, translateState, type AdminCopy, type Locale } from "../i18n.js";
-import { deriveStageStates, isNeedsReviewJob, resolvePrimaryStatus, statusBadgeVariant } from "../lib/status.js";
+import {
+  deriveStageStates,
+  isNeedsInputJob,
+  isNeedsReviewJob,
+  resolvePrimaryStatus,
+  statusBadgeVariant,
+} from "../lib/status.js";
 import {
   extractJobEvidence,
   normalizeExecutorMode,
@@ -51,6 +58,8 @@ interface JobDetailProps {
   onRefresh?(): void;
   onRetry(): void;
   onCancel(): void;
+  /** Submit the operator's answer to a parked NeedsInput job (resumes it). */
+  onAnswer(answer: string): void;
 }
 
 export function JobDetail({
@@ -67,6 +76,7 @@ export function JobDetail({
   onRefresh,
   onRetry,
   onCancel,
+  onAnswer,
 }: JobDetailProps) {
   const [selectedSpan, setSelectedSpan] = useState<SpanSelection | null>(null);
   const lastAutoFocusedKey = useRef<string>("");
@@ -132,6 +142,8 @@ export function JobDetail({
   const cancelDisabled = Boolean(actionState) || terminal;
   const isCancelled = String(job.outcome) === "Cancelled" || String(job.phase) === "Cancelled";
   const needsReview = isNeedsReviewJob(job.phase, job.outcome);
+  const needsInput = isNeedsInputJob(job.phase, job.outcome);
+  const pendingQuestion = stringOrNull(job.pending_question);
   const primaryStatus = resolvePrimaryStatus(job);
   const executorMode = readExecutorMode(job);
   const ticketTitle = stringOrNull(job.title);
@@ -283,6 +295,18 @@ export function JobDetail({
             </section>
           ) : null}
 
+          {/* NeedsInput (입력 대기): the agent asked a blocking question only a human
+              can answer and the job is parked. Surface the question prominently with
+              an inline answer form; submitting resumes the job (answer → guidance). */}
+          {needsInput ? (
+            <NeedsInputPanel
+              question={pendingQuestion}
+              submitting={actionState === "answer"}
+              copy={copy}
+              onAnswer={onAnswer}
+            />
+          ) : null}
+
           <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Fact label={copy.priority} value={stringValue(job.priority, copy)} />
             <Fact label={copy.attempt} value={stringValue(job.attempt, copy)} />
@@ -367,6 +391,72 @@ export function JobDetail({
           />
         </CardContent>
       </Card>
+    </section>
+  );
+}
+
+function NeedsInputPanel({
+  question,
+  submitting,
+  copy,
+  onAnswer,
+}: {
+  question: string | null;
+  submitting: boolean;
+  copy: AdminCopy;
+  onAnswer(answer: string): void;
+}) {
+  const [answer, setAnswer] = useState("");
+  const trimmed = answer.trim();
+  const canSubmit = trimmed.length > 0 && !submitting;
+
+  return (
+    <section className="grid gap-3 rounded-xl border border-info-border bg-info-wash px-4 py-3">
+      <div className="min-w-0">
+        <p className="m-0 flex items-center gap-1.5 text-[13px] font-semibold leading-5 text-info-ink">
+          <MessageCircleQuestion aria-hidden="true" size={15} strokeWidth={2.4} className="shrink-0" />
+          {copy.needsInputSummary}
+        </p>
+        <p className="m-0 mt-1 text-[12px] leading-4 text-charcoal">{copy.needsInputExplainer}</p>
+      </div>
+
+      {question ? (
+        <div className="rounded-lg border border-info-border bg-linen-white px-3 py-2">
+          <p className="m-0 text-[12px] leading-4 text-charcoal">{copy.needsInputQuestionLabel}</p>
+          <p className="m-0 mt-1 whitespace-pre-wrap break-words text-[13px] leading-5 font-medium text-true-black">
+            {question}
+          </p>
+        </div>
+      ) : null}
+
+      <form
+        className="grid gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!canSubmit) return;
+          onAnswer(trimmed);
+        }}
+      >
+        <label className="grid gap-1.5">
+          <span className="text-[12px] leading-4 text-charcoal">{copy.needsInputAnswerLabel}</span>
+          <textarea
+            value={answer}
+            disabled={submitting}
+            rows={3}
+            maxLength={4000}
+            placeholder={copy.needsInputPlaceholder}
+            aria-label={copy.needsInputAnswerLabel}
+            onChange={(event) => setAnswer(event.target.value)}
+            className="w-full resize-y rounded-lg border border-hairline-gray bg-linen-white px-3 py-2 text-[13px] leading-5 text-true-black shadow-sm outline-none focus:border-info-ink focus:ring-2 focus:ring-info-border disabled:opacity-60"
+          />
+        </label>
+        <div className="flex justify-end">
+          <Button type="submit" disabled={!canSubmit} className="gap-1.5">
+            <MessageCircleQuestion data-icon aria-hidden="true" strokeWidth={2.2} />
+            {submitting ? copy.needsInputSubmitting : copy.needsInputSubmit}
+          </Button>
+        </div>
+      </form>
     </section>
   );
 }

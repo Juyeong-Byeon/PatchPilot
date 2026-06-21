@@ -249,6 +249,76 @@ describe.skipIf(!connectionString)("Repositories", () => {
     });
   });
 
+  describe("parkAwaitingInput + answerNeedsInput (NeedsInput)", () => {
+    it("parks a running job at AwaitingInput/NeedsInput and persists the question", async () => {
+      const { jobId } = await seedJob(`park_${Date.now()}`);
+      await setPhase(jobId, "Implementing", "Running");
+      const parked = await repos.parkAwaitingInput(jobId, "CSV or XLSX?", [
+        "Queued",
+        "Planning",
+        "Implementing",
+        "Reviewing",
+        "Testing",
+      ]);
+      expect(parked).toBe(true);
+      expect(await getPhase(jobId)).toEqual({ phase: "AwaitingInput", outcome: "NeedsInput" });
+      const row = await pool.query<{ pending_question: string }>(`select pending_question from jobs where id=$1`, [
+        jobId,
+      ]);
+      expect(row.rows[0].pending_question).toBe("CSV or XLSX?");
+    });
+
+    it("does not park a terminal job (guard rejects, question untouched)", async () => {
+      const { jobId } = await seedJob(`parkterm_${Date.now()}`);
+      await setPhase(jobId, "Completed", "Completed");
+      const parked = await repos.parkAwaitingInput(jobId, "too late?", ["Implementing"]);
+      expect(parked).toBe(false);
+      expect((await getPhase(jobId)).phase).toBe("Completed");
+    });
+
+    it("answers a parked job: persists the answer as run guidance, clears the question, re-queues", async () => {
+      const { jobId } = await seedJob(`answer_${Date.now()}`);
+      await setPhase(jobId, "Implementing", "Running");
+      await repos.parkAwaitingInput(jobId, "Which API version?", ["Implementing"]);
+
+      const result = await repos.answerNeedsInput(jobId, "Use v2.", "admin");
+      expect(result.attempt).toBeGreaterThan(1);
+      // Answer IS guidance — reuses the retry-with-guidance plumbing.
+      expect(await repos.getRunGuidance(result.runId)).toBe("Use v2.");
+      // Job re-queued and the pending question cleared.
+      expect((await getPhase(jobId)).phase).toBe("Queued");
+      const row = await pool.query<{ pending_question: string | null }>(
+        `select pending_question from jobs where id=$1`,
+        [jobId],
+      );
+      expect(row.rows[0].pending_question).toBeNull();
+      // Audit row records the answer (without text).
+      const audit = await pool.query<{ n: number }>(
+        `select count(*)::int as n from audit_events where job_id=$1 and action='job.answer_submitted'`,
+        [jobId],
+      );
+      expect(audit.rows[0].n).toBe(1);
+    });
+
+    it("rejects answering a job that is not awaiting input (409) and a re-park double-submit", async () => {
+      const { jobId } = await seedJob(`answerguard_${Date.now()}`);
+      await setPhase(jobId, "Implementing", "Running");
+      await repos.parkAwaitingInput(jobId, "q?", ["Implementing"]);
+
+      // First answer resumes the job.
+      await repos.answerNeedsInput(jobId, "first answer", "admin");
+      // Second answer (the job is now Queued, not parked) must 409 — re-park is impossible.
+      await expect(repos.answerNeedsInput(jobId, "second answer", "admin")).rejects.toMatchObject({ statusCode: 409 });
+    });
+
+    it("rejects an empty answer (409)", async () => {
+      const { jobId } = await seedJob(`answerempty_${Date.now()}`);
+      await setPhase(jobId, "Implementing", "Running");
+      await repos.parkAwaitingInput(jobId, "q?", ["Implementing"]);
+      await expect(repos.answerNeedsInput(jobId, "   ", "admin")).rejects.toMatchObject({ statusCode: 409 });
+    });
+  });
+
   describe("getMetrics (X5)", () => {
     it("aggregates success/failure/merge/retry/mode over the window", async () => {
       const stamp = `metrics_${Date.now()}`;

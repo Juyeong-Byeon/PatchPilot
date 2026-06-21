@@ -13,6 +13,7 @@ export const ALL_PHASES: readonly InternalPhase[] = [
   "Implementing",
   "Reviewing",
   "Testing",
+  "AwaitingInput",
   "PolicyChecking",
   "Publishing",
   "Completed",

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ListChecks, Monitor, Moon, Settings as SettingsIcon, Sun } from "lucide-react";
 import adminLogo from "./assets/patchpilot-logo.svg";
 import {
+  answerJob,
   cancelJob,
   fetchJob,
   fetchJobArtifacts,
@@ -22,7 +23,14 @@ import { Button } from "./components/ui/button.js";
 import { Card } from "./components/ui/card.js";
 import { Input } from "./components/ui/input.js";
 import { cn } from "./lib/utils.js";
-import { isCompletedJob, isFailedJob, isNeedsReviewJob, isRunningPhase, type StatusFilter } from "./lib/status.js";
+import {
+  isCompletedJob,
+  isFailedJob,
+  isNeedsInputJob,
+  isNeedsReviewJob,
+  isRunningPhase,
+  type StatusFilter,
+} from "./lib/status.js";
 import { applyTheme, getInitialTheme, storeTheme, type ThemePreference } from "./lib/theme.js";
 import { MetricsPanel } from "./components/MetricsPanel.js";
 import { SettingsPanel } from "./components/SettingsPanel.js";
@@ -59,6 +67,7 @@ type StatusState =
   | { kind: "loadedJobs"; count: number }
   | { kind: "refreshFailed" }
   | { kind: "retryQueued"; attempt: number }
+  | { kind: "answerSubmitted"; attempt: number }
   | { kind: "cancelRequested"; phase: string };
 
 // A 401 / invalid-key response means the session is no longer authenticated. We
@@ -122,6 +131,7 @@ export default function App() {
     () => ({
       total: jobs.length,
       running: jobs.filter((job) => isRunningPhase(job.phase)).length,
+      needsInput: jobs.filter((job) => isNeedsInputJob(job.phase, job.outcome)).length,
       needsReview: jobs.filter((job) => isNeedsReviewJob(job.phase, job.outcome)).length,
       failed: jobs.filter((job) => isFailedJob(job.phase, job.outcome)).length,
       // "완료" excludes jobs still parked on PR review so the chip mirrors the filter.
@@ -283,6 +293,29 @@ export default function App() {
         const cancel = await cancelJob(selectedJobId, token);
         setStatus({ kind: "cancelRequested", phase: cancel.phase });
       }
+      await refreshJobs(token);
+      await refreshDetail(selectedJobId, token);
+    } catch (caught) {
+      if (isSessionExpiredError(caught)) {
+        handleSessionExpiry();
+        return;
+      }
+      setDetailError(errorMessage(caught, copy));
+    } finally {
+      setActionState("");
+    }
+  }
+
+  // Submit the operator's answer to a parked NeedsInput job, then refresh. Reuses the
+  // shared session-expiry / error-surfacing boundary exactly like runAction.
+  async function answerCurrentJob(answer: string) {
+    if (!selectedJobId || !answer.trim()) return;
+
+    setActionState("answer");
+    setDetailError("");
+    try {
+      const resumed = await answerJob(selectedJobId, answer.trim(), token);
+      setStatus({ kind: "answerSubmitted", attempt: resumed.attempt });
       await refreshJobs(token);
       await refreshDetail(selectedJobId, token);
     } catch (caught) {
@@ -461,6 +494,12 @@ export default function App() {
                     onClick={() => setStatusFilter("running")}
                   />
                   <MetricPill
+                    label={copy.needsInputJobs}
+                    value={jobStats.needsInput}
+                    active={statusFilter === "needsInput"}
+                    onClick={() => setStatusFilter("needsInput")}
+                  />
+                  <MetricPill
                     label={copy.needsReviewJobs}
                     value={jobStats.needsReview}
                     active={statusFilter === "needsReview"}
@@ -535,6 +574,7 @@ export default function App() {
               onRefresh={refreshCurrentDetail}
               onCancel={() => void runAction("cancel")}
               onRetry={() => void runAction("retry")}
+              onAnswer={(answer) => void answerCurrentJob(answer)}
             />
           )}
         </main>
@@ -580,6 +620,7 @@ function renderStatus(status: StatusState, copy: AdminCopy): string {
   if (status.kind === "loadedJobs") return copy.loadedJobs(status.count);
   if (status.kind === "refreshFailed") return copy.refreshFailed;
   if (status.kind === "retryQueued") return copy.retryQueued(status.attempt);
+  if (status.kind === "answerSubmitted") return copy.needsInputSubmitted;
   return copy.cancelRequested(status.phase);
 }
 

@@ -16,6 +16,9 @@ export interface JobRecord extends JsonRecord {
   failure_category?: string | null;
   failure_reason?: string | null;
   next_action?: string | null;
+  // The agent's blocking question while the job is parked at NeedsInput (입력 대기).
+  // Returned by getJob; null/absent for every job that is not awaiting input.
+  pending_question?: string | null;
   pr_url?: string | null;
   last_event?: string | null;
   // Ticket context joined in by getJob (ticket_snapshots). Both snake_case (raw
@@ -177,6 +180,43 @@ export async function retryJob(jobId: string, token = getStoredAdminToken()): Pr
     method: "POST",
     token,
   });
+}
+
+/**
+ * Answer a parked NeedsInput job (입력 대기): POST the operator's answer, which the
+ * backend injects as the new run's guidance and re-enqueues (a fresh attempt). 401
+ * maps to the shared session-expiry sentinel so the re-auth boundary stays
+ * centralized; any other non-OK surfaces the backend message (e.g. a 409 if the job
+ * is no longer awaiting input). Returns the new run id + attempt like a retry.
+ */
+export async function answerJob(jobId: string, answer: string, token = getStoredAdminToken()): Promise<RetryResponse> {
+  const trimmed = token?.trim();
+  if (!trimmed) throw new Error("admin_access_key_required");
+
+  const response = await fetch(`${API_BASE_URL}/api/jobs/${encodeURIComponent(jobId)}/answer`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${trimmed}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ answer }),
+  });
+
+  if (response.status === 401) throw new Error("admin_access_key_invalid");
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(`${response.status} ${response.statusText}${message ? `: ${message}` : ""}`);
+  }
+
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) throw new Error("admin_api_unavailable");
+
+  try {
+    return (await response.json()) as RetryResponse;
+  } catch {
+    throw new Error("admin_api_unavailable");
+  }
 }
 
 /**

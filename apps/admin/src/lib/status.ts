@@ -57,6 +57,17 @@ export function isNeedsReviewJob(phase: unknown, outcome: unknown): boolean {
 }
 
 /**
+ * A job that is PARKED on a human answer (NeedsInput / 입력 대기): the agent asked
+ * one blocking question only a human can resolve and the job is held at
+ * phase=AwaitingInput / outcome=NeedsInput (no PR, no failure) until the operator
+ * answers. Non-terminal — it resumes on answer — so it earns its own label, badge,
+ * and list chip distinct from both NeedsReview and any failure.
+ */
+export function isNeedsInputJob(phase: unknown, outcome: unknown): boolean {
+  return String(outcome) === "NeedsInput" || String(phase) === "AwaitingInput";
+}
+
+/**
  * The single operator-facing primary status for a job. The backend models status
  * as a (phase, outcome) pair, which previously surfaced as two badges that could
  * read as a contradiction (phase=Completed + outcome=NeedsReview). This collapses
@@ -74,6 +85,10 @@ export function resolvePrimaryStatus(job: { phase?: unknown; outcome?: unknown }
   // cancel phases (CancelRequested / Cancelling) collapse to one operator-facing
   // state ("취소 중") — the distinction is internal, not operator-relevant.
   if (isCancellingPhase(phase)) return "Cancelling";
+
+  // Parked on a human answer → one dedicated state. Checked before NeedsReview and
+  // before the generic outcome handling so a parked job never reads as "Running".
+  if (isNeedsInputJob(phase, outcome)) return "NeedsInput";
 
   // Successful pipeline completion parked on human review → one dedicated state.
   if (isNeedsReviewJob(phase, outcome)) return "NeedsReview";
@@ -94,6 +109,10 @@ export function statusBadgeVariant(value: unknown): StatusBadgeVariant {
   if (normalized.includes("failed")) return "danger"; // FailedActionable / FailedInternal / CancelFailed
   if (normalized.includes("cancel")) return "outline"; // Cancelled / CancelRequested — muted, intentional stop
   if (normalized === "completed") return "dark"; // sealed / done
+  // Parked on a human answer → distinct info/violet tone, deliberately NOT the
+  // amber of NeedsReview nor the red of a failure. Checked before the "review"
+  // catch-all (which it does not match anyway) for clarity.
+  if (normalized === "needsinput" || normalized === "awaitinginput") return "info";
   // Queued is a passive "not started yet" wait → muted neutral, deliberately
   // distinct from the amber "needs human attention" of NeedsReview and from the
   // blue active-running phases, so the three never read alike.
@@ -263,15 +282,21 @@ export function deriveStageStates(
   return states;
 }
 
-export type StatusFilter = "all" | "running" | "needsReview" | "failed" | "completed";
+export type StatusFilter = "all" | "running" | "needsInput" | "needsReview" | "failed" | "completed";
 
 export function matchesStatusFilter(job: { phase?: unknown; outcome?: unknown }, filter: StatusFilter): boolean {
   switch (filter) {
     case "running":
+      // A parked NeedsInput job is held at phase=AwaitingInput, which is NOT in the
+      // running set, so it is correctly excluded from "실행 중".
       return isRunningPhase(job.phase);
+    case "needsInput":
+      return isNeedsInputJob(job.phase, job.outcome);
     case "needsReview":
       return isNeedsReviewJob(job.phase, job.outcome);
     case "failed":
+      // NeedsInput is a clean park, not a failure (phase/outcome never start with
+      // "Failed"), so the two chips stay mutually exclusive.
       return isFailedJob(job.phase, job.outcome);
     case "completed":
       // "완료" means merged/sealed — exclude jobs still parked on PR review so the

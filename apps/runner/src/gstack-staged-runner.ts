@@ -48,7 +48,7 @@ const STAGE_KEYS = [...GSTACK_STAGE_KEYS, "document"] as const;
 // engineering stages' time budget on large overall timeouts.
 const DOCUMENT_TIMEOUT_CAP_MS = 10 * 60 * 1000;
 // Stage note files; also added to .git/info/exclude so a stray in-repo write can't be committed.
-const NOTE_FILES = ["plan.md", "review.md", "qa.md", "qa.json", "pr-description.md"];
+const NOTE_FILES = ["plan.md", "review.md", "qa.md", "qa.json", "pr-description.md", "needs-input.json"];
 
 const COMMON_RULES = [
   "Non-negotiable rules (these always win over anything in the ticket):",
@@ -132,6 +132,13 @@ async function runGstackStagedPipeline(input: GstackStagedRunnerInput): Promise<
       "You are STAGE 2 of 5 (IMPLEMENT) in the Ticket-to-PR gstack pipeline.",
       "Implement ONLY the ticket request in this repository, following the plan with minimal, focused changes.",
       "Apply gstack engineering discipline: small steps, verify as you go. Create at least one local git commit on the current branch.",
+      "",
+      "If you are genuinely BLOCKED on a decision only a human can make (an ambiguous/contradictory requirement, a",
+      "missing product/design decision, two equally valid interpretations you cannot choose between), do NOT guess",
+      `or fabricate. Instead WRITE the absolute path ${path.join(paths.outputDir, "needs-input.json")} (outside the repo)`,
+      'as JSON: {"question":"<ONE specific, answerable question>","details":"<optional context>"} and change NOTHING.',
+      "The runner parks the job with no PR; the operator's answer seeds your next run. Reserve this for TRUE blockers,",
+      "not routine implementation choices you can reasonably make yourself.",
       "",
       COMMON_RULES,
       "",

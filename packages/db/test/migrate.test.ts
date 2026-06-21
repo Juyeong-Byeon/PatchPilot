@@ -57,6 +57,15 @@ describe("migrate / listMigrationFiles", () => {
     expect(sql).toMatch(/value jsonb not null/i);
   });
 
+  it("includes the jobs.pending_question NeedsInput migration as an idempotent ADD COLUMN", () => {
+    const files = listMigrationFiles(join(srcDir, "migrations"));
+    const target = files.find((f) => f.fileName.includes("pending_question"));
+    expect(target).toMatchObject({ version: "0005" });
+    const sql = readFileSync(join(srcDir, "migrations", target!.fileName), "utf8");
+    expect(sql).toMatch(/alter table jobs/i);
+    expect(sql).toMatch(/add column if not exists pending_question/i);
+  });
+
   it("returns [] when the migrations directory is missing", () => {
     expect(listMigrationFiles(join(srcDir, "does-not-exist"))).toEqual([]);
   });
@@ -88,5 +97,9 @@ describe("migrate / idempotent schema baseline", () => {
 
   it("declares the app_settings override table in the idempotent baseline", () => {
     expect(schema).toMatch(/create table if not exists app_settings/i);
+  });
+
+  it("declares jobs.pending_question for the NeedsInput park in the baseline", () => {
+    expect(schema).toMatch(/pending_question text/i);
   });
 });

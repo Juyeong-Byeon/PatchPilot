@@ -17,6 +17,13 @@ export interface AdminRepositories {
     actor: string,
     guidance?: RetryGuidanceView,
   ): Promise<{ runId: string; attempt: number }>;
+  /**
+   * Resume a parked NeedsInput job by injecting the operator's answer (reuses the
+   * retry-with-guidance plumbing: the answer is persisted as the new run's
+   * guidance). Throws an HTTP-coded error — 404 (job not found) / 409 (job is not
+   * awaiting input, or the answer is empty) — which the route maps to a status.
+   */
+  answerNeedsInput(jobId: string, answer: string, actor: string): Promise<{ runId: string; attempt: number }>;
   getMetrics(periodDays?: number): Promise<MetricsSummary>;
   transitionJob(jobId: string, phase: InternalPhase, outcome: UserOutcome, reason?: string): Promise<void>;
   appendEvent(input: {
@@ -46,6 +53,9 @@ export interface RetryGuidanceView {
 
 /** Max length of an operator guidance note; keeps the steering blurb bounded. */
 const MAX_GUIDANCE_LENGTH = 4000;
+
+/** Max length of an operator answer to a NeedsInput question (same bound as guidance). */
+const MAX_ANSWER_LENGTH = 4000;
 
 export type CancelRequestView =
   | { status: "requested" }
@@ -158,6 +168,55 @@ export async function registerAdminRoutes(
     }
     return reply.code(202).send({ ok: true, runId: retry.runId, attempt: retry.attempt });
   });
+
+  // NeedsInput resume: the operator answers the agent's blocking question. The
+  // answer is injected as the new run's guidance (reusing the retry-with-guidance
+  // plumbing), then the run is re-enqueued exactly like a retry. 409 when the job
+  // is not parked on a question; 400 on an empty / over-long answer.
+  app.post<{ Params: { id: string }; Body?: { answer?: unknown } }>("/api/jobs/:id/answer", async (request, reply) => {
+    const answer = normalizeAnswer(request.body?.answer);
+    if (answer === "invalid") {
+      return reply.code(400).send({ error: `Answer must be a non-empty string under ${MAX_ANSWER_LENGTH} characters` });
+    }
+
+    let resumed: { runId: string; attempt: number };
+    try {
+      resumed = await repos.answerNeedsInput(request.params.id, answer, "admin");
+    } catch (error) {
+      if (isHttpError(error, 404)) return reply.code(404).send({ error: "Job not found" });
+      // The repo's guard rejects any job that is not parked on a question (or a
+      // double submit that already resumed it) with a 409.
+      if (isHttpError(error, 409)) return reply.code(409).send({ error: "Job is not awaiting input" });
+      throw error;
+    }
+
+    try {
+      await queue.add(
+        request.params.id,
+        {
+          jobId: request.params.id,
+          runId: resumed.runId,
+          attempt: resumed.attempt,
+        },
+        // X6: stable per-attempt jobId dedups a double-submitted resume.
+        { jobId: enqueueJobId(request.params.id, resumed.runId) },
+      );
+    } catch (error) {
+      const message = getErrorMessage(error);
+      await repos.transitionJob(request.params.id, "Failed", "FailedInternal", message);
+      await repos.appendEvent({
+        jobId: request.params.id,
+        runId: resumed.runId,
+        attempt: resumed.attempt,
+        phase: "Failed",
+        eventType: "job.answer_enqueue_failed",
+        source: "api",
+        message,
+      });
+      return reply.code(503).send({ error: "Answer enqueue failed" });
+    }
+    return reply.code(202).send({ ok: true, runId: resumed.runId, attempt: resumed.attempt });
+  });
 }
 
 function isHttpError(error: unknown, statusCode: number): boolean {
@@ -191,6 +250,20 @@ function normalizeGuidance(raw: unknown): string | null | "invalid" {
   const trimmed = raw.trim();
   if (trimmed.length === 0) return null;
   if (trimmed.length > MAX_GUIDANCE_LENGTH) return "invalid";
+  return trimmed;
+}
+
+/**
+ * Normalizes an operator answer to a NeedsInput question. A non-string, empty /
+ * whitespace-only, or over-long value → `"invalid"` (400); otherwise the trimmed
+ * answer. Unlike guidance, an empty answer is invalid (you cannot "answer" with
+ * nothing) — so empty maps to 400, not to a no-op.
+ */
+function normalizeAnswer(raw: unknown): string | "invalid" {
+  if (typeof raw !== "string") return "invalid";
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return "invalid";
+  if (trimmed.length > MAX_ANSWER_LENGTH) return "invalid";
   return trimmed;
 }
 

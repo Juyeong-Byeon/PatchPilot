@@ -181,6 +181,38 @@ describe("App", () => {
     expect(reviewChip).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("renders an 입력 대기 (NeedsInput) filter chip that counts and filters parked jobs", async () => {
+    window.localStorage.setItem("ADMIN_TOKEN", "access-key");
+    window.history.pushState(null, "", "/jobs");
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      const body = url.endsWith("/api/jobs")
+        ? [
+            { id: "job_parked", phase: "AwaitingInput", outcome: "NeedsInput", repository: "acme/web" },
+            { id: "job_running", phase: "Implementing", outcome: "Running", repository: "acme/web" },
+          ]
+        : [];
+      return jsonResponse(body);
+    });
+
+    render(<App />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const filterGroup = screen.getByRole("group", { name: "작업 필터" });
+    const inputChip = within(filterGroup).getByRole("button", { name: /입력 대기/ });
+    // Only the parked job counts toward the chip.
+    expect(inputChip).toHaveTextContent("1");
+
+    await act(async () => {
+      inputChip.click();
+      await Promise.resolve();
+    });
+    expect(inputChip).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("surfaces a single session-expired state and stops polling on a 401", async () => {
     vi.useFakeTimers();
     window.localStorage.setItem("ADMIN_TOKEN", "stale-key");
