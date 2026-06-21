@@ -66,7 +66,7 @@ export type GitHubWebhookResult =
 
 export interface HandleGitHubWebhookOptions {
   /** GitHub `x-github-delivery` header — enables exactly-once dedup when present. */
-  deliveryId?: string;
+  deliveryId?: string | undefined;
 }
 
 export async function handleGitHubPullRequestWebhook(

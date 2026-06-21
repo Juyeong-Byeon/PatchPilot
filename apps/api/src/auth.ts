@@ -54,7 +54,7 @@ export interface LarkWebhookVerifierOptions {
    * request is rejected even with a valid signature — this is the replay guard's
    * coarse bound; the nonce cache is the fine one.
    */
-  replayWindowSeconds?: number;
+  replayWindowSeconds?: number | undefined;
   /** Injectable clock (ms) for deterministic tests. Defaults to Date.now. */
   now?: () => number;
 }

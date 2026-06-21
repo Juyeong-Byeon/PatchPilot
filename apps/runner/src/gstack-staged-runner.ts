@@ -34,8 +34,8 @@ export interface GstackStagedRunnerInput {
 
 interface QaResult {
   passed: boolean;
-  command?: string;
-  summary?: string;
+  command?: string | undefined;
+  summary?: string | undefined;
 }
 
 // The gstack engineering stages plus a final platform stage that authors the
@@ -194,7 +194,7 @@ async function runGstackStagedPipeline(input: GstackStagedRunnerInput): Promise<
   if (qa && qa.passed === false) {
     throw new Error(`gstack stage "verify" reported failing verification: ${qa.summary ?? "see qa.md"}`);
   }
-  const tests: Array<{ command: string; status: "passed" | "skipped"; summary?: string }> = qa
+  const tests: Array<{ command: string; status: "passed" | "skipped"; summary?: string | undefined }> = qa
     ? [{ command: qa.command ?? "project checks", status: "passed", summary: qa.summary }]
     : [
         {

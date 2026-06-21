@@ -2,9 +2,9 @@ export interface LarkStatusUpdate {
   recordId: string;
   status: string;
   jobId?: string;
-  prUrl?: string;
-  prNumber?: number;
-  failureReason?: string;
+  prUrl?: string | undefined;
+  prNumber?: number | undefined;
+  failureReason?: string | undefined;
 }
 
 export interface LarkStatusFieldMapping {

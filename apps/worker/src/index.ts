@@ -153,7 +153,7 @@ export function startWorkspaceLifecycle(
   const config: WorkspaceLifecycleConfig & {
     intervalMs: number;
     getActiveRunIds: () => ReadonlySet<string>;
-    resolveRetentionDays?: () => Promise<number>;
+    resolveRetentionDays?: (() => Promise<number>) | undefined;
   } = {
     workspaceRoot: env.workspaceRoot,
     failedRetentionDays: env.failedWorkspaceRetentionDays,

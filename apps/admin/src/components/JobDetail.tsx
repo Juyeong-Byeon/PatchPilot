@@ -815,7 +815,7 @@ function ArtifactPanel({
   variant = "card",
 }: {
   artifacts: Artifact[];
-  totalCount?: number;
+  totalCount?: number | undefined;
   copy: AdminCopy;
   locale: Locale;
   variant?: "card" | "embedded";
@@ -871,7 +871,7 @@ function ArtifactPanel({
 
 interface StepContext {
   phase: string;
-  source?: string;
+  source?: string | undefined;
   sources: string[];
   startMs: number | null;
   endMs: number | null;

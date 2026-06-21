@@ -10,12 +10,12 @@ export interface GstackCommandInput {
   runnerImage: string;
   workspacePath: string;
   workspaceMountSource?: string;
-  gstackCommand?: string;
-  gstackArgs?: string;
-  codexAuthFile?: string;
-  codexConfigFile?: string;
-  codexSkillsDir?: string;
-  gstackSkillSourceDir?: string;
+  gstackCommand?: string | undefined;
+  gstackArgs?: string | undefined;
+  codexAuthFile?: string | undefined;
+  codexConfigFile?: string | undefined;
+  codexSkillsDir?: string | undefined;
+  gstackSkillSourceDir?: string | undefined;
   job: {
     jobId: string;
     ticketSnapshotId: string;
@@ -29,8 +29,8 @@ export interface GstackCommandInput {
     attempt: number;
     workBranch: string;
   };
-  timeoutSeconds?: number;
-  githubToken?: string;
+  timeoutSeconds?: number | undefined;
+  githubToken?: string | undefined;
 }
 
 export interface CommandSpec {
@@ -42,24 +42,24 @@ export interface GstackExecutorOptions {
   runnerImage: string;
   resultPath?: string;
   timeoutSeconds?: number;
-  githubToken?: string;
+  githubToken?: string | undefined;
   workspaceRoot?: string;
-  workspaceHostRoot?: string;
-  gstackCommand?: string;
+  workspaceHostRoot?: string | undefined;
+  gstackCommand?: string | undefined;
   /**
    * Explicit GSTACK_ARGS override (back-compat). When set it is used verbatim for
    * every job regardless of mode. When unset, args are selected per-job from the
    * executor mode via {@link gstackStagedArgs} / {@link gstackSingleArgs}.
    */
-  gstackArgs?: string;
+  gstackArgs?: string | undefined;
   /** GSTACK_ARGS for the staged pipeline (input.executorMode === "staged"). */
   gstackStagedArgs?: string;
   /** GSTACK_ARGS for the single-pass pipeline (default). */
   gstackSingleArgs?: string;
-  codexAuthFile?: string;
-  codexConfigFile?: string;
-  codexSkillsDir?: string;
-  gstackSkillSourceDir?: string;
+  codexAuthFile?: string | undefined;
+  codexConfigFile?: string | undefined;
+  codexSkillsDir?: string | undefined;
+  gstackSkillSourceDir?: string | undefined;
   policy?: {
     repositoryAllowlist: string[];
     protectedPathDenylist: string[];
@@ -287,7 +287,7 @@ export async function writeRunnerInputArtifacts(input: {
     protectedPathDenylist: string[];
   };
   /** X4 operator retry-guidance, written into context.json + a guidance markdown file. */
-  retryGuidance?: string;
+  retryGuidance?: string | undefined;
 }): Promise<void> {
   const paths = getWorkspacePaths(input.workspacePath);
   const guidance = input.retryGuidance?.trim();
@@ -373,7 +373,7 @@ export async function runCommand(
   input: ExecutorInput,
   timeoutMs = 3_630_000,
   killGraceMs = 2000,
-  options: { signal?: AbortSignal; containerName?: string } = {},
+  options: { signal?: AbortSignal | undefined; containerName?: string } = {},
 ): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const child = spawn(command.file, command.args, { detached: true, stdio: ["ignore", "pipe", "pipe"] });
