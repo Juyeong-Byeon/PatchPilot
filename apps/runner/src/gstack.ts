@@ -37,11 +37,21 @@ export function runGstack(repoDir: string, logPath: string, timeoutMs: number, k
           }, killGraceMs);
         }, timeoutMs);
 
+        // Tee the (redacted) gstack output to BOTH the per-run log file and this
+        // process's stdout/stderr. The platform captures the runner's stdout, so
+        // echoing here is what surfaces the staged `=== gstack stage N/M: ... ===`
+        // banners (→ gstack.stage events → the admin sub-track) and the live agent
+        // output. Without it, gstack output is trapped in the log file and the
+        // platform only ever sees the runner's own console logs.
         child.stdout.on("data", (chunk: Buffer) => {
-          logStream.write(stdoutRedactor(chunk.toString("utf8")));
+          const redacted = stdoutRedactor(chunk.toString("utf8"));
+          logStream.write(redacted);
+          process.stdout.write(redacted);
         });
         child.stderr.on("data", (chunk: Buffer) => {
-          logStream.write(stderrRedactor(chunk.toString("utf8")));
+          const redacted = stderrRedactor(chunk.toString("utf8"));
+          logStream.write(redacted);
+          process.stderr.write(redacted);
         });
 
         child.on("error", (error) => {
@@ -66,8 +76,12 @@ export function runGstack(repoDir: string, logPath: string, timeoutMs: number, k
             clearTimeout(killTimer);
           }
 
-          logStream.write(stdoutRedactor("", true));
-          logStream.write(stderrRedactor("", true));
+          const stdoutTail = stdoutRedactor("", true);
+          const stderrTail = stderrRedactor("", true);
+          logStream.write(stdoutTail);
+          logStream.write(stderrTail);
+          if (stdoutTail) process.stdout.write(stdoutTail);
+          if (stderrTail) process.stderr.write(stderrTail);
           logStream.end(() => {
             if (settled) {
               return;
