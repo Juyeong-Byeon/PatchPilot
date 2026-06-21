@@ -85,6 +85,19 @@ export async function buildServer(deps: ApiServerDependencies): Promise<FastifyI
       root: deps.adminStaticRoot,
       prefix: "/",
     });
+    // SPA fallback: a full-page load of a client route (e.g. /jobs/:id on reload,
+    // bookmark, or shared link) must return index.html, not a JSON 404. API and
+    // webhook misses stay real 404s so callers still get a machine-readable error.
+    if (existsSync(join(deps.adminStaticRoot, "index.html"))) {
+      app.setNotFoundHandler((request, reply) => {
+        if (request.method === "GET" && !request.url.startsWith("/api") && !request.url.startsWith("/webhooks")) {
+          return reply.type("text/html").sendFile("index.html");
+        }
+        return reply
+          .code(404)
+          .send({ message: `Route ${request.method}:${request.url} not found`, error: "Not Found", statusCode: 404 });
+      });
+    }
   }
 
   return app;
