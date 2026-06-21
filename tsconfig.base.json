@@ -5,6 +5,10 @@
     "moduleResolution": "NodeNext",
     "lib": ["ES2022"],
     "strict": true,
+    // noImplicitAny + strictNullChecks are already implied by `strict`; kept
+    // explicit so the type-safety contract is readable at a glance.
+    "noImplicitAny": true,
+    "strictNullChecks": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     "esModuleInterop": true,
