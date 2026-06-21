@@ -4,7 +4,6 @@
 // format + parser in one place stops the producer and consumer from drifting.
 
 export const GSTACK_STAGE_KEYS = ["plan", "implement", "review", "verify"] as const;
-export type GstackStageKey = (typeof GSTACK_STAGE_KEYS)[number];
 
 export interface GstackStageBanner {
   index: number;
