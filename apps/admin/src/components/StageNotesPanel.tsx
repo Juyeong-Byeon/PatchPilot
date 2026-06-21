@@ -46,6 +46,7 @@ function StageNote({ note, copy }: { note: Artifact; copy: AdminCopy }) {
   // Collapsed by default — operators expand the stage note they care about.
   const [open, setOpen] = useState(false);
   const meta = STAGE_META[String(note.kind)];
+  if (!meta) return null;
   const Icon = meta.icon;
   const text = typeof note.content === "string" ? note.content : safeStringify(note.content);
 
@@ -105,7 +106,7 @@ function renderMarkdown(source: string): ReactNode {
         </p>,
       );
     } else if (bullet) {
-      list.push(bullet[1]);
+      list.push(bullet[1] ?? "");
     } else if (line.trim() === "") {
       flushList();
     } else {

@@ -101,7 +101,7 @@ export async function registerSettingsRoutes(
   adminToken: string,
 ): Promise<void> {
   app.addHook("preHandler", async (request) => {
-    const path = request.url.split("?", 1)[0];
+    const path = request.url.split("?", 1)[0] ?? "";
     if (path.startsWith("/api/settings")) {
       assertAdminToken(request, adminToken);
     }
