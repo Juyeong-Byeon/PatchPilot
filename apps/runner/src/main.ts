@@ -1,7 +1,7 @@
 import { access } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { readJsonArtifact, readTextArtifact } from "@ticket-to-pr/runner-contract";
+import { parseRunResultStatus, readJsonArtifact, readTextArtifact } from "@ticket-to-pr/runner-contract";
 import { checkoutBaseAndCreateBranch, cloneRepository, getChangedFiles, getHeadSha, hasLocalCommit } from "./git.js";
 import { runGstack } from "./gstack.js";
 import { prepareWorkspace } from "./workspace.js";
@@ -30,6 +30,25 @@ export async function runRunner(env: NodeJS.ProcessEnv = process.env): Promise<v
   console.log(`Checked out ${config.workBranch} from ${config.targetBranch} at ${baseSha}`);
 
   await runGstack(paths.repoDir, gstackLog, config.timeoutSeconds * 1000);
+
+  // result.json is the source of truth for the run's outcome. A run that PARKED on
+  // operator input (status "needs_input") or reported a structured failure
+  // (status "failed") legitimately produces no commits, so only the completed path
+  // enforces commits/changed-files. Exiting cleanly here lets the worker read
+  // result.json and act on the real status — instead of a non-zero exit turning a
+  // valid parked/failed outcome into an "exited with code 1" infra crash.
+  await requireFile(paths.resultJson);
+  const status = parseRunResultStatus(await readJsonArtifact(paths.resultJson));
+
+  if (status === "needs_input") {
+    console.log("Runner parked: agent requested operator input (needs-input.json); no changes pushed");
+    return;
+  }
+  if (status === "failed") {
+    console.log("Runner reported a structured failure; no changes pushed");
+    return;
+  }
+
   await verifyRequiredArtifacts(paths.resultJson, paths.prTitle, paths.prBody);
 
   if (!(await hasLocalCommit(paths.repoDir, config.targetBranch))) {

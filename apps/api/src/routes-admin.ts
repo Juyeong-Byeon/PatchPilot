@@ -278,5 +278,8 @@ function isActionableFailure(preflight: RetryPreflightView): boolean {
  * genuinely new attempt (new runId) still enqueues.
  */
 function enqueueJobId(jobId: string, runId: string): string {
-  return `${jobId}:${runId}`;
+  // BullMQ rejects custom job ids containing ":" (its Redis key separator), so use
+  // a "__" separator. Keyed by jobId+runId so each retry/answer attempt is its own
+  // dedup unit: re-submitting the same attempt collapses, a new attempt enqueues.
+  return `${jobId}__${runId}`;
 }
