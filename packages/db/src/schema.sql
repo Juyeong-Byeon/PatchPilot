@@ -45,6 +45,9 @@ create table if not exists runs (
   work_branch text,
   head_sha text,
   exit_code integer,
+  -- Pipeline that ran this attempt: 'single-pass' | 'staged' (epic D / X3). Also
+  -- added to existing databases by migration 0002.
+  executor_mode text,
   heartbeat_at timestamptz,
   started_at timestamptz,
   finished_at timestamptz,

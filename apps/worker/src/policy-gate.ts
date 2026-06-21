@@ -11,6 +11,8 @@ export interface PolicyGateInput extends WorkerPolicyConfig {
   expectedTargetBranch?: string;
 }
 
+export type VerificationVerdict = "passed" | "skipped" | "failed";
+
 export interface PolicyGateArtifact {
   status: "passed" | "failed";
   repository: string;
@@ -18,6 +20,24 @@ export interface PolicyGateArtifact {
   changedFiles: string[];
   deniedFiles: string[];
   reasons: string[];
+  /**
+   * Trusted summary of the verification evidence the gate evaluated. `passed` when
+   * at least one test passed and none failed; `failed` on any explicit failure;
+   * `skipped` when verification was honestly not run (single-pass). Surfaced in the
+   * platform PR footer and the admin evidence card — never an agent claim.
+   */
+  verification: VerificationVerdict;
+}
+
+/**
+ * Collapse the per-test statuses into a single trusted verdict. Any explicit
+ * `failed` dominates; otherwise at least one `passed` means passed; everything
+ * else (only skipped, or no tests at all) is `skipped`.
+ */
+export function summarizeVerification(tests: AgentResult["tests"]): VerificationVerdict {
+  if (tests.some((test) => test.status === "failed")) return "failed";
+  if (tests.some((test) => test.status === "passed")) return "passed";
+  return "skipped";
 }
 
 export interface PolicyGateResult {
@@ -41,6 +61,7 @@ export function evaluatePreExecutionPolicy(input: PolicyGateInput): PolicyGateRe
       changedFiles: [],
       deniedFiles: [],
       reasons,
+      verification: "skipped",
     },
   };
 }
@@ -68,8 +89,13 @@ export function evaluatePolicyGate(result: AgentResult, input: PolicyGateInput):
   if (!result.pullRequestDraft?.title || !result.pullRequestDraft.bodyPath) {
     reasons.push("PR draft is missing");
   }
-  if (result.tests.length === 0 || result.tests.every((test) => test.status !== "passed")) {
-    reasons.push("Verification evidence is missing");
+  // Verification is BLOCKING only on an explicit failure. A `skipped` test is the
+  // honest single-pass signal ("no project verification ran") and must NOT hard-fail
+  // the gate — the platform footer surfaces it as "검증 없음 (verification skipped)".
+  // A wholly missing `tests` array (no evidence at all) is also treated as skipped,
+  // not blocking, because the runner schema now always emits an explicit status.
+  if (result.tests.some((test) => test.status === "failed")) {
+    reasons.push("Verification failed");
   }
 
   const allowed = reasons.length === 0;
@@ -83,6 +109,7 @@ export function evaluatePolicyGate(result: AgentResult, input: PolicyGateInput):
       changedFiles,
       deniedFiles,
       reasons,
+      verification: summarizeVerification(result.tests),
     },
   };
 }

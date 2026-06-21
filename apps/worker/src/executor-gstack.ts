@@ -46,7 +46,16 @@ export interface GstackExecutorOptions {
   workspaceRoot?: string;
   workspaceHostRoot?: string;
   gstackCommand?: string;
+  /**
+   * Explicit GSTACK_ARGS override (back-compat). When set it is used verbatim for
+   * every job regardless of mode. When unset, args are selected per-job from the
+   * executor mode via {@link gstackStagedArgs} / {@link gstackSingleArgs}.
+   */
   gstackArgs?: string;
+  /** GSTACK_ARGS for the staged pipeline (input.executorMode === "staged"). */
+  gstackStagedArgs?: string;
+  /** GSTACK_ARGS for the single-pass pipeline (default). */
+  gstackSingleArgs?: string;
   codexAuthFile?: string;
   codexConfigFile?: string;
   codexSkillsDir?: string;
@@ -123,6 +132,20 @@ export function buildGstackDockerCommand(input: GstackCommandInput): CommandSpec
   };
 }
 
+/**
+ * Pick the GSTACK_ARGS for a job by executor mode (epic D). An explicit
+ * `options.gstackArgs` override wins for every job (back-compat). Otherwise the
+ * staged mode uses `gstackStagedArgs` and everything else uses `gstackSingleArgs`;
+ * either may be undefined, in which case the runner image's own default applies.
+ */
+export function resolveGstackArgs(
+  executorMode: ExecutorInput["executorMode"],
+  options: Pick<GstackExecutorOptions, "gstackArgs" | "gstackStagedArgs" | "gstackSingleArgs">,
+): string | undefined {
+  if (options.gstackArgs !== undefined) return options.gstackArgs;
+  return executorMode === "staged" ? options.gstackStagedArgs : options.gstackSingleArgs;
+}
+
 export async function executeGstack(input: ExecutorInput, options: GstackExecutorOptions): Promise<AgentResult> {
   const repositoryUrl = toRepositoryUrl(input.job.repository);
   const trustedBaseSha = await resolveRemoteTargetSha(repositoryUrl, input.job.targetBranch, options.githubToken);
@@ -136,7 +159,7 @@ export async function executeGstack(input: ExecutorInput, options: GstackExecuto
     workspacePath: input.run.workspacePath,
     workspaceMountSource,
     gstackCommand: options.gstackCommand,
-    gstackArgs: options.gstackArgs,
+    gstackArgs: resolveGstackArgs(input.executorMode, options),
     codexAuthFile: options.codexAuthFile,
     codexConfigFile: options.codexConfigFile,
     codexSkillsDir: options.codexSkillsDir,

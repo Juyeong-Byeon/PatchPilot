@@ -223,13 +223,14 @@ export class Repositories {
   async createRun(input: CreateRunInput): Promise<RunRecord> {
     const result = await this.pool.query<RunRow>(
       `insert into runs
-       (id, job_id, attempt, container_id, runner_image_digest, workspace_path, base_sha, work_branch, started_at, heartbeat_at)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,now(),now())
+       (id, job_id, attempt, container_id, runner_image_digest, workspace_path, base_sha, work_branch, executor_mode, started_at, heartbeat_at)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,now(),now())
        on conflict (id) do update set
          workspace_path = coalesce(nullif(excluded.workspace_path, ''), runs.workspace_path),
          work_branch = coalesce(nullif(excluded.work_branch, ''), runs.work_branch),
+         executor_mode = coalesce(excluded.executor_mode, runs.executor_mode),
          heartbeat_at=now()
-       returning id, job_id, attempt, container_id, runner_image_digest, workspace_path, base_sha, work_branch, head_sha, exit_code`,
+       returning id, job_id, attempt, container_id, runner_image_digest, workspace_path, base_sha, work_branch, head_sha, exit_code, executor_mode`,
       [
         input.id,
         input.jobId,
@@ -239,6 +240,7 @@ export class Repositories {
         input.workspacePath ?? "",
         input.baseSha ?? null,
         input.workBranch ?? "",
+        input.executorMode ?? null,
       ],
     );
     return mapRun(result.rows[0]);
@@ -276,10 +278,24 @@ export class Repositories {
   }
 
   async savePullRequest(input: SavePullRequestInput): Promise<void> {
+    // X2 idempotency: a retried publish that reused an existing open PR (same
+    // repository, pr_number) must not throw on the (repository, pr_number) unique
+    // index — upsert the latest evidence instead so reconcile/merge still resolve
+    // to one row. Keeps the original id stable; refreshes run/sha/body fields.
     await this.pool.query(
       `insert into pull_requests
        (id, job_id, run_id, repository, target_branch, work_branch, base_sha, head_sha, commit_shas, pr_url, pr_number, pr_title, pr_body)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+       on conflict (repository, pr_number) do update set
+         run_id = excluded.run_id,
+         target_branch = excluded.target_branch,
+         work_branch = excluded.work_branch,
+         base_sha = excluded.base_sha,
+         head_sha = excluded.head_sha,
+         commit_shas = excluded.commit_shas,
+         pr_url = excluded.pr_url,
+         pr_title = excluded.pr_title,
+         pr_body = excluded.pr_body`,
       [
         input.id,
         input.jobId,
@@ -411,6 +427,7 @@ export class Repositories {
          pr.pr_url,
          last_run.work_branch,
          last_run.attempt,
+         last_run.executor_mode,
          last_event.message as last_event
        from jobs j
        join ticket_snapshots ts on ts.id = j.ticket_snapshot_id
@@ -422,7 +439,7 @@ export class Repositories {
          limit 1
        ) pr on true
        left join lateral (
-         select work_branch, attempt
+         select work_branch, attempt, executor_mode
          from runs
          where job_id = j.id
          order by attempt desc, started_at desc
@@ -455,7 +472,8 @@ export class Repositories {
          pr.pr_number,
          pr.pr_title,
          last_run.work_branch,
-         last_run.attempt
+         last_run.attempt,
+         last_run.executor_mode
        from jobs j
        join ticket_snapshots ts on ts.id = j.ticket_snapshot_id
        left join lateral (
@@ -466,7 +484,7 @@ export class Repositories {
          limit 1
        ) pr on true
        left join lateral (
-         select work_branch, attempt
+         select work_branch, attempt, executor_mode
          from runs
          where job_id = j.id
          order by attempt desc, started_at desc
@@ -742,6 +760,7 @@ interface RunRow {
   work_branch: string;
   head_sha: string | null;
   exit_code: number | null;
+  executor_mode?: string | null;
 }
 
 function mapRun(row: RunRow): RunRecord {
@@ -756,5 +775,6 @@ function mapRun(row: RunRow): RunRecord {
     workBranch: row.work_branch,
     headSha: row.head_sha,
     exitCode: row.exit_code,
+    executorMode: row.executor_mode ?? null,
   };
 }
