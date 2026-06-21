@@ -29,6 +29,30 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "작업" })).toBeInTheDocument();
   });
 
+  it("renders a skip-to-content link targeting the focusable main region", () => {
+    window.localStorage.setItem("ADMIN_TOKEN", "access-key");
+    window.history.pushState(null, "", "/jobs");
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => jsonResponse([]));
+
+    render(<App />);
+
+    // WCAG 2.4.1 bypass-block: a skip link points at the main content landmark…
+    const skipLink = screen.getByRole("link", { name: adminCopy.ko.skipToContent });
+    expect(skipLink).toHaveAttribute("href", "#main-content");
+    // …and the <main> region carries the matching id so the link resolves.
+    const main = document.getElementById("main-content");
+    expect(main).not.toBeNull();
+    expect(main?.tagName).toBe("MAIN");
+  });
+
+  it("associates the onboarding access-key input with its label", () => {
+    render(<App />);
+
+    // The label resolves the input by text (explicit htmlFor association).
+    const input = screen.getByLabelText(adminCopy.ko.tokenLabel);
+    expect(input).toHaveAttribute("id", "onboarding-token");
+  });
+
   it("shows the onboarding view and hides the job console when no token is saved", () => {
     render(<App />);
 
