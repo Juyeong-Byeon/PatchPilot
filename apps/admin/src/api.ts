@@ -1,3 +1,12 @@
+import {
+  parseCancelResponse,
+  parseJobMetrics,
+  parseRecord,
+  parseRecordArray,
+  parseRetryResponse,
+  parseSettingsView,
+} from "./lib/api-schemas.js";
+
 export type JsonRecord = Record<string, unknown>;
 
 export interface JobRecord extends JsonRecord {
@@ -149,29 +158,39 @@ export function storeAdminToken(token: string): void {
 }
 
 export async function fetchJobs(token = getStoredAdminToken()): Promise<JobRecord[]> {
-  return adminRequest<JobRecord[]>("/api/jobs", { token });
+  return adminRequest<JobRecord[]>("/api/jobs", { token, validate: parseRecordArray<JobRecord> });
 }
 
 export async function fetchJob(jobId: string, token = getStoredAdminToken()): Promise<JobRecord> {
-  return adminRequest<JobRecord>(`/api/jobs/${encodeURIComponent(jobId)}`, { token });
+  return adminRequest<JobRecord>(`/api/jobs/${encodeURIComponent(jobId)}`, { token, validate: parseRecord<JobRecord> });
 }
 
 export async function fetchJobEvents(jobId: string, token = getStoredAdminToken()): Promise<RunEvent[]> {
-  return adminRequest<RunEvent[]>(`/api/jobs/${encodeURIComponent(jobId)}/events`, { token });
+  return adminRequest<RunEvent[]>(`/api/jobs/${encodeURIComponent(jobId)}/events`, {
+    token,
+    validate: parseRecordArray<RunEvent>,
+  });
 }
 
 export async function fetchJobLogs(jobId: string, token = getStoredAdminToken()): Promise<LogLine[]> {
-  return adminRequest<LogLine[]>(`/api/jobs/${encodeURIComponent(jobId)}/logs`, { token });
+  return adminRequest<LogLine[]>(`/api/jobs/${encodeURIComponent(jobId)}/logs`, {
+    token,
+    validate: parseRecordArray<LogLine>,
+  });
 }
 
 export async function fetchJobArtifacts(jobId: string, token = getStoredAdminToken()): Promise<Artifact[]> {
-  return adminRequest<Artifact[]>(`/api/jobs/${encodeURIComponent(jobId)}/artifacts`, { token });
+  return adminRequest<Artifact[]>(`/api/jobs/${encodeURIComponent(jobId)}/artifacts`, {
+    token,
+    validate: parseRecordArray<Artifact>,
+  });
 }
 
 export async function cancelJob(jobId: string, token = getStoredAdminToken()): Promise<{ ok: boolean; phase: string }> {
   return adminRequest<{ ok: boolean; phase: string }>(`/api/jobs/${encodeURIComponent(jobId)}/cancel`, {
     method: "POST",
     token,
+    validate: parseCancelResponse,
   });
 }
 
@@ -179,6 +198,7 @@ export async function retryJob(jobId: string, token = getStoredAdminToken()): Pr
   return adminRequest<RetryResponse>(`/api/jobs/${encodeURIComponent(jobId)}/retry`, {
     method: "POST",
     token,
+    validate: parseRetryResponse,
   });
 }
 
@@ -212,11 +232,15 @@ export async function answerJob(jobId: string, answer: string, token = getStored
   const contentType = response.headers.get("content-type") ?? "";
   if (!contentType.includes("application/json")) throw new Error("admin_api_unavailable");
 
+  let body: unknown;
   try {
-    return (await response.json()) as RetryResponse;
+    body = await response.json();
   } catch {
     throw new Error("admin_api_unavailable");
   }
+  const parsed = parseRetryResponse(body);
+  if (!parsed) throw new Error("admin_api_unavailable");
+  return parsed;
 }
 
 /**
@@ -251,11 +275,17 @@ export async function fetchMetrics(token = getStoredAdminToken()): Promise<JobMe
   const contentType = response.headers.get("content-type") ?? "";
   if (!contentType.includes("application/json")) throw new Error(METRICS_UNAVAILABLE);
 
+  let body: unknown;
   try {
-    return (await response.json()) as JobMetrics;
+    body = await response.json();
   } catch {
     throw new Error(METRICS_UNAVAILABLE);
   }
+  // A malformed body is treated like an absent endpoint: hide the panel silently
+  // rather than letting a wrong-typed shape reach the dashboard render.
+  const parsed = parseJobMetrics(body);
+  if (!parsed) throw new Error(METRICS_UNAVAILABLE);
+  return parsed;
 }
 
 /**
@@ -285,11 +315,17 @@ export async function fetchSettings(token = getStoredAdminToken()): Promise<Sett
   const contentType = response.headers.get("content-type") ?? "";
   if (!contentType.includes("application/json")) throw new Error(SETTINGS_UNAVAILABLE);
 
+  let body: unknown;
   try {
-    return (await response.json()) as SettingsView;
+    body = await response.json();
   } catch {
     throw new Error(SETTINGS_UNAVAILABLE);
   }
+  // A malformed body degrades to the same hidden/disabled state as an absent
+  // endpoint instead of surfacing a broken Settings screen.
+  const parsed = parseSettingsView(body);
+  if (!parsed) throw new Error(SETTINGS_UNAVAILABLE);
+  return parsed;
 }
 
 /**
@@ -323,14 +359,29 @@ export async function updateSettings(
   const contentType = response.headers.get("content-type") ?? "";
   if (!contentType.includes("application/json")) throw new Error("admin_api_unavailable");
 
+  let body: unknown;
   try {
-    return (await response.json()) as SettingsView;
+    body = await response.json();
   } catch {
     throw new Error("admin_api_unavailable");
   }
+  const parsed = parseSettingsView(body);
+  if (!parsed) throw new Error("admin_api_unavailable");
+  return parsed;
 }
 
-async function adminRequest<T>(path: string, options: { method?: "GET" | "POST"; token?: string } = {}): Promise<T> {
+/**
+ * Shared fetch helper. The caller supplies a `validate` guard that runs against the
+ * parsed JSON, so the response shape is checked at runtime instead of being blindly
+ * cast to `T` (Phase 3 / G3 — see docs/type-safety-hardening-plan.md). A body that
+ * fails the guard is treated exactly like a non-JSON body: it throws
+ * `admin_api_unavailable` so the UI shows its existing connection-failure state
+ * rather than rendering a wrong-typed value.
+ */
+async function adminRequest<T>(
+  path: string,
+  options: { method?: "GET" | "POST"; token?: string; validate: (value: unknown) => T | null },
+): Promise<T> {
   const token = options.token?.trim();
   if (!token) throw new Error("admin_access_key_required");
 
@@ -351,9 +402,13 @@ async function adminRequest<T>(path: string, options: { method?: "GET" | "POST";
   const contentType = response.headers.get("content-type") ?? "";
   if (!contentType.includes("application/json")) throw new Error("admin_api_unavailable");
 
+  let body: unknown;
   try {
-    return (await response.json()) as T;
+    body = await response.json();
   } catch {
     throw new Error("admin_api_unavailable");
   }
+  const parsed = options.validate(body);
+  if (parsed === null) throw new Error("admin_api_unavailable");
+  return parsed;
 }
