@@ -5,8 +5,6 @@
 
 export type ThemePreference = "light" | "dark" | "system";
 
-export const THEME_PREFERENCES: readonly ThemePreference[] = ["light", "dark", "system"];
-
 const THEME_STORAGE_KEY = "ADMIN_THEME";
 
 function isThemePreference(value: unknown): value is ThemePreference {
