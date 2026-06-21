@@ -77,6 +77,12 @@ export interface ExecutorInput {
   appendLog?: (input: AppendExecutorLogInput) => Promise<void>;
   /** Aborted when a cancel is requested mid-run so the executor can stop the runner. */
   signal?: AbortSignal;
+  /**
+   * Operator retry-guidance (X4) to steer this attempt. The gstack executor writes
+   * it into the runner input context so the agent reads it alongside the ticket.
+   * Undefined on first attempts / retries without guidance.
+   */
+  retryGuidance?: string;
 }
 
 // How often the worker polls for a cancel request while the runner executes.
@@ -174,6 +180,13 @@ export interface WorkerRepositories {
     runId?: string;
     metadata?: unknown;
   }): Promise<void>;
+  /**
+   * Bump the run's heartbeat timestamp (L1). Optional so test doubles and older
+   * repositories without it still satisfy the interface; the worker simply skips
+   * heartbeats when it is absent. Injected by index.ts as a raw `update runs set
+   * heartbeat_at=now()` over the existing pool.
+   */
+  touchRunHeartbeat?(runId: string): Promise<void>;
 }
 
 export interface ProcessAgentJobOptions {
@@ -192,6 +205,22 @@ export interface ProcessAgentJobOptions {
    * job's priority via {@link resolveExecutorMode}.
    */
   executorModeOverride?: ExecutorMode;
+  /**
+   * Execution dedup hook (X6). When provided, the worker acquires a per-job lock
+   * before doing any work; if the lock is already held (a redelivered/duplicate
+   * delivery while another worker is still processing the same job), it no-ops
+   * instead of launching a second runner/PR. Injected by index.ts as a Postgres
+   * advisory lock over the existing pool. Omitted by test doubles and the mock
+   * worker, which then run without dedup (single-processor assumption).
+   */
+  acquireExecutionLock?: (jobId: string) => Promise<{ acquired: boolean; release(): Promise<void> }>;
+  /**
+   * GC the job's workspace after a successful publish (L1). Best-effort; injected by
+   * index.ts. Omitted in tests that assert on the workspace contents.
+   */
+  gcWorkspaceOnSuccess?: (jobId: string) => Promise<void>;
+  /** Run-heartbeat cadence while the runner executes (L1). 0/undefined disables. */
+  heartbeatIntervalMs?: number;
   ids?: {
     runId?: () => string;
     artifactId?: (kind: string) => string;
@@ -225,12 +254,31 @@ export type ProcessAgentJobResult =
   | { status: "completed"; runId: string }
   | { status: "failed"; runId: string }
   | { status: "policy_blocked"; runId: string }
-  | { status: "cancelled"; runId: string };
+  | { status: "cancelled"; runId: string }
+  // X6 execution dedup: another worker already holds this job's lock, so this
+  // (redelivered) delivery did no work. No run is created.
+  | { status: "dedup_skipped" };
 
 export async function processAgentJob(
   payload: AgentJobPayload,
   options: ProcessAgentJobOptions,
 ): Promise<ProcessAgentJobResult> {
+  // X6: take the per-job execution lock first. If another worker is already
+  // processing this job (crash redelivery / stalled-job requeue / duplicate
+  // enqueue that slipped past jobId dedup), no-op instead of launching a second
+  // runner and creating a duplicate PR. The lock is released in `finally`.
+  const lock = options.acquireExecutionLock ? await options.acquireExecutionLock(payload.jobId) : undefined;
+  if (lock && !lock.acquired) {
+    return { status: "dedup_skipped" };
+  }
+  try {
+    return await runAgentJob(payload, options);
+  } finally {
+    if (lock) await lock.release();
+  }
+}
+
+async function runAgentJob(payload: AgentJobPayload, options: ProcessAgentJobOptions): Promise<ProcessAgentJobResult> {
   const job = await options.repos.getJobForWorker(payload.jobId);
   if (!job) throw new Error(`Job not found: ${payload.jobId}`);
   if (payload.ticketSnapshotId && job.ticketSnapshotId !== payload.ticketSnapshotId) {
@@ -249,6 +297,12 @@ export async function processAgentJob(
   // unless an explicit GSTACK_ARGS override is in effect. Recorded on the run so the
   // admin can read it back, and emitted as an event for the timeline.
   const executorMode = options.executorModeOverride ?? resolveExecutorMode(job.priority);
+
+  // X4: operator retry-guidance to steer this attempt. Prefer the explicit payload
+  // field (set by the api track on retry); fall back to a `retryGuidance` string in
+  // the ticket's rawFields so the worker works even before the api track stamps the
+  // payload. Forward-compatible: undefined when neither is present.
+  const retryGuidance = resolveRetryGuidance(payload, job);
 
   const run = await options.repos.createRun({
     id: runId,
@@ -291,7 +345,9 @@ export async function processAgentJob(
     outcome: UserOutcome,
     reason?: string,
     lark?: { status: string; prUrl?: string; prNumber?: number; failureReason?: string },
-    failure?: { category: FailureCategory; nextAction: string },
+    // `category` widened to string so a runner's STRUCTURED failure category (X4)
+    // passes through unchanged; the underlying repo column is free-form text.
+    failure?: { category: FailureCategory | string; nextAction: string },
   ) => {
     if (failure !== undefined) {
       await options.repos.transitionJob(job.jobId, phase, outcome, reason, failure);
@@ -351,6 +407,14 @@ export async function processAgentJob(
       overridden: options.executorModeOverride !== undefined,
     });
     await appendProgressLog("Planning", "worker", "작업자가 티켓과 저장소 정책을 확인하고 있습니다.");
+    if (retryGuidance) {
+      // X4: record that operator steering is being applied to this attempt. The
+      // guidance text itself is part of the runner input context (written by the
+      // executor); the event makes the steering auditable on the timeline.
+      await appendEvent("Planning", "worker.retry_guidance", "Operator retry guidance applied to this attempt", {
+        attempt: run.attempt,
+      });
+    }
 
     await transitionJob("Implementing", deriveOutcome("Implementing"));
     await appendEvent("Implementing", "runner.started", "AI runner started", undefined, "gstack");
@@ -365,6 +429,19 @@ export async function processAgentJob(
         })
         .catch(() => undefined);
     }, options.cancelPollMs ?? CANCEL_POLL_MS);
+
+    // L1: periodically bump the run heartbeat while the runner executes so a long
+    // but healthy run is distinguishable from a stuck/dead one. Best-effort.
+    const heartbeatInterval = options.heartbeatIntervalMs ?? 0;
+    const heartbeatPoll =
+      heartbeatInterval > 0 && options.repos.touchRunHeartbeat
+        ? setInterval(() => {
+            void options.repos.touchRunHeartbeat?.(run.runId).catch(() => undefined);
+          }, heartbeatInterval)
+        : undefined;
+    const stopHeartbeat = () => {
+      if (heartbeatPoll) clearInterval(heartbeatPoll);
+    };
 
     // Detect the staged runner's per-stage banners in the streamed stdout and record
     // each as a structured `gstack.stage` event (line-buffered so a banner split across
@@ -402,6 +479,7 @@ export async function processAgentJob(
         job,
         run,
         executorMode,
+        retryGuidance,
         appendLog: (log) => {
           detectStageBanners(log.text);
           return options.repos.appendLog({ jobId: job.jobId, runId: run.runId, ...log });
@@ -410,6 +488,7 @@ export async function processAgentJob(
       });
     } catch (error) {
       clearInterval(cancelPoll);
+      stopHeartbeat();
       await stageEventChain;
       if (abortController.signal.aborted) {
         // Cancelled mid-run: record where it stopped and tidy up (the runner container is killed).
@@ -423,6 +502,7 @@ export async function processAgentJob(
       throw error;
     }
     clearInterval(cancelPoll);
+    stopHeartbeat();
     detectStageBanners("\n");
     await stageEventChain;
 
@@ -444,15 +524,18 @@ export async function processAgentJob(
     }
 
     if (result.status !== "completed") {
-      const reason = result.failure?.message ?? `Agent result status: ${result.status}`;
+      // X4: honor the runner's STRUCTURED failure when present (output/failure.json →
+      // result.failure). Surface its message, category, and nextAction instead of the
+      // canned worker text so the operator sees the runner's own diagnosis. Tolerant
+      // of absence (forward-compatible): when failure is null we fall back to the
+      // generic agent/infra remediation as before.
+      const structured = result.failure;
+      const reason = structured?.message ?? `Agent result status: ${result.status}`;
       const outcome = result.retryable ? "FailedInternal" : "FailedActionable";
-      await transitionJob(
-        "Failed",
-        outcome,
-        reason,
-        { status: outcome, failureReason: reason },
-        failureDetails("agent", result.retryable ? NEXT_ACTION.infra : NEXT_ACTION.agent),
-      );
+      const failure = structured
+        ? { category: structured.category, nextAction: structured.nextAction }
+        : failureDetails("agent", result.retryable ? NEXT_ACTION.infra : NEXT_ACTION.agent);
+      await transitionJob("Failed", outcome, reason, { status: outcome, failureReason: reason }, failure);
       await appendEvent("Failed", "worker.failed", reason, result.failure);
       return { status: "failed", runId: run.runId };
     }
@@ -538,6 +621,10 @@ export async function processAgentJob(
     });
     await appendEvent("Completed", "worker.completed", "Worker completed job", { prUrl: published.prUrl });
     await appendProgressLog("Completed", "worker", "PR 생성이 끝났습니다.");
+    // L1: GC the workspace now that the PR is published — a completed job is never
+    // retried, so its checkout/output is no longer needed. Best-effort, never fails
+    // the job.
+    if (options.gcWorkspaceOnSuccess) await options.gcWorkspaceOnSuccess(job.jobId).catch(() => undefined);
     return { status: "completed", runId: run.runId };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown worker error";
@@ -670,6 +757,21 @@ async function createPublishInput(
 
 export function createAttemptWorkBranch(jobId: string, attempt: number): string {
   return attempt > 1 ? `ticket-to-pr/${jobId}-attempt-${attempt}` : `ticket-to-pr/${jobId}`;
+}
+
+/**
+ * Resolve operator retry-guidance (X4) for this attempt. Prefers the explicit
+ * payload field set by the api track on retry; falls back to a non-empty
+ * `retryGuidance` string in the ticket's rawFields so the worker is useful even
+ * before the api track stamps the payload. Returns undefined when neither carries
+ * usable guidance (forward-compatible — never throws on a missing field).
+ */
+export function resolveRetryGuidance(payload: AgentJobPayload, job: WorkerJobRecord): string | undefined {
+  const fromPayload = typeof payload.retryGuidance === "string" ? payload.retryGuidance.trim() : "";
+  if (fromPayload) return fromPayload;
+  const rawValue = job.rawFields?.retryGuidance;
+  const fromRaw = typeof rawValue === "string" ? rawValue.trim() : "";
+  return fromRaw ? fromRaw : undefined;
 }
 
 function phaseLabel(phase: InternalPhase): string {

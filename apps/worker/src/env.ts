@@ -32,6 +32,12 @@ export interface WorkerEnv {
   githubToken?: string;
   /** Reconcile poller cadence in ms. 0 disables the poller. */
   reconcileIntervalMs: number;
+  /** Days to keep a FAILED job's workspace before the sweep GCs it (L1). */
+  failedWorkspaceRetentionDays: number;
+  /** Heartbeat write cadence in ms while a runner executes (L1). 0 disables. */
+  runHeartbeatIntervalMs: number;
+  /** Workspace sweep + orphan-container reap cadence in ms (L1). 0 disables. */
+  workspaceSweepIntervalMs: number;
   larkRecordUpdaterConfig?: LarkRecordUpdaterConfig;
 }
 
@@ -61,8 +67,7 @@ export function readWorkerEnv(source: NodeJS.ProcessEnv = process.env): WorkerEn
     // GSTACK_ARGS is the runner JS entrypoint path (run as `node <path>`), not a CLI string.
     gstackStagedArgs:
       parseOptional(source.GSTACK_STAGED_ARGS) ?? "/opt/runner/apps/runner/dist/gstack-staged-runner.js",
-    gstackSingleArgs:
-      parseOptional(source.GSTACK_SINGLE_ARGS) ?? "/opt/runner/apps/runner/dist/codex-agent-runner.js",
+    gstackSingleArgs: parseOptional(source.GSTACK_SINGLE_ARGS) ?? "/opt/runner/apps/runner/dist/codex-agent-runner.js",
     codexAuthFile: parseOptional(source.CODEX_AUTH_FILE),
     codexConfigFile: parseOptional(source.CODEX_CONFIG_FILE),
     codexSkillsDir: parseOptional(source.CODEX_SKILLS_DIR),
@@ -71,6 +76,12 @@ export function readWorkerEnv(source: NodeJS.ProcessEnv = process.env): WorkerEn
     githubToken,
     // 0 disables the reconcile poller; default 60s recovers from missed merge webhooks.
     reconcileIntervalMs: parseNonNegativeInteger(source.WORKER_RECONCILE_INTERVAL_MS, 60_000),
+    // L1 workspace lifecycle. Failed workspaces kept 7 days for post-mortem by default.
+    failedWorkspaceRetentionDays: parseNonNegativeInteger(source.FAILED_WORKSPACE_RETENTION_DAYS, 7),
+    // 0 disables; default 30s heartbeat keeps a long run visibly alive.
+    runHeartbeatIntervalMs: parseNonNegativeInteger(source.WORKER_RUN_HEARTBEAT_INTERVAL_MS, 30_000),
+    // 0 disables; default hourly workspace sweep + orphan-container reap.
+    workspaceSweepIntervalMs: parseNonNegativeInteger(source.WORKER_WORKSPACE_SWEEP_INTERVAL_MS, 3_600_000),
     larkRecordUpdaterConfig: readLarkRecordUpdaterConfig(source),
   };
 }

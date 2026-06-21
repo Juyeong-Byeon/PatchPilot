@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluatePolicyGate } from "../src/policy-gate.js";
+import { evaluatePolicyGate, evaluatePreExecutionPolicy, isValidBranchName } from "../src/policy-gate.js";
 
 const completedResult = {
   schemaVersion: "1.0" as const,
@@ -119,5 +119,104 @@ describe("evaluatePolicyGate", () => {
     expect(gate.allowed).toBe(false);
     expect(gate.reason).toContain("Verification failed");
     expect(gate.artifact.verification).toBe("failed");
+  });
+
+  it("blocks when the diff evidence contains a secret (X7 secret scan)", () => {
+    const gate = evaluatePolicyGate(
+      {
+        ...completedResult,
+        commits: [{ sha: "abc", message: "add key AKIAIOSFODNN7EXAMPLE" }],
+      },
+      {
+        repository: "acme/web",
+        repositoryAllowlist: ["acme/web"],
+        protectedPathDenylist: [],
+        expectedTargetBranch: "main",
+      },
+    );
+
+    expect(gate.allowed).toBe(false);
+    expect(gate.reason).toContain("Potential secrets detected");
+    expect(gate.artifact.secretFindings?.[0]?.rule).toBe("aws-access-key-id");
+  });
+
+  it("passes a clean diff with empty secretFindings", () => {
+    const gate = evaluatePolicyGate(completedResult, {
+      repository: "acme/web",
+      repositoryAllowlist: ["acme/web"],
+      protectedPathDenylist: [],
+      expectedTargetBranch: "main",
+    });
+    expect(gate.allowed).toBe(true);
+    expect(gate.artifact.secretFindings).toEqual([]);
+  });
+});
+
+describe("isValidBranchName", () => {
+  it("accepts normal branch names", () => {
+    for (const branch of ["main", "develop", "feature/login", "release-1.2.3", "fix/JIRA-42_thing"]) {
+      expect(isValidBranchName(branch)).toBe(true);
+    }
+  });
+
+  it("rejects malformed branch names", () => {
+    for (const branch of [
+      "",
+      " main",
+      "main ",
+      "/main",
+      "main/",
+      "feat//x",
+      ".hidden",
+      "trailing.",
+      "a..b",
+      "ref.lock",
+      "has space",
+      "has~tilde",
+      "has^caret",
+      "has:colon",
+      "star*",
+      "q?mark",
+      "br[acket",
+      "back\\slash",
+      "ref@{0}",
+    ]) {
+      expect(isValidBranchName(branch)).toBe(false);
+    }
+  });
+});
+
+describe("evaluatePreExecutionPolicy (X7 strengthening)", () => {
+  const base = {
+    repository: "acme/web",
+    repositoryAllowlist: ["acme/web"],
+    protectedPathDenylist: ["infra/**"],
+  };
+
+  it("passes an allowlisted repo with a valid target branch", () => {
+    const gate = evaluatePreExecutionPolicy({ ...base, expectedTargetBranch: "main" });
+    expect(gate.allowed).toBe(true);
+  });
+
+  it("blocks a non-allowlisted repository up front", () => {
+    const gate = evaluatePreExecutionPolicy({ ...base, repository: "evil/web", expectedTargetBranch: "main" });
+    expect(gate.allowed).toBe(false);
+    expect(gate.reason).toContain("not allowlisted");
+  });
+
+  it("blocks a malformed target branch before the agent runs", () => {
+    const gate = evaluatePreExecutionPolicy({ ...base, expectedTargetBranch: "bad branch~name" });
+    expect(gate.allowed).toBe(false);
+    expect(gate.reason).toContain("Invalid target branch name");
+  });
+
+  it("blocks a target branch that matches the protected-path denylist", () => {
+    const gate = evaluatePreExecutionPolicy({
+      ...base,
+      protectedPathDenylist: ["main"],
+      expectedTargetBranch: "main",
+    });
+    expect(gate.allowed).toBe(false);
+    expect(gate.reason).toContain("Target branch is protected");
   });
 });
