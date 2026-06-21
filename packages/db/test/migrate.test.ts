@@ -30,6 +30,15 @@ describe("migrate / listMigrationFiles", () => {
     expect(sql).toMatch(/pull_requests\s*\(\s*repository\s*,\s*pr_number\s*\)/i);
   });
 
+  it("includes the runs.executor_mode migration as an idempotent ADD COLUMN", () => {
+    const files = listMigrationFiles(join(srcDir, "migrations"));
+    const target = files.find((f) => f.fileName.includes("executor_mode"));
+    expect(target).toMatchObject({ version: "0002" });
+    const sql = readFileSync(join(srcDir, "migrations", target!.fileName), "utf8");
+    expect(sql).toMatch(/alter table runs/i);
+    expect(sql).toMatch(/add column if not exists executor_mode/i);
+  });
+
   it("returns [] when the migrations directory is missing", () => {
     expect(listMigrationFiles(join(srcDir, "does-not-exist"))).toEqual([]);
   });

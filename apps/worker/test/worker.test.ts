@@ -413,7 +413,11 @@ describe("processAgentJob", () => {
       },
     );
 
-    expect(publisher).toHaveBeenCalledWith(expect.objectContaining({ body: "Agent-authored body\n" }));
+    // The agent body stays on top; the platform trust footer is appended below a separator.
+    const publishedBody = publisher.mock.calls[0][0].body as string;
+    expect(publishedBody.startsWith("Agent-authored body")).toBe(true);
+    expect(publishedBody).toContain("\n---\n");
+    expect(publishedBody).toContain("PatchPilot 신뢰 증거");
   });
 
   it("fails completed results that reference a missing PR body artifact", async () => {
@@ -492,6 +496,87 @@ describe("processAgentJob", () => {
     expect(repos.appendEvent).toHaveBeenCalledWith(
       expect.objectContaining({ eventType: "worker.cancelled", metadata: { cancelledPhase: "Implementing" } }),
     );
+  });
+
+  it("honors a cancel that wins the race when the guarded Publishing transition no-ops", async () => {
+    const repos = createRepos();
+    const executor = vi.fn().mockImplementation(async (input) => {
+      await writeFile(join(input.run.workspacePath, "PR_BODY.md"), "Generated body");
+      return completedResult;
+    });
+    const publisher = vi.fn();
+    // The optimistic guard rejects the PolicyChecking -> Publishing advance (a
+    // concurrent cancel flipped the row), so the worker must NOT publish.
+    const transitionJobGuarded = vi.fn().mockImplementation(async (_jobId, phase) => phase !== "Publishing");
+
+    const outcome = await processAgentJob(
+      { jobId: "job_1", ticketSnapshotId: "ts_1" },
+      {
+        repos: { ...repos, transitionJobGuarded },
+        executor,
+        publisher,
+        policyConfig: { repositoryAllowlist: ["acme/web"], protectedPathDenylist: [] },
+        ids: { runId: () => "run_1", artifactId: (kind) => `artifact_${kind}`, pullRequestId: () => "pr_1" },
+      },
+    );
+
+    expect(outcome).toEqual({ status: "cancelled", runId: "run_1" });
+    expect(publisher).not.toHaveBeenCalled();
+    expect(transitionJobGuarded).toHaveBeenCalledWith(
+      "job_1",
+      "Publishing",
+      "Running",
+      undefined,
+      undefined,
+      "PolicyChecking",
+    );
+    expect(repos.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: "worker.cancelled", phase: "Cancelled" }),
+    );
+  });
+
+  it("uses the guarded transition to enter Publishing on the happy path", async () => {
+    const repos = createRepos();
+    const transitionJobGuarded = vi.fn().mockResolvedValue(true);
+    const executor = vi.fn().mockImplementation(async (input) => {
+      await writeFile(join(input.run.workspacePath, "PR_BODY.md"), "Generated body");
+      return completedResult;
+    });
+    const publisher = vi.fn().mockResolvedValue({
+      repository: "acme/web",
+      targetBranch: "main",
+      workBranch: "ticket-to-pr/job_1",
+      baseSha: "base",
+      headSha: "head",
+      pushSha: "0123456789abcdef0123456789abcdef01234567",
+      commitShas: ["abc"],
+      prUrl: "https://github.local/acme/web/pull/mock-job_1",
+      prNumber: 1,
+      prTitle: "Fix login",
+      prBody: "Generated body",
+    });
+
+    const outcome = await processAgentJob(
+      { jobId: "job_1", ticketSnapshotId: "ts_1" },
+      {
+        repos: { ...repos, transitionJobGuarded },
+        executor,
+        publisher,
+        policyConfig: { repositoryAllowlist: ["acme/web"], protectedPathDenylist: [] },
+        ids: { runId: () => "run_1", artifactId: (kind) => `artifact_${kind}`, pullRequestId: () => "pr_1" },
+      },
+    );
+
+    expect(outcome).toEqual({ status: "completed", runId: "run_1" });
+    expect(transitionJobGuarded).toHaveBeenCalledWith(
+      "job_1",
+      "Publishing",
+      "Running",
+      undefined,
+      undefined,
+      "PolicyChecking",
+    );
+    expect(publisher).toHaveBeenCalled();
   });
 
   it("stops before execution when cancel was already requested", async () => {

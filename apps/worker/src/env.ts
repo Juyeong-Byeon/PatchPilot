@@ -14,13 +14,24 @@ export interface WorkerEnv {
   workspaceRoot: string;
   workspaceHostRoot?: string;
   gstackCommand?: string;
+  /**
+   * Explicit GSTACK_ARGS override. When set, it wins for every job regardless of
+   * priority (back-compat) and forces the recorded executor mode. When unset, the
+   * worker derives args per-job from priority via the staged/single args below.
+   */
   gstackArgs?: string;
+  /** GSTACK_ARGS used for the staged pipeline (High priority). */
+  gstackStagedArgs: string;
+  /** GSTACK_ARGS used for the single-pass pipeline (default). */
+  gstackSingleArgs: string;
   codexAuthFile?: string;
   codexConfigFile?: string;
   codexSkillsDir?: string;
   gstackSkillSourceDir?: string;
   jobTimeoutSeconds: number;
   githubToken?: string;
+  /** Reconcile poller cadence in ms. 0 disables the poller. */
+  reconcileIntervalMs: number;
   larkRecordUpdaterConfig?: LarkRecordUpdaterConfig;
 }
 
@@ -47,12 +58,16 @@ export function readWorkerEnv(source: NodeJS.ProcessEnv = process.env): WorkerEn
     workspaceHostRoot: parseOptional(source.WORKER_WORKSPACE_HOST_ROOT ?? source.JOB_WORKSPACE_HOST_ROOT),
     gstackCommand: parseOptional(source.GSTACK_COMMAND),
     gstackArgs: parseOptional(source.GSTACK_ARGS),
+    gstackStagedArgs: parseOptional(source.GSTACK_STAGED_ARGS) ?? "ship --staged --no-push",
+    gstackSingleArgs: parseOptional(source.GSTACK_SINGLE_ARGS) ?? "ship --no-push",
     codexAuthFile: parseOptional(source.CODEX_AUTH_FILE),
     codexConfigFile: parseOptional(source.CODEX_CONFIG_FILE),
     codexSkillsDir: parseOptional(source.CODEX_SKILLS_DIR),
     gstackSkillSourceDir: parseOptional(source.GSTACK_SKILL_SOURCE_DIR),
     jobTimeoutSeconds: parsePositiveInteger(source.WORKER_JOB_TIMEOUT_SECONDS ?? source.JOB_TIMEOUT_SECONDS, 3600),
     githubToken,
+    // 0 disables the reconcile poller; default 60s recovers from missed merge webhooks.
+    reconcileIntervalMs: parseNonNegativeInteger(source.WORKER_RECONCILE_INTERVAL_MS, 60_000),
     larkRecordUpdaterConfig: readLarkRecordUpdaterConfig(source),
   };
 }
@@ -85,5 +100,13 @@ function parsePositiveInteger(value: string | undefined, fallback: number): numb
   if (!value) return fallback;
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) throw new Error(`Invalid positive integer: ${value}`);
+  return parsed;
+}
+
+// Like parsePositiveInteger but allows 0 (used as the "disable" sentinel).
+function parseNonNegativeInteger(value: string | undefined, fallback: number): number {
+  if (value === undefined || value.trim() === "") return fallback;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) throw new Error(`Invalid non-negative integer: ${value}`);
   return parsed;
 }

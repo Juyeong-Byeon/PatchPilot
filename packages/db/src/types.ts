@@ -42,6 +42,8 @@ export interface CreateRunInput {
   workspacePath?: string | null;
   baseSha?: string | null;
   workBranch?: string | null;
+  /** Pipeline that ran this attempt: 'single-pass' | 'staged' (epic D). Persisted to runs.executor_mode. */
+  executorMode?: string | null;
 }
 
 export interface RunRecord {
@@ -55,6 +57,7 @@ export interface RunRecord {
   workBranch: string;
   headSha: string | null;
   exitCode: number | null;
+  executorMode: string | null;
 }
 
 export interface AppendLogInput {

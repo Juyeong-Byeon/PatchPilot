@@ -55,7 +55,13 @@ export async function buildServer(deps: ApiServerDependencies): Promise<FastifyI
       if (!hasGitHubWebhookRepositories(deps.repos))
         return reply.code(503).send({ error: "GitHub webhook repository unavailable" });
 
-      const result = await handleGitHubPullRequestWebhook(request.body as never, deps.repos, deps.larkUpdater);
+      // Pass the GitHub delivery id so the handler can dedup redeliveries exactly
+      // once (T2). The header is single-valued; coerce an array form defensively.
+      const deliveryHeader = request.headers["x-github-delivery"];
+      const deliveryId = Array.isArray(deliveryHeader) ? deliveryHeader[0] : deliveryHeader;
+      const result = await handleGitHubPullRequestWebhook(request.body as never, deps.repos, deps.larkUpdater, {
+        deliveryId,
+      });
       const statusCode = result.action === "completed" ? 202 : 200;
       return reply.code(statusCode).send(result);
     });

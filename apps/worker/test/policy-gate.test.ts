@@ -58,7 +58,7 @@ describe("evaluatePolicyGate", () => {
     });
   });
 
-  it("blocks missing publish and verification evidence", () => {
+  it("blocks missing publish evidence but treats absent tests as skipped, not blocking", () => {
     const gate = evaluatePolicyGate(
       {
         ...completedResult,
@@ -79,6 +79,45 @@ describe("evaluatePolicyGate", () => {
     expect(gate.reason).toContain("Target branch mismatch");
     expect(gate.reason).toContain("No local commit");
     expect(gate.reason).toContain("PR draft is missing");
-    expect(gate.reason).toContain("Verification evidence is missing");
+    // N2: no tests at all is honest "no verification" → skipped, NOT a hard fail.
+    expect(gate.reason).not.toContain("Verification");
+    expect(gate.artifact.verification).toBe("skipped");
+  });
+
+  it("accepts a skipped single-pass test as truthful 'no verification ran'", () => {
+    const gate = evaluatePolicyGate(
+      {
+        ...completedResult,
+        tests: [{ command: "project verification", status: "skipped", summary: "no verification" }],
+      },
+      {
+        repository: "acme/web",
+        repositoryAllowlist: ["acme/web"],
+        protectedPathDenylist: [],
+        expectedTargetBranch: "main",
+      },
+    );
+
+    expect(gate.allowed).toBe(true);
+    expect(gate.artifact.verification).toBe("skipped");
+  });
+
+  it("blocks an explicit verification failure", () => {
+    const gate = evaluatePolicyGate(
+      {
+        ...completedResult,
+        tests: [{ command: "npm test", status: "failed", summary: "2 specs failed" }],
+      },
+      {
+        repository: "acme/web",
+        repositoryAllowlist: ["acme/web"],
+        protectedPathDenylist: [],
+        expectedTargetBranch: "main",
+      },
+    );
+
+    expect(gate.allowed).toBe(false);
+    expect(gate.reason).toContain("Verification failed");
+    expect(gate.artifact.verification).toBe("failed");
   });
 });
