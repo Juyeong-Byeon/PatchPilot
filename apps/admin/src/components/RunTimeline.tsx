@@ -73,11 +73,21 @@ export function RunTimeline({
         >
           <thead className="bg-linen-white/95 text-[12px] font-medium leading-4 text-charcoal">
             <tr className="border-b border-hairline-gray">
-              <th className="w-[44px] px-3 py-2">{copy.traceColumnIndex}</th>
-              <th className="w-[112px] px-3 py-2">{copy.traceColumnStage}</th>
-              <th className="w-[112px] px-3 py-2">{copy.traceColumnStatus}</th>
-              <th className="w-[112px] px-3 py-2">{copy.traceColumnService}</th>
-              <th className="w-[340px] px-3 py-2 text-right">{copy.traceColumnDuration}</th>
+              <th scope="col" className="w-[44px] px-3 py-2">
+                {copy.traceColumnIndex}
+              </th>
+              <th scope="col" className="w-[112px] px-3 py-2">
+                {copy.traceColumnStage}
+              </th>
+              <th scope="col" className="w-[112px] px-3 py-2">
+                {copy.traceColumnStatus}
+              </th>
+              <th scope="col" className="w-[112px] px-3 py-2">
+                {copy.traceColumnService}
+              </th>
+              <th scope="col" className="w-[340px] px-3 py-2 text-right">
+                {copy.traceColumnDuration}
+              </th>
             </tr>
           </thead>
           <tbody>
