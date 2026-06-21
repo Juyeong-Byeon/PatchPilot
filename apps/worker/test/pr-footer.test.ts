@@ -91,10 +91,10 @@ describe("composePrBodyWithFooter", () => {
         {
           command: "deploy",
           status: "passed",
-          summary: "used token ghp_0123456789abcdefghijklmnopqrstuvwxyz",
+          summary: "used token ghp_0123456789abcdefghijklmnopqrstuvwxyz", // secret-scan:allow (fake fixture token)
         },
       ],
     });
-    expect(footer).not.toContain("ghp_0123456789abcdefghijklmnopqrstuvwxyz");
+    expect(footer).not.toContain("ghp_0123456789abcdefghijklmnopqrstuvwxyz"); // secret-scan:allow (fake fixture token)
   });
 });

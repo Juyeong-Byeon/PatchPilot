@@ -11,6 +11,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    # Blocks the merge if a committed secret is detected. Self-contained (no deps,
+    # no build) so it runs fast and fails independently of the rest of CI. Make
+    # this a required status check in branch protection to enforce the gate.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Scan tracked files for secrets
+        run: npm run scan:secrets
+
   verify:
     name: Lint, typecheck, test, build
     runs-on: ubuntu-latest
