@@ -18,6 +18,7 @@ import { handleLarkWebhook, parseLarkWebhookInput, type AgentQueue } from "./lar
 import { registerAdminRoutes, type AdminRepositories } from "./routes-admin.js";
 import { registerHealthRoutes, type HealthProbes } from "./routes-health.js";
 import { registerSettingsRoutes, type SettingsRepositories } from "./routes-settings.js";
+import { registerVersionRoutes } from "./routes-version.js";
 
 export interface ApiServerDependencies {
   repos: Pick<Repositories, "createJobFromTicket" | "appendEvent"> &
@@ -55,6 +56,7 @@ export async function buildServer(deps: ApiServerDependencies): Promise<FastifyI
     : undefined;
 
   await registerHealthRoutes(app, deps.healthProbes);
+  await registerVersionRoutes(app);
   if (deps.adminToken && hasAdminRepositories(deps.repos)) {
     await registerAdminRoutes(app, deps.repos, deps.queue, deps.adminToken);
   }
