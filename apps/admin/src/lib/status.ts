@@ -137,7 +137,6 @@ export function isStageBannerText(text: string | undefined | null): boolean {
 // come from the event metadata. (Kept local to the frontend — the browser bundle
 // does not depend on @ticket-to-pr/core.)
 export const GSTACK_STAGE_KEYS = ["plan", "implement", "review", "verify", "document"] as const;
-export type GstackStageKey = (typeof GSTACK_STAGE_KEYS)[number];
 
 export type StageStatus = "pending" | "active" | "complete" | "failed" | "skipped";
 
