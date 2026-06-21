@@ -1,0 +1,20 @@
+# Build-only Compose override that threads the current git SHA into the worker
+# and runner images as a build arg. Used by `npm run docker:build-runtime`
+# (scripts/docker-build-runtime.mjs) so the resulting images carry a
+# `git-sha` label that the stale-image guard (scripts/status.mjs) can verify.
+#
+# This is layered ON TOP of docker-compose.yml; it only adds build args and does
+# not change runtime behavior. Apply with:
+#   docker compose -f docker-compose.yml -f docker/compose.build.yml ...
+services:
+  worker:
+    build:
+      args:
+        GIT_SHA: ${GIT_SHA:-}
+
+  runner-image:
+    build:
+      args:
+        # Preserve the existing install-command arg while adding GIT_SHA.
+        GSTACK_INSTALL_COMMAND: ${GSTACK_INSTALL_COMMAND:-}
+        GIT_SHA: ${GIT_SHA:-}

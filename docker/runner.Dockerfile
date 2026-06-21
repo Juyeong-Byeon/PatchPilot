@@ -4,6 +4,9 @@ FROM node:22-alpine
 RUN apk add --no-cache git openssh-client bash ripgrep
 ARG GSTACK_INSTALL_COMMAND=""
 RUN if [ -n "$GSTACK_INSTALL_COMMAND" ]; then sh -lc "$GSTACK_INSTALL_COMMAND"; fi
+# git-sha stamps the image with the checkout it was built from (see worker.Dockerfile).
+ARG GIT_SHA=""
+LABEL git-sha="${GIT_SHA}"
 RUN addgroup -S runner && adduser -S runner -G runner
 WORKDIR /opt/runner
 COPY package*.json tsconfig.base.json /opt/runner/
