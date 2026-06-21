@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ListChecks, Monitor, Moon, Settings as SettingsIcon, Sun } from "lucide-react";
 import adminLogo from "./assets/patchpilot-logo.svg";
 import {
@@ -35,6 +36,7 @@ import { applyTheme, getInitialTheme, storeTheme, type ThemePreference } from ".
 import { MetricsPanel } from "./components/MetricsPanel.js";
 import { SettingsPanel } from "./components/SettingsPanel.js";
 import { adminCopy, getInitialLocale, storeLocale, type AdminCopy, type Locale } from "./i18n.js";
+import { createQueryClient } from "./lib/query-client.js";
 
 const LIST_REFRESH_RUNNING_MS = 2000;
 const LIST_REFRESH_IDLE_MS = 5000;
@@ -85,15 +87,20 @@ const emptyDetail: DetailState = {
 };
 
 export default function App() {
+  const [queryClient] = useState(createQueryClient);
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AppInner />
+    </QueryClientProvider>
+  );
+}
+
+function AppInner() {
   const [route, setRoute] = useState<AdminRoute>(() => readRoute());
   const [locale, setLocale] = useState<Locale>(() => getInitialLocale());
   const [theme, setTheme] = useState<ThemePreference>(() => getInitialTheme());
   const copy = adminCopy[locale];
   const [token, setToken] = useState(() => getStoredAdminToken());
-  const [jobs, setJobs] = useState<JobRecord[]>([]);
-  const [detail, setDetail] = useState<DetailState>(emptyDetail);
-  const [isLoadingJobs, setIsLoadingJobs] = useState(false);
-  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [status, setStatus] = useState<StatusState>(() => (token ? { kind: "ready" } : { kind: "enterToken" }));
   const [listError, setListError] = useState<string>("");
@@ -116,17 +123,45 @@ export default function App() {
     setSessionExpired(true);
     setStatus({ kind: "sessionExpired" });
     setListError(copy.tokenInvalid);
-    setIsLoadingJobs(false);
-    setIsLoadingDetail(false);
     // Defer focus until after the re-render that re-enables the form.
     window.setTimeout(() => tokenInputRef.current?.focus(), 0);
   }
+
+  const queryClient = useQueryClient();
+  const queryEnabled = !!token.trim() && !sessionExpired;
+
+  const jobsQuery = useQuery({
+    queryKey: ["jobs", token],
+    queryFn: () => fetchJobs(token),
+    enabled: queryEnabled,
+    refetchInterval: (query) => {
+      if (route.page !== "list" || sessionExpired) return false;
+      const running = (query.state.data ?? []).filter((job) => isRunningPhase(job.phase)).length;
+      return running > 0 ? LIST_REFRESH_RUNNING_MS : LIST_REFRESH_IDLE_MS;
+    },
+  });
+  const jobs = useMemo(() => jobsQuery.data ?? [], [jobsQuery.data]);
+
+  const detailQuery = useQuery({
+    queryKey: ["detail", selectedJobId, token],
+    queryFn: async (): Promise<DetailState> => {
+      const [job, events, logs, artifacts] = await Promise.all([
+        fetchJob(selectedJobId, token),
+        fetchJobEvents(selectedJobId, token),
+        fetchJobLogs(selectedJobId, token),
+        fetchJobArtifacts(selectedJobId, token),
+      ]);
+      return { job, events, logs, artifacts };
+    },
+    enabled: queryEnabled && !!selectedJobId,
+    refetchInterval: (query) => (sessionExpired ? false : isRunningPhase(query.state.data?.job?.phase) ? 1000 : 3000),
+  });
+  const detail = detailQuery.data ?? emptyDetail;
 
   const selectedJob = useMemo(
     () => (route.page === "detail" ? (detail.job ?? jobs.find((job) => job.id === route.jobId) ?? null) : null),
     [detail.job, jobs, route],
   );
-  const detailRefreshMs = isRunningPhase(selectedJob?.phase) ? 1000 : 3000;
   const jobStats = useMemo(
     () => ({
       total: jobs.length,
@@ -141,13 +176,38 @@ export default function App() {
     }),
     [jobs],
   );
-  // Poll the list faster while any job is in flight so status + rows feel live.
-  const listRefreshMs = jobStats.running > 0 ? LIST_REFRESH_RUNNING_MS : LIST_REFRESH_IDLE_MS;
+
+  // Single re-auth boundary: a 401 on either query freezes polling, surfaces one
+  // re-auth state, and focuses the token form.
+  useEffect(() => {
+    if (isSessionExpiredError(jobsQuery.error) || isSessionExpiredError(detailQuery.error)) handleSessionExpiry();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobsQuery.error, detailQuery.error]);
 
   useEffect(() => {
-    if (!token) return;
-    void refreshJobs(token);
-  }, [token]);
+    if (jobsQuery.isSuccess) {
+      setListError("");
+      setStatus({ kind: "loadedJobs", count: jobsQuery.data.length });
+    }
+  }, [jobsQuery.data, jobsQuery.isSuccess]);
+
+  useEffect(() => {
+    if (jobsQuery.error && !isSessionExpiredError(jobsQuery.error)) {
+      setListError(errorMessage(jobsQuery.error, copy));
+      // Only a foreground/initial load failure changes the status line. A transient
+      // background-poll error still surfaces via listError but must not flash
+      // refreshFailed — parity with the old silent-poll path (isLoadingError is true
+      // only when the query errored with no prior data, i.e. the initial load).
+      if (jobsQuery.isLoadingError) setStatus({ kind: "refreshFailed" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobsQuery.error]);
+
+  useEffect(() => {
+    if (detailQuery.error && !isSessionExpiredError(detailQuery.error))
+      setDetailError(errorMessage(detailQuery.error, copy));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detailQuery.error]);
 
   useEffect(() => {
     if (window.location.pathname === "/") {
@@ -178,96 +238,11 @@ export default function App() {
   }, [showOnboarding]);
 
   useEffect(() => {
-    if (!selectedJobId || !token) {
-      setDetail(emptyDetail);
-      return;
-    }
-
-    void refreshDetail(selectedJobId, token);
-  }, [selectedJobId, token]);
-
-  useEffect(() => {
-    if (!selectedJobId || !token || sessionExpired) return;
-
-    const intervalId = window.setInterval(() => {
-      void refreshDetail(selectedJobId, token, { silent: true });
-    }, detailRefreshMs);
-
-    return () => window.clearInterval(intervalId);
-  }, [detailRefreshMs, selectedJobId, token, sessionExpired]);
-
-  useEffect(() => {
     if (!selectedJobId) return;
 
     const intervalId = window.setInterval(() => setNowMs(Date.now()), 1000);
     return () => window.clearInterval(intervalId);
   }, [selectedJobId]);
-
-  useEffect(() => {
-    if (route.page !== "list" || !token || sessionExpired) return;
-
-    const intervalId = window.setInterval(() => {
-      if (document.visibilityState === "hidden") return;
-      void refreshJobs(token, { silent: true });
-    }, listRefreshMs);
-    const onVisible = () => {
-      if (document.visibilityState === "visible") void refreshJobs(token, { silent: true });
-    };
-    document.addEventListener("visibilitychange", onVisible);
-
-    return () => {
-      window.clearInterval(intervalId);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [route.page, token, listRefreshMs, sessionExpired]);
-
-  async function refreshJobs(activeToken = token, options: { silent?: boolean } = {}) {
-    if (!activeToken.trim()) {
-      setStatus({ kind: "enterToken" });
-      return;
-    }
-
-    if (!options.silent) setIsLoadingJobs(true);
-    setListError("");
-    try {
-      const nextJobs = await fetchJobs(activeToken);
-      setJobs(nextJobs);
-      if (!options.silent) setStatus({ kind: "loadedJobs", count: nextJobs.length });
-    } catch (caught) {
-      // A 401 freezes polling and routes to the single re-auth boundary — even on
-      // the silent path, so an expired session never silently stalls the screen.
-      if (isSessionExpiredError(caught)) {
-        handleSessionExpiry();
-        return;
-      }
-      setListError(errorMessage(caught, copy));
-      if (!options.silent) setStatus({ kind: "refreshFailed" });
-    } finally {
-      if (!options.silent) setIsLoadingJobs(false);
-    }
-  }
-
-  async function refreshDetail(jobId: string, activeToken = token, options: { silent?: boolean } = {}) {
-    if (!options.silent) setIsLoadingDetail(true);
-    setDetailError("");
-    try {
-      const [job, events, logs, artifacts] = await Promise.all([
-        fetchJob(jobId, activeToken),
-        fetchJobEvents(jobId, activeToken),
-        fetchJobLogs(jobId, activeToken),
-        fetchJobArtifacts(jobId, activeToken),
-      ]);
-      setDetail({ job, events, logs, artifacts });
-    } catch (caught) {
-      if (isSessionExpiredError(caught)) {
-        handleSessionExpiry();
-        return;
-      }
-      setDetailError(errorMessage(caught, copy));
-    } finally {
-      if (!options.silent) setIsLoadingDetail(false);
-    }
-  }
 
   function saveToken() {
     storeAdminToken(token);
@@ -277,7 +252,7 @@ export default function App() {
     setEditingToken(false);
     setListError("");
     setStatus(token.trim() ? { kind: "ready" } : { kind: "enterToken" });
-    void refreshJobs(token);
+    void queryClient.invalidateQueries({ queryKey: ["jobs"] });
   }
 
   async function runAction(action: "retry" | "cancel") {
@@ -293,8 +268,8 @@ export default function App() {
         const cancel = await cancelJob(selectedJobId, token);
         setStatus({ kind: "cancelRequested", phase: cancel.phase });
       }
-      await refreshJobs(token);
-      await refreshDetail(selectedJobId, token);
+      await queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      await queryClient.invalidateQueries({ queryKey: ["detail", selectedJobId] });
     } catch (caught) {
       if (isSessionExpiredError(caught)) {
         handleSessionExpiry();
@@ -316,8 +291,8 @@ export default function App() {
     try {
       const resumed = await answerJob(selectedJobId, answer.trim(), token);
       setStatus({ kind: "answerSubmitted", attempt: resumed.attempt });
-      await refreshJobs(token);
-      await refreshDetail(selectedJobId, token);
+      await queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      await queryClient.invalidateQueries({ queryKey: ["detail", selectedJobId] });
     } catch (caught) {
       if (isSessionExpiredError(caught)) {
         handleSessionExpiry();
@@ -353,7 +328,7 @@ export default function App() {
 
   function refreshCurrentDetail() {
     if (!selectedJobId) return;
-    void refreshDetail(selectedJobId, token);
+    void queryClient.invalidateQueries({ queryKey: ["detail", selectedJobId] });
   }
 
   const pageTitle = route.page === "settings" ? copy.settings : route.page === "list" ? copy.jobs : copy.jobDetail;
@@ -537,7 +512,7 @@ export default function App() {
               onEditingTokenChange={setEditingToken}
               onTokenChange={setToken}
               onSaveToken={saveToken}
-              onRefresh={() => void refreshJobs(token)}
+              onRefresh={() => void queryClient.invalidateQueries({ queryKey: ["jobs"] })}
               onChangeLocale={changeLocale}
             />
           ) : route.page === "list" ? (
@@ -551,7 +526,7 @@ export default function App() {
               <JobList
                 jobs={jobs}
                 selectedJobId={selectedJobId}
-                isLoading={isLoadingJobs}
+                isLoading={jobsQuery.isPending}
                 copy={copy}
                 locale={locale}
                 statusFilter={statusFilter}
@@ -564,7 +539,7 @@ export default function App() {
               events={detail.events}
               logs={detail.logs}
               artifacts={detail.artifacts}
-              isLoading={isLoadingDetail}
+              isLoading={detailQuery.isPending}
               actionState={actionState}
               nowMs={nowMs}
               copy={copy}
