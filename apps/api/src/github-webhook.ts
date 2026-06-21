@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { LarkStatusUpdater } from "@ticket-to-pr/core";
 import type {
   MarkPullRequestMergedInput,
@@ -17,17 +18,43 @@ export interface GitHubWebhookRepositories {
   recordWebhookDelivery?(input: RecordWebhookDeliveryInput): Promise<boolean>;
 }
 
-interface GitHubPullRequestPayload {
-  action?: string;
-  repository?: {
-    full_name?: string;
-  };
-  pull_request?: {
-    number?: number;
-    merged?: boolean;
-    html_url?: string;
-    merged_at?: string | null;
-  };
+/**
+ * Runtime shape check for the GitHub `pull_request` webhook body. Defense in
+ * depth ON TOP of the HMAC signature in `assertGitHubWebhookSignature` — the
+ * signature proves the bytes came from GitHub; this proves they have the shape
+ * the handler reads. Every field is optional and `.passthrough()` keeps unknown
+ * keys: GitHub sends a large payload and the handler only consumes a few fields,
+ * so we validate the *types* of the ones we touch without rejecting the rest.
+ * Anything that does not match (e.g. a non-merged close, a non-`pull_request`
+ * event body) flows into the handler's existing `{ action: "ignored" }` path.
+ */
+export const githubPullRequestPayloadSchema = z
+  .object({
+    action: z.string().optional(),
+    repository: z.object({ full_name: z.string().optional() }).passthrough().optional(),
+    pull_request: z
+      .object({
+        number: z.number().optional(),
+        merged: z.boolean().optional(),
+        html_url: z.string().optional(),
+        merged_at: z.string().nullish(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+
+export type GitHubPullRequestPayload = z.infer<typeof githubPullRequestPayloadSchema>;
+
+/**
+ * Parse an untrusted webhook body into the handler's payload shape. Returns
+ * `null` when the body is not an object matching the schema; the route maps that
+ * to the same safe `{ action: "ignored" }` / 200 response GitHub already gets for
+ * any event it does not act on, so a malformed body never crashes the route.
+ */
+export function parseGitHubPullRequestPayload(body: unknown): GitHubPullRequestPayload | null {
+  const result = githubPullRequestPayloadSchema.safeParse(body);
+  return result.success ? result.data : null;
 }
 
 export type GitHubWebhookResult =
