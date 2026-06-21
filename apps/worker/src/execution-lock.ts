@@ -55,7 +55,9 @@ export async function acquireJobExecutionLock(
 
   let client: LockClient;
   try {
-    client = (await pool.connect()) as unknown as LockClient;
+    // pg's PoolClient is structurally assignable to LockClient (it has the
+    // `query`/`release` surface we use), so the narrowing needs no assertion.
+    client = await pool.connect();
   } catch (error) {
     onError?.(error);
     // Fail open: could not reach the pool to take a lock — proceed unguarded.

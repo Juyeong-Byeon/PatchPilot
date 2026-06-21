@@ -64,12 +64,14 @@ describe("parseSettingsView", () => {
 
   it("accepts a well-typed view", () => {
     const value = { sections: [{ key: "ops", fields: [field] }] };
-    expect(parseSettingsView(value)).toBe(value);
+    // The parser builds a fresh validated object (no assertion / no input
+    // passthrough), so assert structural equality rather than identity.
+    expect(parseSettingsView(value)).toStrictEqual(value);
   });
 
   it("accepts a view with no sections", () => {
     const value = { sections: [] };
-    expect(parseSettingsView(value)).toBe(value);
+    expect(parseSettingsView(value)).toStrictEqual(value);
   });
 
   it("rejects a body missing the sections array", () => {
@@ -101,7 +103,7 @@ describe("parseSettingsView", () => {
 describe("parseRetryResponse", () => {
   it("accepts a well-typed response", () => {
     const value = { ok: true, runId: "run_1", attempt: 2 };
-    expect(parseRetryResponse(value)).toBe(value);
+    expect(parseRetryResponse(value)).toStrictEqual(value);
   });
 
   it("rejects missing or wrong-typed fields", () => {
@@ -116,7 +118,7 @@ describe("parseRetryResponse", () => {
 describe("parseCancelResponse", () => {
   it("accepts a well-typed ack", () => {
     const value = { ok: true, phase: "Cancelled" };
-    expect(parseCancelResponse(value)).toBe(value);
+    expect(parseCancelResponse(value)).toStrictEqual(value);
   });
 
   it("rejects missing or wrong-typed fields", () => {

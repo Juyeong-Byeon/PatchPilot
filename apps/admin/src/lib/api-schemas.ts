@@ -56,7 +56,10 @@ export function parseJobMetrics(value: unknown): JobMetrics | null {
     }
   }
 
-  return value as JobMetrics;
+  // JobMetrics extends JsonRecord and every named field is optional, so the
+  // validated record already satisfies it — no assertion needed (unlike
+  // parseRetryResponse / parseSettingsView, whose targets have required fields).
+  return value;
 }
 
 const FIELD_KINDS = new Set<SettingsFieldView["kind"]>(["string", "int", "bool", "csv", "enum"]);
@@ -93,10 +96,13 @@ function isSettingsSection(value: unknown): value is SettingsSectionView {
  */
 export function parseSettingsView(value: unknown): SettingsView | null {
   if (!isRecord(value)) return null;
-  if (!Array.isArray(value.sections)) return null;
-  if (!value.sections.every(isSettingsSection)) return null;
-  // SettingsView is not an open record, so narrow through `unknown` after the guard.
-  return value as unknown as SettingsView;
+  const { sections } = value;
+  if (!Array.isArray(sections)) return null;
+  // `every` with the type-guard predicate narrows `sections` to
+  // SettingsSectionView[], so the returned object is built from validated data
+  // with no assertion.
+  if (!sections.every(isSettingsSection)) return null;
+  return { sections };
 }
 
 /**
@@ -131,10 +137,11 @@ export function parseRecord<T extends Record<string, unknown>>(value: unknown): 
  */
 export function parseRetryResponse(value: unknown): RetryResponse | null {
   if (!isRecord(value)) return null;
-  if (typeof value.ok !== "boolean") return null;
-  if (typeof value.runId !== "string") return null;
-  if (typeof value.attempt !== "number" || !Number.isFinite(value.attempt)) return null;
-  return value as unknown as RetryResponse;
+  const { ok, runId, attempt } = value;
+  if (typeof ok !== "boolean") return null;
+  if (typeof runId !== "string") return null;
+  if (typeof attempt !== "number" || !Number.isFinite(attempt)) return null;
+  return { ok, runId, attempt };
 }
 
 /**
@@ -144,7 +151,8 @@ export function parseRetryResponse(value: unknown): RetryResponse | null {
  */
 export function parseCancelResponse(value: unknown): { ok: boolean; phase: string } | null {
   if (!isRecord(value)) return null;
-  if (typeof value.ok !== "boolean") return null;
-  if (typeof value.phase !== "string") return null;
-  return value as unknown as { ok: boolean; phase: string };
+  const { ok, phase } = value;
+  if (typeof ok !== "boolean") return null;
+  if (typeof phase !== "string") return null;
+  return { ok, phase };
 }

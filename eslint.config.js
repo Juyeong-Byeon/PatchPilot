@@ -27,6 +27,10 @@ export default tseslint.config(
       "@typescript-eslint/no-unsafe-call": "error",
       "@typescript-eslint/no-unsafe-return": "error",
       "@typescript-eslint/no-unsafe-argument": "error",
+      // Flags `as`/`<>` casts that don't change the type — keeps the codebase
+      // free of redundant assertions that mask later type drift. Type-aware, so
+      // it lives in this src-scoped block alongside the other no-unsafe-* rules.
+      "@typescript-eslint/no-unnecessary-type-assertion": "error",
     },
   },
   {
