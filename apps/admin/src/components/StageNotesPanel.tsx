@@ -133,5 +133,3 @@ function safeStringify(value: unknown): string {
 export function isStageNoteArtifact(artifact: { kind?: string | null }): boolean {
   return Boolean(artifact.kind && STAGE_META[artifact.kind]);
 }
-
-export const STAGE_NOTE_KINDS = STAGE_ORDER;
