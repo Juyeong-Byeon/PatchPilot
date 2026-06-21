@@ -1,5 +1,12 @@
 import { useMemo } from "react";
-import { AlertCircle, CheckCircle2, CircleDashed, LoaderCircle, MinusCircle } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  CircleDashed,
+  LoaderCircle,
+  MessageCircleQuestion,
+  MinusCircle,
+} from "lucide-react";
 import type { RunEvent } from "../api.js";
 import { stageKeyLabel, translateState, type AdminCopy, type Locale } from "../i18n.js";
 import type { StageState, StageStatus } from "../lib/status.js";
@@ -17,7 +24,7 @@ interface RunStepGraphProps {
   onSelectStep?(selection: SpanSelection): void;
 }
 
-type StepStatus = "pending" | "skipped" | "complete" | "active" | "failed";
+type StepStatus = "pending" | "skipped" | "complete" | "active" | "failed" | "awaiting";
 
 interface GraphStep {
   phase: string;
@@ -132,6 +139,16 @@ function buildGraphSteps(events: RunEvent[], currentPhase: string | undefined): 
   for (const phase of observedPhases) {
     if (!phaseFlow.includes(phase)) phaseFlow.push(phase);
   }
+  // AwaitingInput parks the pipeline mid-run (the agent asked the operator a
+  // question), so render it right after Implementing — where the agent runs —
+  // rather than appended after Completed, so the paused gate reads in flow order.
+  if (currentPhase === "AwaitingInput" && !phaseFlow.includes("AwaitingInput")) phaseFlow.push("AwaitingInput");
+  const awaitingIndex = phaseFlow.indexOf("AwaitingInput");
+  if (awaitingIndex >= 0) {
+    phaseFlow.splice(awaitingIndex, 1);
+    const implementingIndex = phaseFlow.indexOf("Implementing");
+    phaseFlow.splice(implementingIndex >= 0 ? implementingIndex + 1 : phaseFlow.length, 0, "AwaitingInput");
+  }
 
   const failedPhase = resolveFailedPhase(events, currentPhase);
   const currentIndex = resolveCurrentIndex(phaseFlow, events, currentPhase, failedPhase);
@@ -202,11 +219,14 @@ function lastNonTerminalPhase(events: RunEvent[], startIndex: number): string | 
 }
 
 function activeStatus(currentPhase: string | undefined): StepStatus {
-  return currentPhase === "Completed" ? "complete" : "active";
+  if (currentPhase === "Completed") return "complete";
+  if (currentPhase === "AwaitingInput") return "awaiting";
+  return "active";
 }
 
 function statusLabel(status: StepStatus, copy: AdminCopy): string {
   if (status === "failed") return copy.spanFailurePoint;
+  if (status === "awaiting") return copy.stepAwaitingInput;
   if (status === "active") return copy.spanActive;
   if (status === "complete") return copy.spanComplete;
   if (status === "skipped") return copy.stepSkipped;
@@ -215,6 +235,9 @@ function statusLabel(status: StepStatus, copy: AdminCopy): string {
 
 function nodeClass(status: StepStatus, selected: boolean): string {
   if (status === "failed") return "status-glow-failed border-danger bg-danger text-white";
+  // Awaiting human input: a distinct violet, gently pulsing so the operator's eye
+  // is drawn to the one step that needs their action.
+  if (status === "awaiting") return "border-info-ink bg-info-ink text-paper animate-pulse";
   if (status === "active") return "status-glow-active border-cobalt-surface bg-cobalt-surface text-paper";
   if (status === "complete") return "border-electric-blue bg-electric-blue text-paper";
   if (selected) return "border-cobalt-surface bg-linen-white text-cobalt-surface shadow-sm shadow-electric-blue/15";
@@ -232,7 +255,8 @@ function subStageDotClass(status: StageStatus): string {
 }
 
 function connectorClass(status: StepStatus, nextStatus: StepStatus): string {
-  if (status === "failed") return "bg-hairline-gray";
+  if (status === "failed" || status === "awaiting") return "bg-hairline-gray";
+  if (nextStatus === "awaiting") return "bg-[var(--color-info-border)]";
   if (status === "pending" || status === "skipped" || nextStatus === "pending" || nextStatus === "skipped")
     return "bg-hairline-gray";
   return "bg-electric-blue";
@@ -240,6 +264,7 @@ function connectorClass(status: StepStatus, nextStatus: StepStatus): string {
 
 function statusGlyph(status: StepStatus) {
   if (status === "failed") return <AlertCircle aria-hidden="true" size={18} strokeWidth={2.4} />;
+  if (status === "awaiting") return <MessageCircleQuestion aria-hidden="true" size={18} strokeWidth={2.4} />;
   if (status === "active")
     return <LoaderCircle aria-hidden="true" className="animate-spin" size={18} strokeWidth={2.4} />;
   if (status === "complete") return <CheckCircle2 aria-hidden="true" size={18} strokeWidth={2.4} />;

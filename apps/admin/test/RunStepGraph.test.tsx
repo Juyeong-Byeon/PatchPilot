@@ -87,6 +87,58 @@ describe("RunStepGraph", () => {
     expect(container.querySelector(".animate-spin")).toBeInTheDocument();
   });
 
+  it("renders a distinct 'awaiting input' gate after Implementing when parked", () => {
+    const { container } = render(
+      <RunStepGraph
+        copy={adminCopy.ko}
+        locale="ko"
+        currentPhase="AwaitingInput"
+        events={[
+          {
+            id: "1",
+            phase: "Queued",
+            event_type: "job.enqueued",
+            source: "api",
+            message: "accepted",
+            created_at: "2026-06-20T00:00:00.000Z",
+          },
+          {
+            id: "2",
+            phase: "Implementing",
+            event_type: "runner.started",
+            source: "gstack",
+            message: "runner started",
+            created_at: "2026-06-20T00:00:05.000Z",
+          },
+          {
+            id: "3",
+            phase: "AwaitingInput",
+            event_type: "job.needs_input",
+            source: "worker",
+            message: "어떤 DB를 쓸까요?",
+            created_at: "2026-06-20T00:00:12.000Z",
+          },
+        ]}
+      />,
+    );
+
+    const graph = screen.getByRole("list", { name: "처리 단계 그래프" });
+    // The gate has its own label — not the generic running spinner.
+    expect(within(graph).getByRole("button", { name: "입력 대기 입력 대기 중" })).toBeInTheDocument();
+    // It sits right after Implementing and before PolicyChecking.
+    const labels = within(graph)
+      .getAllByRole("button")
+      .map((button) => button.getAttribute("aria-label") ?? "");
+    const implementing = labels.findIndex((label) => label.startsWith("구현"));
+    const awaiting = labels.findIndex((label) => label.startsWith("입력 대기"));
+    const policy = labels.findIndex((label) => label.startsWith("정책"));
+    expect(implementing).toBeLessThan(awaiting);
+    expect(awaiting).toBeLessThan(policy);
+    // Distinct violet pulse for "needs your action", never the blue running spinner.
+    expect(container.querySelector(".animate-pulse")).toBeInTheDocument();
+    expect(container.querySelector(".animate-spin")).not.toBeInTheDocument();
+  });
+
   it("attributes terminal failure to the last running phase", () => {
     const { container } = render(
       <RunStepGraph
