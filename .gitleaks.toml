@@ -1,0 +1,26 @@
+# gitleaks configuration (pilot — see docs/library-adoption-plan.md, Tier 2).
+# Extends gitleaks' built-in rules and allowlists the placeholder secrets that
+# live in example/test fixtures so the advisory CI job reports real signal, not
+# noise. Real secrets (e.g. the local .env) are gitignored and never committed.
+
+title = "ticket-to-pr gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Example/test placeholder secrets are not real credentials"
+paths = [
+  '''\.env\.example$''',
+  '''scripts/e2e-smoke\.mjs$''',
+  '''.*\.test\.(ts|tsx)$''',
+  '''(^|/)test/.*''',
+]
+regexes = [
+  '''webhook_secret_xxx''',
+  '''github_webhook_secret_xxx''',
+  '''secret_xxx''',
+  '''cli_xxx''',
+  '''change-me-admin-token''',
+  '''e2e-(admin-token|lark-secret|github-secret)''',
+]
