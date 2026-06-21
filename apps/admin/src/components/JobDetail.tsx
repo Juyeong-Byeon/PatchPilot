@@ -2,11 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Ban, Check, Copy, ExternalLink, RotateCcw, Undo2, X } from "lucide-react";
 import type { Artifact, JobRecord, LogLine, RunEvent } from "../api.js";
 import { translateFailureCategory, translateState, type AdminCopy, type Locale } from "../i18n.js";
-import { isRunningPhase, parseStageProgress, statusBadgeVariant, type StageProgress } from "../lib/status.js";
+import { deriveStageStates, statusBadgeVariant } from "../lib/status.js";
 import { LogViewer } from "./LogViewer.js";
 import { RunStepGraph } from "./RunStepGraph.js";
 import { RunTimeline, type SpanSelection } from "./RunTimeline.js";
 import { StageNotesPanel, isStageNoteArtifact } from "./StageNotesPanel.js";
+import { StagePipeline } from "./StagePipeline.js";
 import { Badge } from "./ui/badge.js";
 import { Button } from "./ui/button.js";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
@@ -54,9 +55,9 @@ export function JobDetail({
   const currentLogs = useMemo(() => filterRunScopedRecords(logs, currentRunId), [currentRunId, logs]);
   const currentArtifacts = useMemo(() => filterRunScopedRecords(artifacts, currentRunId), [artifacts, currentRunId]);
   const stageNotes = useMemo(() => currentArtifacts.filter(isStageNoteArtifact), [currentArtifacts]);
-  const stageProgress = useMemo(
-    () => (isRunningPhase(job?.phase) ? parseStageProgress(currentLogs) : null),
-    [currentLogs, job?.phase],
+  const stageStates = useMemo(
+    () => deriveStageStates(currentEvents, job?.phase, job?.outcome),
+    [currentEvents, job?.outcome, job?.phase],
   );
   const runningPhase = useMemo(() => resolveRunningPhase(job), [job]);
   const selectedContext = useMemo(
@@ -230,9 +231,9 @@ export function JobDetail({
         copy={copy}
         locale={locale}
         selectedStep={selectedSpan}
-        subStageLabel={stageProgress ? formatStageProgress(stageProgress, copy) : undefined}
         onSelectStep={setSelectedSpan}
       />
+      {stageStates ? <StagePipeline stages={stageStates} nowMs={nowMs} copy={copy} /> : null}
       <Card>
         <CardHeader>
           <CardTitle>{copy.runDiagnostics}</CardTitle>
@@ -566,17 +567,6 @@ function parseTime(value: string | undefined): number | null {
   if (!value) return null;
   const time = Date.parse(value);
   return Number.isNaN(time) ? null : time;
-}
-
-function formatStageProgress(progress: StageProgress, copy: AdminCopy): string {
-  const labels: Record<string, string> = {
-    plan: copy.stagePlan,
-    implement: copy.stageImplement,
-    review: copy.stageReview,
-    verify: copy.stageQa,
-    qa: copy.stageQa,
-  };
-  return `${labels[progress.key] ?? progress.key} ${progress.index}/${progress.total}`;
 }
 
 function stringValue(value: unknown, copy: AdminCopy): string {
