@@ -125,7 +125,7 @@ describe("evaluatePolicyGate", () => {
     const gate = evaluatePolicyGate(
       {
         ...completedResult,
-        commits: [{ sha: "abc", message: "add key AKIAIOSFODNN7EXAMPLE" }],
+        commits: [{ sha: "abc", message: "add key AKIAIOSFODNN7EXAMPLE" }], // secret-scan:allow (AWS docs example key)
       },
       {
         repository: "acme/web",
