@@ -8,6 +8,7 @@ import {
   ExternalLink,
   FileDiff,
   GitBranch,
+  GitPullRequest,
   RotateCcw,
   ShieldCheck,
   Undo2,
@@ -15,7 +16,7 @@ import {
 } from "lucide-react";
 import type { Artifact, JobRecord, LogLine, RunEvent } from "../api.js";
 import { executorModeLabel, translateFailureCategory, translateState, type AdminCopy, type Locale } from "../i18n.js";
-import { deriveStageStates, resolvePrimaryStatus, statusBadgeVariant } from "../lib/status.js";
+import { deriveStageStates, isNeedsReviewJob, resolvePrimaryStatus, statusBadgeVariant } from "../lib/status.js";
 import {
   extractJobEvidence,
   normalizeExecutorMode,
@@ -127,6 +128,7 @@ export function JobDetail({
   const retryDisabled = Boolean(actionState) || !(job.phase === "Failed" && String(job.outcome) === "FailedInternal");
   const cancelDisabled = Boolean(actionState) || terminal;
   const isCancelled = String(job.outcome) === "Cancelled" || String(job.phase) === "Cancelled";
+  const needsReview = isNeedsReviewJob(job.phase, job.outcome);
   const primaryStatus = resolvePrimaryStatus(job);
   const executorMode = readExecutorMode(job);
   const ticketTitle = stringOrNull(job.title);
@@ -247,6 +249,33 @@ export function JobDetail({
                   <span className="text-charcoal">{copy.nextAction}: </span>
                   {job.next_action}
                 </p>
+              ) : null}
+            </section>
+          ) : null}
+
+          {/* NeedsReview is the dominant successful-terminal state: the operator's
+              one job is to review/merge the PR. Surface that next action as a
+              prominent, labeled CTA instead of relying on the bare PR icon button
+              in the action cluster (which has no text and is easy to miss). */}
+          {needsReview ? (
+            <section className="flex flex-col gap-3 rounded-xl border border-amber-border bg-amber-wash px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="m-0 flex items-center gap-1.5 text-[13px] font-semibold leading-5 text-amber-ink">
+                  <GitPullRequest aria-hidden="true" size={15} strokeWidth={2.4} className="shrink-0" />
+                  {copy.reviewSummary}
+                </p>
+                <p className="m-0 mt-1 text-[12px] leading-4 text-charcoal">{copy.reviewHint}</p>
+              </div>
+              {job.pr_url ? (
+                <a
+                  className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-amber-ink bg-amber-ink px-3 py-2 text-[13px] font-medium text-white no-underline shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md"
+                  href={job.pr_url}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  <ExternalLink aria-hidden="true" size={15} strokeWidth={2.4} />
+                  {copy.reviewOpenPr}
+                </a>
               ) : null}
             </section>
           ) : null}
@@ -591,7 +620,7 @@ function EvidenceBadge({ spec }: { spec: EvidenceBadgeSpec }) {
       : spec.tone === "danger"
         ? "border-danger bg-danger-wash text-danger"
         : spec.tone === "warning"
-          ? "border-transparent bg-linen text-cobalt-surface"
+          ? "border-amber-border bg-amber-wash text-amber-ink"
           : "border-hairline-gray bg-linen-white text-charcoal";
   return (
     <span

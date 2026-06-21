@@ -12,6 +12,13 @@
   --color-danger-hover: #ef4444;
   --color-danger-wash: #fef2f2;
 
+  /* Amber "needs attention / waiting" ramp. Distinct from both the blue info ramp
+     (mist-blue) and the red danger ramp, so a warning state never collides with a
+     neutral running/info state. amber-ink on amber-wash is 6.37:1 (WCAG AA). */
+  --color-amber-ink: #92400e;
+  --color-amber-wash: #fef3c7;
+  --color-amber-border: #fcd34d;
+
   --color-forest-ink: #091135;
   --color-sage-wash: #dbeaff;
   --color-mist-blue: #edf5ff;

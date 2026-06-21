@@ -324,6 +324,37 @@ describe("JobDetail", () => {
     expect(within(badgeGroup).getAllByText(/대기|완료|실패|구현/).length).toBe(1);
   });
 
+  it("surfaces a prominent PR-review next action for a NeedsReview job", () => {
+    render(
+      <JobDetail
+        {...baseProps}
+        job={{
+          id: "job_1",
+          phase: "Completed",
+          outcome: "NeedsReview",
+          repository: "acme/web",
+          pr_url: "https://github.com/acme/web/pull/7",
+        }}
+      />,
+    );
+
+    // The operator's next action (review the PR) is a labeled CTA, not just the
+    // bare icon button in the action cluster.
+    const cta = screen.getByRole("link", { name: adminCopy.ko.reviewOpenPr });
+    expect(cta).toHaveAttribute("href", "https://github.com/acme/web/pull/7");
+    expect(screen.getByText(adminCopy.ko.reviewHint)).toBeInTheDocument();
+  });
+
+  it("does not show the PR-review next action for a running job", () => {
+    render(
+      <JobDetail
+        {...baseProps}
+        job={{ id: "job_1", phase: "Implementing", outcome: "Running", repository: "acme/web" }}
+      />,
+    );
+    expect(screen.queryByText(adminCopy.ko.reviewHint)).not.toBeInTheDocument();
+  });
+
   it("renders the ticket / DoD panel as a checklist when DoD is enumerable", () => {
     render(
       <JobDetail
