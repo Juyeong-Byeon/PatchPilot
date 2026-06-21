@@ -136,7 +136,11 @@ jobs:
           # gitleaks scans commit history, so it needs the full clone.
           fetch-depth: 0
 
-      - name: Run gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Run the gitleaks CLI via its official image rather than the v2 Action: the
+      # Action drives the GitHub PR API (fetch commits / post a summary) and needs
+      # extra token permissions, which is overkill for an advisory scan and crashes
+      # under the default read-only token. The CLI scans full history directly.
+      - name: Run gitleaks (full history)
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE:/repo" ghcr.io/gitleaks/gitleaks:latest \
+            detect --source=/repo --config=/repo/.gitleaks.toml --redact --no-banner --verbose
