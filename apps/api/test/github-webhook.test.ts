@@ -139,6 +139,72 @@ describe("github webhook route", () => {
     await app.close();
   });
 
+  it("ignores a malformed body without crashing or reaching the state change", async () => {
+    const repos = {
+      createJobFromTicket: vi.fn(),
+      appendEvent: vi.fn(),
+      markPullRequestMerged: vi.fn(),
+    };
+    const app = await buildServer({
+      repos: repos as never,
+      queue: { add: vi.fn() },
+      larkWebhookSecret: "lark-secret",
+      githubWebhookSecret: "github-secret",
+    });
+    // Authentic (correctly signed) but shape-invalid: `pull_request.number` is a
+    // string and `action` is a number, so the zod schema rejects it. The route
+    // must fall back to the safe ignored/200 response, not 500, and never call
+    // the merge path.
+    const body = JSON.stringify({ action: 7, pull_request: { number: "not-a-number", merged: true } });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/webhooks/github",
+      headers: {
+        "content-type": "application/json",
+        "x-github-event": "pull_request",
+        "x-hub-signature-256": signatureFor("github-secret", body),
+      },
+      payload: body,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ action: "ignored" });
+    expect(repos.markPullRequestMerged).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it("ignores a non-object body without crashing", async () => {
+    const repos = {
+      createJobFromTicket: vi.fn(),
+      appendEvent: vi.fn(),
+      markPullRequestMerged: vi.fn(),
+    };
+    const app = await buildServer({
+      repos: repos as never,
+      queue: { add: vi.fn() },
+      larkWebhookSecret: "lark-secret",
+      githubWebhookSecret: "github-secret",
+    });
+    const body = JSON.stringify("a bare string, not the expected object");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/webhooks/github",
+      headers: {
+        "content-type": "application/json",
+        "x-github-event": "pull_request",
+        "x-hub-signature-256": signatureFor("github-secret", body),
+      },
+      payload: body,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ action: "ignored" });
+    expect(repos.markPullRequestMerged).not.toHaveBeenCalled();
+    await app.close();
+  });
+
   it("ignores closed pull requests that were not merged", async () => {
     const repos = {
       createJobFromTicket: vi.fn(),

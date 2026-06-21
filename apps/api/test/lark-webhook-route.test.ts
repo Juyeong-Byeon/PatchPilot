@@ -100,6 +100,26 @@ describe("lark webhook route", () => {
     await app.close();
   });
 
+  it("rejects an authentic but malformed body with 400 before any job work", async () => {
+    const deps = makeDeps();
+    const app = await buildServer({ ...deps, larkWebhookSecret: "secret" });
+
+    // Correct secret (authentic) but the shape is wrong: `fields` is missing and
+    // `recordId` is a number. The zod boundary check must 400 before
+    // `parseLarkTicket`/`createJobFromTicket` runs — never a 500.
+    const response = await app.inject({
+      method: "POST",
+      url: "/webhooks/lark",
+      headers: { "content-type": "application/json", "x-lark-webhook-secret": "secret" },
+      payload: JSON.stringify({ recordId: 123, triggerVersion: "v1" }),
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(deps.repos.createJobFromTicket).not.toHaveBeenCalled();
+    expect(deps.queue.add).not.toHaveBeenCalled();
+    await app.close();
+  });
+
   it("rejects a signed request whose signature does not match the body", async () => {
     const deps = makeDeps();
     const app = await buildServer({ ...deps, larkWebhookSecret: "secret" });

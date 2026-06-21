@@ -8,11 +8,34 @@ import {
 import type { LarkStatusUpdater } from "@ticket-to-pr/core";
 import type { Repositories } from "@ticket-to-pr/db";
 import type { AgentJobPayload } from "@ticket-to-pr/queue";
+import { z } from "zod";
 
-export interface LarkWebhookInput {
-  recordId: string;
-  triggerVersion: string;
-  fields: Record<string, unknown>;
+/**
+ * Runtime shape check for the Lark automation webhook body. Defense in depth ON
+ * TOP of the HMAC/timestamp/nonce verification in `createLarkWebhookVerifier` —
+ * the verifier proves the bytes are authentic; this proves the three fields the
+ * handler reads are present and typed. Unlike GitHub these fields are required,
+ * so a body missing them is rejected at the boundary rather than fed to
+ * `parseLarkTicket`. `.passthrough()` keeps any extra keys Lark may send.
+ */
+export const larkWebhookInputSchema = z
+  .object({
+    recordId: z.string(),
+    triggerVersion: z.string(),
+    fields: z.record(z.unknown()),
+  })
+  .passthrough();
+
+export type LarkWebhookInput = z.infer<typeof larkWebhookInputSchema>;
+
+/**
+ * Parse an untrusted webhook body into `LarkWebhookInput`. Returns `null` when
+ * the body does not match the schema; the route maps that to a 400 so a
+ * malformed body never reaches `parseLarkTicket` or crashes the route.
+ */
+export function parseLarkWebhookInput(body: unknown): LarkWebhookInput | null {
+  const result = larkWebhookInputSchema.safeParse(body);
+  return result.success ? result.data : null;
 }
 
 export interface AgentQueue {

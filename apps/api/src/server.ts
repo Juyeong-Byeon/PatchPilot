@@ -9,8 +9,12 @@ import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import { assertGitHubWebhookSignature, createLarkWebhookVerifier } from "./auth.js";
 import { readApiEnv } from "./env.js";
-import { handleGitHubPullRequestWebhook, type GitHubWebhookRepositories } from "./github-webhook.js";
-import { handleLarkWebhook, type AgentQueue, type LarkWebhookInput } from "./lark-webhook.js";
+import {
+  handleGitHubPullRequestWebhook,
+  parseGitHubPullRequestPayload,
+  type GitHubWebhookRepositories,
+} from "./github-webhook.js";
+import { handleLarkWebhook, parseLarkWebhookInput, type AgentQueue } from "./lark-webhook.js";
 import { registerAdminRoutes, type AdminRepositories } from "./routes-admin.js";
 import { registerHealthRoutes, type HealthProbes } from "./routes-health.js";
 import { registerSettingsRoutes, type SettingsRepositories } from "./routes-settings.js";
@@ -60,28 +64,39 @@ export async function buildServer(deps: ApiServerDependencies): Promise<FastifyI
   if (deps.adminToken && hasSettingsRepositories(deps.repos)) {
     await registerSettingsRoutes(app, deps.repos, deps.adminToken);
   }
-  app.post<{ Body: LarkWebhookInput }>("/webhooks/lark", async (request, reply) => {
+  app.post<{ Body: unknown }>("/webhooks/lark", async (request, reply) => {
     // Hardened verifier (L5): prefers signed (HMAC + timestamp + nonce) requests,
     // falls back to the legacy plain `x-lark-webhook-secret` header for
     // back-compat. Needs the exact raw body bytes for the HMAC.
     if (larkVerifier) larkVerifier.verify(request, readRawBody(request));
-    const result = await handleLarkWebhook(request.body, deps.repos, deps.queue, deps.larkUpdater);
+    // Runtime shape check on top of the HMAC: an authentic but malformed body is
+    // rejected with 400 before it reaches `parseLarkTicket`, never a 500.
+    const input = parseLarkWebhookInput(request.body);
+    if (!input) return reply.code(400).send({ error: "Invalid Lark webhook payload" });
+    const result = await handleLarkWebhook(input, deps.repos, deps.queue, deps.larkUpdater);
     const statusCode = result.action === "enqueued" ? 202 : 200;
     return reply.code(statusCode).send(result);
   });
   const githubWebhookSecret = deps.githubWebhookSecret?.trim();
   if (githubWebhookSecret || deps.allowUnauthenticatedGitHubWebhook === true) {
-    app.post("/webhooks/github", async (request, reply) => {
+    app.post<{ Body: unknown }>("/webhooks/github", async (request, reply) => {
       if (githubWebhookSecret) assertGitHubWebhookSignature(request, githubWebhookSecret, readRawBody(request));
       if (request.headers["x-github-event"] !== "pull_request") return reply.code(200).send({ action: "ignored" });
       if (!hasGitHubWebhookRepositories(deps.repos))
         return reply.code(503).send({ error: "GitHub webhook repository unavailable" });
 
+      // Runtime shape check on top of the HMAC, replacing `request.body as never`.
+      // A body that is not a shape-valid pull_request payload maps to the same
+      // safe "ignored"/200 response GitHub already gets for events it does not act
+      // on — never a 500.
+      const payload = parseGitHubPullRequestPayload(request.body);
+      if (!payload) return reply.code(200).send({ action: "ignored" });
+
       // Pass the GitHub delivery id so the handler can dedup redeliveries exactly
       // once (T2). The header is single-valued; coerce an array form defensively.
       const deliveryHeader = request.headers["x-github-delivery"];
       const deliveryId = Array.isArray(deliveryHeader) ? deliveryHeader[0] : deliveryHeader;
-      const result = await handleGitHubPullRequestWebhook(request.body as never, deps.repos, deps.larkUpdater, {
+      const result = await handleGitHubPullRequestWebhook(payload, deps.repos, deps.larkUpdater, {
         deliveryId,
       });
       const statusCode = result.action === "completed" ? 202 : 200;
