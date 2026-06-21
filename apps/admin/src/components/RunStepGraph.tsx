@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import { AlertCircle, CheckCircle2, CircleDashed, LoaderCircle, MinusCircle } from "lucide-react";
 import type { RunEvent } from "../api.js";
-import { translateState, type AdminCopy, type Locale } from "../i18n.js";
+import { stageKeyLabel, translateState, type AdminCopy, type Locale } from "../i18n.js";
+import type { StageState, StageStatus } from "../lib/status.js";
 import type { SpanSelection } from "./RunTimeline.js";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
 
@@ -11,6 +12,8 @@ interface RunStepGraphProps {
   copy: AdminCopy;
   locale: Locale;
   selectedStep?: SpanSelection | null;
+  /** gstack sub-stages, nested under the Implementing node when present (staged runs). */
+  stageStates?: StageState[] | null;
   onSelectStep?(selection: SpanSelection): void;
 }
 
@@ -23,7 +26,15 @@ interface GraphStep {
 
 const standardPhaseFlow = ["Queued", "Planning", "Implementing", "PolicyChecking", "Publishing", "Completed"];
 
-export function RunStepGraph({ events, currentPhase, copy, locale, selectedStep, onSelectStep }: RunStepGraphProps) {
+export function RunStepGraph({
+  events,
+  currentPhase,
+  copy,
+  locale,
+  selectedStep,
+  stageStates,
+  onSelectStep,
+}: RunStepGraphProps) {
   const orderedEvents = useMemo(() => sortEvents(events), [events]);
   const steps = useMemo(() => buildGraphSteps(orderedEvents, currentPhase), [currentPhase, orderedEvents]);
 
@@ -77,6 +88,24 @@ export function RunStepGraph({ events, currentPhase, copy, locale, selectedStep,
                       <span className="text-[12px] leading-4 text-charcoal">{statusLabel(step.status, copy)}</span>
                     </span>
                   </button>
+                  {step.phase === "Implementing" && stageStates && stageStates.length > 0 ? (
+                    <ul
+                      className="mt-1.5 grid gap-1 border-t border-dashed border-hairline-gray px-1.5 pt-2"
+                      aria-label={copy.agentStages}
+                    >
+                      {stageStates.map((sub) => (
+                        <li className="flex items-center gap-1.5" key={`${sub.index}-${sub.key}`}>
+                          <span
+                            className={`size-2 shrink-0 rounded-full ${subStageDotClass(sub.status)}`}
+                            aria-hidden="true"
+                          />
+                          <span className="truncate text-[11px] leading-4 text-charcoal">
+                            {stageKeyLabel(sub.key, copy)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                 </li>
               );
             })}
@@ -191,6 +220,15 @@ function nodeClass(status: StepStatus, selected: boolean): string {
   if (selected) return "border-cobalt-surface bg-linen-white text-cobalt-surface shadow-sm shadow-electric-blue/15";
   if (status === "skipped") return "border-hairline-gray bg-linen text-graphite";
   return "border-hairline-gray bg-linen-white text-graphite";
+}
+
+// Status dot for the gstack sub-stages nested under the Implementing node. Quieter
+// than the main nodes: ink for done, cobalt for active, hairline for not-yet-run.
+function subStageDotClass(status: StageStatus): string {
+  if (status === "failed") return "bg-danger";
+  if (status === "active") return "bg-cobalt-surface";
+  if (status === "complete") return "bg-forest-ink";
+  return "bg-hairline-gray"; // pending / skipped
 }
 
 function connectorClass(status: StepStatus, nextStatus: StepStatus): string {

@@ -223,17 +223,20 @@ export function JobDetail({
         </CardContent>
       </Card>
 
-      {stageNotes.length > 0 ? <StageNotesPanel notes={stageNotes} copy={copy} /> : null}
-
       <RunStepGraph
         events={currentEvents}
         currentPhase={job.phase}
         copy={copy}
         locale={locale}
         selectedStep={selectedSpan}
+        stageStates={stageStates}
         onSelectStep={setSelectedSpan}
       />
       {stageStates ? <StagePipeline stages={stageStates} nowMs={nowMs} copy={copy} /> : null}
+      {/* Stage notes belong to the Implementing phase — show them only when that step is selected. */}
+      {selectedSpan?.phase === "Implementing" && stageNotes.length > 0 ? (
+        <StageNotesPanel notes={stageNotes} copy={copy} />
+      ) : null}
       <Card>
         <CardHeader>
           <CardTitle>{copy.runDiagnostics}</CardTitle>

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { JobDetail } from "../src/components/JobDetail.js";
 import { adminCopy } from "../src/i18n.js";
@@ -242,11 +242,12 @@ describe("JobDetail", () => {
       />,
     );
 
-    // Brand-free heading, with the implement stage relabelled to avoid clashing
-    // with the platform "구현" phase chip.
+    // Brand-free heading (sub-track card), with the implement stage relabelled to
+    // avoid clashing with the platform "구현" phase chip. Stage labels also appear
+    // nested under the Implementing node in the step graph, so they render twice.
     expect(screen.getByText("에이전트 단계")).toBeInTheDocument();
-    expect(screen.getByText("코드 작성")).toBeInTheDocument();
-    expect(screen.getByText("검증")).toBeInTheDocument();
+    expect(screen.getAllByText("코드 작성").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("검증").length).toBeGreaterThan(0);
   });
 
   it("renders the final PR-description stage label for a completed staged run", () => {
@@ -264,7 +265,24 @@ describe("JobDetail", () => {
       />,
     );
 
-    expect(screen.getByText("PR 설명")).toBeInTheDocument();
+    // Rendered both in the sub-track card and nested under the Implementing node.
+    expect(screen.getAllByText("PR 설명").length).toBeGreaterThan(0);
+  });
+
+  it("reveals the pipeline stage notes only when the Implementing step is selected", () => {
+    const props = {
+      ...baseProps,
+      job: { id: "job_1", phase: "Completed", outcome: "NeedsReview", repository: "acme/web" },
+      artifacts: [{ id: "art_plan", run_id: "run_1", kind: "gstack-plan", content: "# Plan\n- do the thing" }],
+    };
+    render(<JobDetail {...props} />);
+
+    // Completed job opens with no step selected → the stage-notes panel is hidden.
+    expect(screen.queryByText(adminCopy.ko.stageNotes)).not.toBeInTheDocument();
+
+    // Selecting the Implementing node in the step graph reveals it.
+    fireEvent.click(screen.getByRole("button", { name: /구현/ }));
+    expect(screen.getByText(adminCopy.ko.stageNotes)).toBeInTheDocument();
   });
 
   it("hides the agent sub-stage track for non-staged runs that emit no stage events", () => {

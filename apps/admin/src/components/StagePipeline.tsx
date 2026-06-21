@@ -1,5 +1,5 @@
 import { AlertCircle, CheckCircle2, CircleDashed, LoaderCircle, MinusCircle } from "lucide-react";
-import type { AdminCopy } from "../i18n.js";
+import { stageKeyLabel, type AdminCopy } from "../i18n.js";
 import type { StageState, StageStatus } from "../lib/status.js";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
 
@@ -51,7 +51,7 @@ export function StagePipeline({ stages, nowMs, copy }: StagePipelineProps) {
                     </span>
                     <span className="grid w-full min-w-0 gap-0.5">
                       <strong className="truncate text-[12px] font-semibold leading-4 text-true-black">
-                        {stageLabel(stage.key, copy)}
+                        {stageKeyLabel(stage.key, copy)}
                       </strong>
                       <span className="text-[11px] leading-4 text-charcoal">{statusLabel(stage.status, copy)}</span>
                       {elapsed(stage, nowMs) ? (
@@ -69,18 +69,6 @@ export function StagePipeline({ stages, nowMs, copy }: StagePipelineProps) {
       </CardContent>
     </Card>
   );
-}
-
-function stageLabel(key: string, copy: AdminCopy): string {
-  const labels: Record<string, string> = {
-    plan: copy.stagePlan,
-    implement: copy.stageCode,
-    review: copy.stageReview,
-    verify: copy.stageQa,
-    qa: copy.stageQa,
-    document: copy.stageDocument,
-  };
-  return labels[key] ?? key;
 }
 
 function statusLabel(status: StageStatus, copy: AdminCopy): string {
