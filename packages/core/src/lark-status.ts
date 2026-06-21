@@ -57,13 +57,14 @@ export function readLarkRecordUpdaterConfig(
   ]
     .filter(([, value]) => !value)
     .map(([name]) => name);
-  if (missing.length > 0) throw new Error(`Incomplete Lark status update config: ${missing.join(", ")}`);
+  if (!appId || !appSecret || !baseAppToken || !tableId)
+    throw new Error(`Incomplete Lark status update config: ${missing.join(", ")}`);
 
   return {
-    appId: appId!,
-    appSecret: appSecret!,
-    baseAppToken: baseAppToken!,
-    tableId: tableId!,
+    appId,
+    appSecret,
+    baseAppToken,
+    tableId,
     apiBaseUrl: clean(source.LARK_API_BASE_URL) ?? "https://open.larksuite.com",
     fieldMapping: {
       statusField: clean(source.LARK_STATUS_FIELD) ?? "PatchPilot Status",
