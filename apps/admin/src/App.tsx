@@ -586,10 +586,11 @@ export default function App() {
 function readRoute(): AdminRoute {
   if (window.location.pathname === "/settings") return { page: "settings" };
   const match = window.location.pathname.match(/^\/jobs\/(.+)$/);
-  if (!match) return { page: "list" };
+  const jobIdRaw = match?.[1];
+  if (jobIdRaw === undefined) return { page: "list" };
 
   try {
-    return { page: "detail", jobId: decodeURIComponent(match[1]) };
+    return { page: "detail", jobId: decodeURIComponent(jobIdRaw) };
   } catch {
     return { page: "list" };
   }

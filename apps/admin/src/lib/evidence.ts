@@ -133,7 +133,7 @@ export function parseDefinitionOfDone(value: unknown): string[] {
   // before the bullet check below, which (the line starts with "1)") would otherwise
   // return the whole line as a single item.
   if (lines.length === 1) {
-    const inline = splitInlineEnumeration(lines[0]);
+    const inline = splitInlineEnumeration(lines[0] ?? "");
     if (inline.length >= 2) return inline;
   }
 
@@ -159,7 +159,7 @@ export function parseDefinitionOfDone(value: unknown): string[] {
 function splitInlineEnumeration(text: string): string[] {
   const matches = [...text.matchAll(/(?:^|\s)\d+\)\s*(.+?)(?=\s+\d+\)\s|$)/gs)];
   if (matches.length < 2) return [];
-  return matches.map((match) => match[1].trim()).filter(Boolean);
+  return matches.map((match) => (match[1] ?? "").trim()).filter(Boolean);
 }
 
 // Forward-compat: surface an executor/pipeline mode badge ONLY when the backend

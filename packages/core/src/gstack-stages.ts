@@ -21,5 +21,7 @@ export function formatStageBanner(index: number, total: number, key: string): st
 export function parseStageBanner(line: string): GstackStageBanner | null {
   const match = STAGE_BANNER.exec(line);
   if (!match) return null;
-  return { index: Number(match[1]), total: Number(match[2]), key: match[3] };
+  const key = match[3];
+  if (key === undefined) return null;
+  return { index: Number(match[1]), total: Number(match[2]), key };
 }

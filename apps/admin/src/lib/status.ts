@@ -241,7 +241,9 @@ export function deriveStageStates(
   if (byIndex.size === 0) return null;
 
   const started = [...byIndex.values()].sort((a, b) => a.index - b.index);
-  const maxStarted = started[started.length - 1].index;
+  const lastStarted = started[started.length - 1];
+  if (!lastStarted) return null;
+  const maxStarted = lastStarted.index;
   const total = Math.max(GSTACK_STAGE_KEYS.length, maxStarted, ...started.map((stage) => stage.total));
 
   const implementingDone =

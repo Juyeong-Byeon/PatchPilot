@@ -82,7 +82,7 @@ export async function registerAdminRoutes(
     // Both the job console and the owner metrics dashboard are admin-only. Match
     // on the path prefix (ignoring any query string) so `/api/metrics?days=7` is
     // protected exactly like `/api/jobs`.
-    const path = request.url.split("?", 1)[0];
+    const path = request.url.split("?", 1)[0] ?? "";
     if (path.startsWith("/api/jobs") || path.startsWith("/api/metrics")) {
       assertAdminToken(request, adminToken);
     }

@@ -245,7 +245,9 @@ export class Repositories {
         input.executorMode ?? null,
       ],
     );
-    return mapRun(result.rows[0]);
+    const row = result.rows[0];
+    if (!row) throw new Error("insert into runs returned no row");
+    return mapRun(row);
   }
 
   async appendLog(input: AppendLogInput): Promise<void> {
@@ -643,7 +645,9 @@ export class Repositories {
          returning id, job_id, attempt, container_id, runner_image_digest, workspace_path, base_sha, work_branch, head_sha, exit_code, guidance`,
         [runId, jobId, attempt, "", workBranch, guidance],
       );
-      const run = mapRun(runResult.rows[0]);
+      const runRow = runResult.rows[0];
+      if (!runRow) throw new Error("insert into runs returned no row");
+      const run = mapRun(runRow);
 
       await client.query(
         `update jobs
@@ -751,7 +755,9 @@ export class Repositories {
          returning id, job_id, attempt, container_id, runner_image_digest, workspace_path, base_sha, work_branch, head_sha, exit_code, guidance`,
         [runId, jobId, attempt, "", workBranch, trimmed],
       );
-      const run = mapRun(runResult.rows[0]);
+      const runRow = runResult.rows[0];
+      if (!runRow) throw new Error("insert into runs returned no row");
+      const run = mapRun(runRow);
 
       // Resume + clear the pending question. AwaitingInput → Queued is the only
       // forward edge core's whitelist allows for a parked job.
