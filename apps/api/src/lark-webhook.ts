@@ -16,7 +16,13 @@ export interface LarkWebhookInput {
 }
 
 export interface AgentQueue {
-  add(name: string, data: AgentJobPayload): Promise<unknown>;
+  /**
+   * `opts.jobId` is the BullMQ dedup key (X6): enqueuing the same jobId twice
+   * collapses to one queued job, so a redelivered Lark webhook (which already
+   * dedups at the DB via `createJobFromTicket`) cannot also double-enqueue.
+   * Optional to stay back-compatible with callers/tests that pass no opts.
+   */
+  add(name: string, data: AgentJobPayload, opts?: { jobId?: string }): Promise<unknown>;
 }
 
 export async function handleLarkWebhook(
@@ -35,12 +41,17 @@ export async function handleLarkWebhook(
 
   if (!created.created) return { action: "duplicate" };
 
-  await queue.add(created.jobId, {
-    jobId: created.jobId,
-    ticketSnapshotId: created.ticketSnapshotId,
-    larkRecordId: ticket.larkRecordId,
-    triggerVersion: ticket.triggerVersion,
-  });
+  await queue.add(
+    created.jobId,
+    {
+      jobId: created.jobId,
+      ticketSnapshotId: created.ticketSnapshotId,
+      larkRecordId: ticket.larkRecordId,
+      triggerVersion: ticket.triggerVersion,
+    },
+    // X6: the jobId (unique per created job) dedups duplicate enqueues.
+    { jobId: created.jobId },
+  );
   await repos.appendEvent({
     jobId: created.jobId,
     phase: "Queued",

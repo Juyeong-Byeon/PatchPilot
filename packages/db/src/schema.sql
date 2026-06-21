@@ -48,6 +48,10 @@ create table if not exists runs (
   -- Pipeline that ran this attempt: 'single-pass' | 'staged' (epic D / X3). Also
   -- added to existing databases by migration 0002.
   executor_mode text,
+  -- Operator steering note for a retry attempt (epic steering / X4). The
+  -- worker/runner read this back to inject guidance into the next agent run. Also
+  -- added to existing databases by migration 0003. Null when none was attached.
+  guidance text,
   heartbeat_at timestamptz,
   started_at timestamptz,
   finished_at timestamptz,
