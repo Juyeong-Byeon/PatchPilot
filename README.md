@@ -450,14 +450,17 @@ npm run dev:admin
 ## Development Checks
 
 ```bash
+npm run format:check
 npm run typecheck
+npm run lint
 npm test
 npm run build
 git diff --check
 ```
 
-The database repository test is skipped unless `DATABASE_URL` points at a live
-Postgres database.
+These mirror the gates CI enforces (`.github/workflows/ci.yml`). The database
+repository test is skipped unless `DATABASE_URL` points at a live Postgres
+database.
 
 ## Security Boundary
 
