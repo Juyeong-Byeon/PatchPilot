@@ -860,7 +860,12 @@ function ArtifactPanel({
               <time className="text-charcoal md:text-right">{formatDate(artifact.created_at, locale, copy)}</time>
             </header>
             {artifact.content ? (
-              <pre className="terminal-surface m-0 max-h-[280px] overflow-auto p-4 text-[12px] leading-5 whitespace-pre-wrap break-all text-true-black">
+              <pre
+                tabIndex={0}
+                role="group"
+                aria-label={copy.artifacts}
+                className="terminal-surface m-0 max-h-[280px] overflow-auto p-4 text-[12px] leading-5 whitespace-pre-wrap break-all text-true-black"
+              >
                 {formatJson(artifact.content)}
               </pre>
             ) : null}

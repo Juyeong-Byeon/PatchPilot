@@ -30,6 +30,15 @@ describe("LogViewer", () => {
     expect(output.textContent).not.toContain("gstack/progress");
   });
 
+  it("exposes the scrollable log output as a keyboard-focusable, labeled region", () => {
+    render(<LogViewer copy={adminCopy.ko} logs={[LOG]} />);
+
+    // The clipped, scrollable <pre> has no focusable children, so it must itself
+    // be keyboard-focusable and named for WCAG 2.1.1 keyboard access.
+    const region = screen.getByRole("group", { name: adminCopy.ko.logs });
+    expect(region).toHaveAttribute("tabindex", "0");
+  });
+
   it("announces the empty state as a status region when no logs match", () => {
     render(<LogViewer copy={adminCopy.ko} logs={[]} />);
 

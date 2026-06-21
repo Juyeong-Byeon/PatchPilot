@@ -135,7 +135,12 @@ export function LogViewer({
         </div>
       ) : null}
       <div>
-        <pre className="terminal-surface m-0 max-h-[320px] min-h-[180px] overflow-auto p-4 text-[12px] leading-5 whitespace-pre-wrap text-true-black">
+        <pre
+          tabIndex={0}
+          role="group"
+          aria-label={copy.logs}
+          className="terminal-surface m-0 max-h-[320px] min-h-[180px] overflow-auto p-4 text-[12px] leading-5 whitespace-pre-wrap text-true-black"
+        >
           {filteredLogs.length === 0 ? (
             <p className="m-0" role="status">
               {copy.noLogs}
