@@ -3,6 +3,7 @@ node_modules
 work
 coverage
 .superpowers
+.claude/
 docs/superpowers
 package-lock.json
 **/*.svg
