@@ -23,6 +23,14 @@ export interface WorkspaceLifecycleConfig {
 }
 
 /**
+ * Resolve the EFFECTIVE retention window for a sweep tick. The poller reads this
+ * each tick so a live `failedWorkspaceRetentionDays` override (Settings page) applies
+ * without a worker restart. Falls back to the static `failedRetentionDays` when no
+ * resolver is wired (back-compat).
+ */
+export type ResolveRetentionDays = () => Promise<number> | number;
+
+/**
  * GC a successful job's workspace after publish. We remove the whole per-job dir
  * (all attempts) because a completed job will not be retried. No-op if the path is
  * already gone.
@@ -41,8 +49,12 @@ export async function gcSuccessfulWorkspace(
  * single periodic call cleans up everything aged out, including workspaces orphaned
  * by a worker crash. Returns the job dirs it removed (for logging/tests).
  */
-export async function sweepExpiredWorkspaces(config: WorkspaceLifecycleConfig): Promise<string[]> {
-  const cutoff = Date.now() - config.failedRetentionDays * 24 * 60 * 60 * 1000;
+export async function sweepExpiredWorkspaces(
+  config: WorkspaceLifecycleConfig,
+  retentionDaysOverride?: number,
+): Promise<string[]> {
+  const retentionDays = retentionDaysOverride ?? config.failedRetentionDays;
+  const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
   let entries: string[];
   try {
     entries = await readdir(config.workspaceRoot);
@@ -127,12 +139,28 @@ export function startWorkspaceLifecyclePoller(
   config: WorkspaceLifecycleConfig & {
     intervalMs: number;
     getActiveRunIds: () => ReadonlySet<string>;
+    /**
+     * Resolve the EFFECTIVE retention window each tick (env ⊕ DB override; Settings
+     * page) so a live `failedWorkspaceRetentionDays` override applies without a
+     * worker restart. Optional: when absent the static `failedRetentionDays` is used.
+     */
+    resolveRetentionDays?: ResolveRetentionDays;
   },
 ): WorkspaceLifecyclePollerHandle | null {
   if (config.intervalMs <= 0) return null;
-  const tick = () => {
-    void sweepExpiredWorkspaces(config);
-    void sweepOrphanRunnerContainers(config.getActiveRunIds(), config.onError);
+  const tick = async () => {
+    // Read the live retention override each tick; on failure fall back to the static
+    // value so a settings read never breaks the sweep.
+    let retentionDays = config.failedRetentionDays;
+    if (config.resolveRetentionDays) {
+      try {
+        retentionDays = await config.resolveRetentionDays();
+      } catch (error) {
+        config.onError?.("resolveRetentionDays", error);
+      }
+    }
+    await sweepExpiredWorkspaces(config, retentionDays);
+    await sweepOrphanRunnerContainers(config.getActiveRunIds(), config.onError);
   };
   const timer = setInterval(tick, config.intervalMs);
   if (typeof timer.unref === "function") timer.unref();

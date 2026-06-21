@@ -142,3 +142,14 @@ create table if not exists schema_migrations (
   version text primary key,
   applied_at timestamptz not null default now()
 );
+
+-- Operator-editable configuration overrides (Settings page). One row per setting,
+-- keyed by the core settings registry key; the value is jsonb so int/bool/csv/string
+-- all round-trip. The worker resolves the EFFECTIVE value (env ⊕ override) per job /
+-- per sweep. Also added to existing databases by migration 0004.
+create table if not exists app_settings (
+  key text primary key,
+  value jsonb not null,
+  updated_at timestamptz not null default now(),
+  updated_by text
+);

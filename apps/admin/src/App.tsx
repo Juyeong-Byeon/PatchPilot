@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ListChecks, Monitor, Moon, Pencil, ShieldCheck, Sun } from "lucide-react";
+import { ChevronLeft, ListChecks, Monitor, Moon, Settings as SettingsIcon, Sun } from "lucide-react";
 import adminLogo from "./assets/patchpilot-logo.svg";
 import {
   cancelJob,
@@ -25,7 +25,8 @@ import { cn } from "./lib/utils.js";
 import { isCompletedJob, isFailedJob, isNeedsReviewJob, isRunningPhase, type StatusFilter } from "./lib/status.js";
 import { applyTheme, getInitialTheme, storeTheme, type ThemePreference } from "./lib/theme.js";
 import { MetricsPanel } from "./components/MetricsPanel.js";
-import { adminCopy, getInitialLocale, localeNames, storeLocale, type AdminCopy, type Locale } from "./i18n.js";
+import { SettingsPanel } from "./components/SettingsPanel.js";
+import { adminCopy, getInitialLocale, storeLocale, type AdminCopy, type Locale } from "./i18n.js";
 
 const LIST_REFRESH_RUNNING_MS = 2000;
 const LIST_REFRESH_IDLE_MS = 5000;
@@ -49,7 +50,7 @@ interface DetailState {
   artifacts: Artifact[];
 }
 
-type AdminRoute = { page: "list" } | { page: "detail"; jobId: string };
+type AdminRoute = { page: "list" } | { page: "detail"; jobId: string } | { page: "settings" };
 
 type StatusState =
   | { kind: "ready" }
@@ -313,12 +314,16 @@ export default function App() {
     navigate({ page: "list" });
   }
 
+  function openSettings() {
+    navigate({ page: "settings" });
+  }
+
   function refreshCurrentDetail() {
     if (!selectedJobId) return;
     void refreshDetail(selectedJobId, token);
   }
 
-  const pageTitle = route.page === "list" ? copy.jobs : copy.jobDetail;
+  const pageTitle = route.page === "settings" ? copy.settings : route.page === "list" ? copy.jobs : copy.jobDetail;
 
   // Onboarding gate: with no saved token (or after a session-expiry 401) render a
   // dedicated, centered access-key screen instead of the sidebar+content grid.
@@ -393,100 +398,22 @@ export default function App() {
           </div>
 
           <nav className="grid gap-1" aria-label={copy.appTitle}>
-            <button
-              className="interactive-card inline-flex h-9 items-center gap-2 rounded-lg border border-electric-blue/20 bg-mist-blue px-3 text-left text-[13px] font-medium text-cobalt-surface shadow-sm shadow-electric-blue/10 transition-colors hover:border-electric-blue/40 hover:bg-sage-wash"
-              type="button"
+            <NavItem
+              label={copy.jobs}
+              Icon={ListChecks}
+              active={route.page === "list" || route.page === "detail"}
               onClick={openJobList}
-            >
-              <ListChecks aria-hidden="true" size={16} strokeWidth={2.2} />
-              {copy.jobs}
-            </button>
+            />
+            <NavItem
+              label={copy.settings}
+              Icon={SettingsIcon}
+              active={route.page === "settings"}
+              onClick={openSettings}
+            />
           </nav>
 
           <div className="mt-auto grid gap-4">
-            <section className="surface-card-soft rounded-xl border border-hairline-gray bg-linen-white p-3">
-              <div className="mb-2">
-                <strong className="text-[13px] font-semibold text-forest-ink">{copy.tokenLabel}</strong>
-              </div>
-              {editingToken ? (
-                // Edit stage: reveal the access-key input with 적용 / 취소 controls.
-                <form
-                  className="grid gap-2"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    saveToken();
-                  }}
-                >
-                  <label className="sr-only" htmlFor="admin-token">
-                    {copy.tokenLabel}
-                  </label>
-                  <Input
-                    id="admin-token"
-                    ref={tokenInputRef}
-                    value={token}
-                    type="password"
-                    autoComplete="off"
-                    placeholder={copy.tokenPlaceholder}
-                    aria-invalid={sessionExpired || undefined}
-                    onChange={(event) => setToken(event.target.value)}
-                  />
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button type="submit">{copy.apply}</Button>
-                    <Button type="button" variant="outline" onClick={() => setEditingToken(false)}>
-                      {copy.tokenCancel}
-                    </Button>
-                  </div>
-                </form>
-              ) : (
-                // Default stage: compact authenticated indicator + 수정 / 새로고침.
-                <div className="grid gap-2">
-                  <div className="inline-flex items-center gap-2 rounded-lg border border-electric-blue/20 bg-mist-blue px-2.5 py-1.5 text-cobalt-surface">
-                    <ShieldCheck aria-hidden="true" size={16} strokeWidth={2.2} />
-                    <span className="text-[12px] font-semibold leading-4">{copy.tokenAuthenticated}</span>
-                    <span className="ml-auto font-mono text-[12px] leading-4 tracking-[0.2em] text-charcoal">
-                      ••••••••
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setEditingToken(true);
-                        window.setTimeout(() => tokenInputRef.current?.focus(), 0);
-                      }}
-                    >
-                      <Pencil data-icon aria-hidden="true" strokeWidth={2.2} />
-                      {copy.tokenEdit}
-                    </Button>
-                    <Button type="button" variant="outline" onClick={() => void refreshJobs(token)}>
-                      {copy.refresh}
-                    </Button>
-                  </div>
-                </div>
-              )}
-              <div className="mt-2">
-                <span className="block text-[12px] leading-4 text-charcoal" aria-live="polite">
-                  {renderStatus(status, copy)}
-                </span>
-                {listError && !sessionExpired ? (
-                  <strong
-                    role="alert"
-                    className="mt-2 block rounded-lg bg-danger px-2.5 py-1.5 text-xs font-normal leading-4 text-white"
-                  >
-                    {listError}
-                  </strong>
-                ) : null}
-              </div>
-            </section>
-
-            <ThemeLocaleToggle
-              copy={copy}
-              theme={theme}
-              locale={locale}
-              onChangeTheme={changeTheme}
-              onChangeLocale={changeLocale}
-            />
+            <ThemeToggle copy={copy} theme={theme} onChangeTheme={changeTheme} />
             <footer className="border-t border-hairline-gray pt-4 text-[12px] leading-5 text-charcoal">
               <p className="m-0 font-medium text-forest-ink">{copy.appTitle}</p>
               <p className="m-0 mt-1">{copy.footerScope}</p>
@@ -558,7 +485,23 @@ export default function App() {
         </header>
 
         <main className="mx-auto w-full max-w-[var(--page-max-width)] flex-1 px-4 py-5 md:px-6">
-          {route.page === "list" ? (
+          {route.page === "settings" ? (
+            <SettingsPanel
+              token={token}
+              copy={copy}
+              locale={locale}
+              sessionExpired={sessionExpired}
+              onSessionExpired={handleSessionExpiry}
+              status={renderStatus(status, copy)}
+              listError={!sessionExpired ? listError : ""}
+              editingToken={editingToken}
+              onEditingTokenChange={setEditingToken}
+              onTokenChange={setToken}
+              onSaveToken={saveToken}
+              onRefresh={() => void refreshJobs(token)}
+              onChangeLocale={changeLocale}
+            />
+          ) : route.page === "list" ? (
             <div className="grid gap-4">
               <MetricsPanel
                 token={token}
@@ -601,6 +544,7 @@ export default function App() {
 }
 
 function readRoute(): AdminRoute {
+  if (window.location.pathname === "/settings") return { page: "settings" };
   const match = window.location.pathname.match(/^\/jobs\/(.+)$/);
   if (!match) return { page: "list" };
 
@@ -612,7 +556,12 @@ function readRoute(): AdminRoute {
 }
 
 function navigate(route: AdminRoute) {
-  const path = route.page === "detail" ? `/jobs/${encodeURIComponent(route.jobId)}` : "/jobs";
+  const path =
+    route.page === "detail"
+      ? `/jobs/${encodeURIComponent(route.jobId)}`
+      : route.page === "settings"
+        ? "/settings"
+        : "/jobs";
   window.history.pushState(null, "", path);
   window.dispatchEvent(new Event("popstate"));
 }
@@ -634,55 +583,65 @@ function renderStatus(status: StatusState, copy: AdminCopy): string {
   return copy.cancelRequested(status.phase);
 }
 
-// Theme + locale switchers, shared by the sidebar and the pre-auth onboarding view
-// so an operator can adjust appearance and language before signing in.
-function ThemeLocaleToggle({
+// Theme-only segmented control in the sidebar. Locale + account/auth controls moved
+// to the Settings page (환경설정); theme stays here so appearance is always one click
+// away regardless of the active route.
+function ThemeToggle({
   copy,
   theme,
-  locale,
   onChangeTheme,
-  onChangeLocale,
 }: {
   copy: AdminCopy;
   theme: ThemePreference;
-  locale: Locale;
   onChangeTheme(next: ThemePreference): void;
-  onChangeLocale(next: Locale): void;
 }) {
   return (
-    <div className="grid gap-2">
-      <div className="flex items-center gap-1 rounded-lg bg-mist-blue p-1" role="group" aria-label={copy.themeLabel}>
-        {THEME_OPTIONS.map(({ value, Icon, labelKey }) => (
-          <Button
-            key={value}
-            type="button"
-            size="sm"
-            variant={theme === value ? "default" : "ghost"}
-            className="h-8 flex-1 px-0"
-            aria-pressed={theme === value}
-            aria-label={copy[labelKey]}
-            title={copy[labelKey]}
-            onClick={() => onChangeTheme(value)}
-          >
-            <Icon data-icon aria-hidden="true" strokeWidth={2.2} />
-          </Button>
-        ))}
-      </div>
-      <div className="flex items-center gap-1 rounded-lg bg-mist-blue p-1">
-        {(["ko", "en"] as Locale[]).map((entry) => (
-          <Button
-            key={entry}
-            type="button"
-            size="sm"
-            variant={locale === entry ? "default" : "ghost"}
-            className="h-8 flex-1"
-            onClick={() => onChangeLocale(entry)}
-          >
-            {localeNames[entry]}
-          </Button>
-        ))}
-      </div>
+    <div className="flex items-center gap-1 rounded-lg bg-mist-blue p-1" role="group" aria-label={copy.themeLabel}>
+      {THEME_OPTIONS.map(({ value, Icon, labelKey }) => (
+        <Button
+          key={value}
+          type="button"
+          size="sm"
+          variant={theme === value ? "default" : "ghost"}
+          className="h-8 flex-1 px-0"
+          aria-pressed={theme === value}
+          aria-label={copy[labelKey]}
+          title={copy[labelKey]}
+          onClick={() => onChangeTheme(value)}
+        >
+          <Icon data-icon aria-hidden="true" strokeWidth={2.2} />
+        </Button>
+      ))}
     </div>
+  );
+}
+
+function NavItem({
+  label,
+  Icon,
+  active,
+  onClick,
+}: {
+  label: string;
+  Icon: typeof ListChecks;
+  active: boolean;
+  onClick(): void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-current={active ? "page" : undefined}
+      onClick={onClick}
+      className={cn(
+        "interactive-card inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-left text-[13px] font-medium transition-colors",
+        active
+          ? "border-electric-blue/20 bg-mist-blue text-cobalt-surface shadow-sm shadow-electric-blue/10 hover:border-electric-blue/40 hover:bg-sage-wash"
+          : "border-transparent bg-transparent text-charcoal hover:bg-mist-blue hover:text-forest-ink",
+      )}
+    >
+      <Icon aria-hidden="true" size={16} strokeWidth={2.2} />
+      {label}
+    </button>
   );
 }
 

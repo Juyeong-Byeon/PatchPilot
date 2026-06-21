@@ -160,6 +160,38 @@ export const adminCopy = {
     evidenceChangedFilesList: "변경 파일 목록",
     evidenceOpenChangedFile: "GitHub에서 파일 보기",
     evidenceChangedFilesMore: (count: number) => `외 ${count}개 더`,
+    settings: "설정",
+    settingsSubtitle: "환경 변수 ⊕ DB 오버라이드로 결정된 유효 설정",
+    settingsLoading: "설정을 불러오는 중입니다.",
+    settingsUnavailable: "이 백엔드에서는 설정 화면을 사용할 수 없습니다.",
+    settingsSave: "저장",
+    settingsSaving: "저장 중",
+    settingsSaved: "설정을 저장했습니다.",
+    settingsSaveFailed: "설정 저장에 실패했습니다.",
+    settingsNoChanges: "변경된 항목이 없습니다.",
+    settingsReadOnly: "읽기 전용",
+    settingsAppliesRestart: "재시작 후 적용",
+    settingsAppliesLive: "즉시 적용",
+    settingsSourceOverride: "오버라이드",
+    settingsSourceEnv: "환경 변수",
+    settingsSourceDefault: "기본값",
+    settingsSecurityNote: "보안 설정(저장소 허용 목록·보호 경로)은 콘솔에서 변경할 수 없습니다(설계상 읽기 전용).",
+    settingsBoolYes: "예",
+    settingsBoolNo: "아니오",
+    settingsEmptyList: "(없음)",
+    // Settings page groups + relocated preference controls.
+    settingsGroupPreferences: "환경설정",
+    settingsGroupPreferencesHint: "계정과 표시 언어를 관리합니다.",
+    settingsGroupOperations: "운영 설정",
+    settingsGroupOperationsHint: "런타임 동작을 조정하는 편집 가능한 값입니다.",
+    settingsGroupSystem: "시스템 정보",
+    settingsGroupSystemHint: "현재 적용된 읽기 전용 설정입니다.",
+    settingsSystemShow: "시스템 정보 보기",
+    settingsSystemHide: "시스템 정보 숨기기",
+    settingsAccountSection: "계정 · 인증",
+    settingsAccountHint: "인증된 관리자 인증키를 관리합니다.",
+    settingsLanguageSection: "언어",
+    settingsLanguageHint: "콘솔 표시 언어를 선택합니다.",
   },
   en: {
     documentTitle: "PatchPilot Operations",
@@ -315,6 +347,39 @@ export const adminCopy = {
     evidenceChangedFilesList: "Changed files",
     evidenceOpenChangedFile: "View file on GitHub",
     evidenceChangedFilesMore: (count: number) => `+${count} more`,
+    settings: "Settings",
+    settingsSubtitle: "Effective config resolved from env ⊕ DB overrides",
+    settingsLoading: "Loading settings...",
+    settingsUnavailable: "The settings page is unavailable on this backend.",
+    settingsSave: "Save",
+    settingsSaving: "Saving",
+    settingsSaved: "Settings saved.",
+    settingsSaveFailed: "Failed to save settings.",
+    settingsNoChanges: "No changes to save.",
+    settingsReadOnly: "Read-only",
+    settingsAppliesRestart: "Applies after restart",
+    settingsAppliesLive: "Applies live",
+    settingsSourceOverride: "Override",
+    settingsSourceEnv: "Env",
+    settingsSourceDefault: "Default",
+    settingsSecurityNote:
+      "Security values (repository allowlist, protected paths) are read-only from the console by design.",
+    settingsBoolYes: "Yes",
+    settingsBoolNo: "No",
+    settingsEmptyList: "(none)",
+    // Settings page groups + relocated preference controls.
+    settingsGroupPreferences: "Preferences",
+    settingsGroupPreferencesHint: "Manage your account and display language.",
+    settingsGroupOperations: "Operations",
+    settingsGroupOperationsHint: "Editable values that tune runtime behavior.",
+    settingsGroupSystem: "System",
+    settingsGroupSystemHint: "Read-only values currently in effect.",
+    settingsSystemShow: "Show system info",
+    settingsSystemHide: "Hide system info",
+    settingsAccountSection: "Account · Auth",
+    settingsAccountHint: "Manage the authenticated admin access key.",
+    settingsLanguageSection: "Language",
+    settingsLanguageHint: "Choose the console display language.",
   },
 } as const;
 
@@ -421,6 +486,72 @@ export function executorModeLabel(
     default:
       return raw;
   }
+}
+
+// Section + field labels for the Settings page. Unknown keys fall back to the raw
+// registry key so a future backend setting still renders something legible.
+const settingsSectionLabels: Record<Locale, Record<string, string>> = {
+  ko: {
+    modes: "실행 모드",
+    security: "보안 정책",
+    execution: "실행",
+    lifecycle: "수명 주기",
+    integration: "연동(Lark)",
+    runtime: "런타임",
+  },
+  en: {
+    modes: "Modes",
+    security: "Security",
+    execution: "Execution",
+    lifecycle: "Lifecycle",
+    integration: "Integration (Lark)",
+    runtime: "Runtime",
+  },
+};
+
+const settingsFieldLabels: Record<Locale, Record<string, string>> = {
+  ko: {
+    executorMode: "실행기 모드",
+    publisherMode: "게시 모드",
+    repositoryAllowlist: "저장소 허용 목록",
+    protectedPathDenylist: "보호 경로 차단 목록",
+    jobTimeoutSeconds: "작업 타임아웃(초)",
+    highPriorityStaged: "High 우선순위 → 단계형 파이프라인",
+    failedWorkspaceRetentionDays: "실패 워크스페이스 보존(일)",
+    reconcileIntervalMs: "정합성 폴링 주기(ms)",
+    runHeartbeatIntervalMs: "실행 하트비트 주기(ms)",
+    workspaceSweepIntervalMs: "워크스페이스 정리 주기(ms)",
+    larkStatusField: "Lark 상태 필드",
+    larkJobIdField: "Lark 작업 ID 필드",
+    larkPrUrlField: "Lark PR URL 필드",
+    runnerImage: "러너 이미지",
+    gitSha: "빌드 버전(Git SHA)",
+  },
+  en: {
+    executorMode: "Executor mode",
+    publisherMode: "Publisher mode",
+    repositoryAllowlist: "Repository allowlist",
+    protectedPathDenylist: "Protected path denylist",
+    jobTimeoutSeconds: "Job timeout (seconds)",
+    highPriorityStaged: "High priority → staged pipeline",
+    failedWorkspaceRetentionDays: "Failed workspace retention (days)",
+    reconcileIntervalMs: "Reconcile interval (ms)",
+    runHeartbeatIntervalMs: "Run heartbeat interval (ms)",
+    workspaceSweepIntervalMs: "Workspace sweep interval (ms)",
+    larkStatusField: "Lark status field",
+    larkJobIdField: "Lark job ID field",
+    larkPrUrlField: "Lark PR URL field",
+    runnerImage: "Runner image",
+    gitSha: "Build version (Git SHA)",
+  },
+};
+
+export function settingsSectionLabel(section: string, locale: Locale): string {
+  return settingsSectionLabels[locale][section] ?? section;
+}
+
+export function settingsFieldLabel(key: string, locale: Locale): string {
+  return settingsFieldLabels[locale][key] ?? key;
 }
 
 // Display label for a staged-runner sub-stage key. Shared by the agent sub-track

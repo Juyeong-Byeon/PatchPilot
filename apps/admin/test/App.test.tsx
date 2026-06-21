@@ -39,7 +39,7 @@ describe("App", () => {
     expect(screen.queryByRole("button", { name: "작업" })).not.toBeInTheDocument();
   });
 
-  it("hides the token input in the sidebar while authenticated and reveals it on edit", async () => {
+  it("keeps the sidebar minimal: theme toggle only, no token input or locale control", async () => {
     window.localStorage.setItem("ADMIN_TOKEN", "access-key");
     window.history.pushState(null, "", "/jobs");
     vi.spyOn(globalThis, "fetch").mockImplementation(async () => jsonResponse([]));
@@ -50,16 +50,16 @@ describe("App", () => {
       await Promise.resolve();
     });
 
-    // Default sidebar stage: compact "인증됨" indicator, no input field.
-    expect(screen.getByText("인증됨")).toBeInTheDocument();
-    expect(screen.queryByLabelText("관리자 인증키")).not.toBeInTheDocument();
+    // Theme segmented control still lives in the sidebar.
+    const themeGroup = screen.getByRole("group", { name: "테마" });
+    expect(within(themeGroup).getByRole("button", { name: "라이트" })).toBeInTheDocument();
 
-    // Clicking 수정 reveals the input.
-    await act(async () => {
-      screen.getByRole("button", { name: /수정/ }).click();
-      await Promise.resolve();
-    });
-    expect(screen.getByLabelText("관리자 인증키")).toBeInTheDocument();
+    // Account/auth + locale moved to Settings: neither the token input, the
+    // 인증됨 indicator, nor the locale buttons render in the (default) sidebar view.
+    expect(screen.queryByLabelText("관리자 인증키")).not.toBeInTheDocument();
+    expect(screen.queryByText("인증됨")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "한국어" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "English" })).not.toBeInTheDocument();
   });
 
   it("dismisses onboarding and shows the app after submitting a token", async () => {
