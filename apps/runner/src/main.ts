@@ -1,7 +1,7 @@
 import { access } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { readJsonArtifact, readTextArtifact } from "@ticket-to-pr/runner-contract";
+import { parseRunResultStatus, readJsonArtifact, readTextArtifact } from "@ticket-to-pr/runner-contract";
 import { checkoutBaseAndCreateBranch, cloneRepository, getChangedFiles, getHeadSha, hasLocalCommit } from "./git.js";
 import { runGstack } from "./gstack.js";
 import { prepareWorkspace } from "./workspace.js";
@@ -38,8 +38,7 @@ export async function runRunner(env: NodeJS.ProcessEnv = process.env): Promise<v
   // result.json and act on the real status — instead of a non-zero exit turning a
   // valid parked/failed outcome into an "exited with code 1" infra crash.
   await requireFile(paths.resultJson);
-  const result = (await readJsonArtifact(paths.resultJson)) as { status?: string } | null;
-  const status = result?.status;
+  const status = parseRunResultStatus(await readJsonArtifact(paths.resultJson));
 
   if (status === "needs_input") {
     console.log("Runner parked: agent requested operator input (needs-input.json); no changes pushed");
