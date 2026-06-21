@@ -579,6 +579,307 @@ describe("processAgentJob", () => {
     expect(publisher).toHaveBeenCalled();
   });
 
+  it("surfaces a runner's structured failure category and nextAction (X4)", async () => {
+    const repos = createRepos();
+    const executor = vi.fn().mockResolvedValue({
+      ...completedResult,
+      status: "failed",
+      targetBranch: undefined,
+      baseSha: undefined,
+      headSha: undefined,
+      pushSha: undefined,
+      review: undefined,
+      pullRequestDraft: undefined,
+      changedFiles: [],
+      commits: [],
+      tests: [],
+      retryable: false,
+      failure: {
+        stage: "implement",
+        category: "agent-quality",
+        message: "Could not satisfy DoD item 2",
+        retryable: false,
+        nextAction: "DoD 2번 항목을 더 구체화한 뒤 재시도하세요.",
+      },
+    });
+    const publisher = vi.fn();
+
+    const outcome = await processAgentJob(
+      { jobId: "job_1", ticketSnapshotId: "ts_1" },
+      {
+        repos,
+        executor,
+        publisher,
+        policyConfig: { repositoryAllowlist: ["acme/web"], protectedPathDenylist: [] },
+        ids: { runId: () => "run_1", artifactId: (kind) => `artifact_${kind}`, pullRequestId: () => "pr_1" },
+      },
+    );
+
+    expect(outcome).toEqual({ status: "failed", runId: "run_1" });
+    expect(publisher).not.toHaveBeenCalled();
+    // The runner's structured category + nextAction flow through verbatim.
+    expect(repos.transitionJob).toHaveBeenLastCalledWith(
+      "job_1",
+      "Failed",
+      "FailedActionable",
+      "Could not satisfy DoD item 2",
+      expect.objectContaining({
+        category: "agent-quality",
+        nextAction: "DoD 2번 항목을 더 구체화한 뒤 재시도하세요.",
+      }),
+    );
+  });
+
+  it("falls back to canned remediation for a non-completed result without structured failure (X4 tolerance)", async () => {
+    const repos = createRepos();
+    // A cancelled result is schema-valid with failure:null and exercises the
+    // fallback branch (the canned agent/infra remediation) since result.failure is
+    // absent. status !== "completed" → routed through the failure-handling block.
+    const executor = vi.fn().mockResolvedValue({
+      ...completedResult,
+      status: "cancelled",
+      targetBranch: undefined,
+      baseSha: undefined,
+      headSha: undefined,
+      pushSha: undefined,
+      review: undefined,
+      pullRequestDraft: undefined,
+      changedFiles: [],
+      commits: [],
+      tests: [],
+      retryable: false,
+      failure: null,
+    });
+    const publisher = vi.fn();
+
+    const outcome = await processAgentJob(
+      { jobId: "job_1", ticketSnapshotId: "ts_1" },
+      {
+        repos,
+        executor,
+        publisher,
+        policyConfig: { repositoryAllowlist: ["acme/web"], protectedPathDenylist: [] },
+        ids: { runId: () => "run_1", artifactId: (kind) => `artifact_${kind}`, pullRequestId: () => "pr_1" },
+      },
+    );
+
+    expect(outcome.status).toBe("failed");
+    expect(repos.transitionJob).toHaveBeenLastCalledWith(
+      "job_1",
+      "Failed",
+      "FailedActionable",
+      expect.stringContaining("Agent result status"),
+      expect.objectContaining({ category: "agent" }),
+    );
+  });
+
+  it("injects operator retry guidance into the executor input and records an event (X4)", async () => {
+    const repos = createRepos();
+    let seenGuidance: string | undefined;
+    const executor = vi.fn().mockImplementation(async (input) => {
+      seenGuidance = input.retryGuidance;
+      await writeFile(join(input.run.workspacePath, "PR_BODY.md"), "Generated body");
+      return completedResult;
+    });
+    const publisher = vi.fn().mockResolvedValue({
+      repository: "acme/web",
+      targetBranch: "main",
+      workBranch: "ticket-to-pr/job_1-attempt-2",
+      baseSha: "base",
+      headSha: "head",
+      pushSha: "0123456789abcdef0123456789abcdef01234567",
+      commitShas: ["abc"],
+      prUrl: "https://github.local/acme/web/pull/mock-job_1",
+      prNumber: 1,
+      prTitle: "Fix login",
+      prBody: "Generated body",
+    });
+
+    await processAgentJob(
+      { jobId: "job_1", ticketSnapshotId: "ts_1", attempt: 2, retryGuidance: "Focus on the redirect bug." },
+      {
+        repos,
+        executor,
+        publisher,
+        policyConfig: { repositoryAllowlist: ["acme/web"], protectedPathDenylist: [] },
+        ids: { runId: () => "run_1", artifactId: (kind) => `artifact_${kind}`, pullRequestId: () => "pr_1" },
+      },
+    );
+
+    expect(seenGuidance).toBe("Focus on the redirect bug.");
+    expect(repos.appendEvent).toHaveBeenCalledWith(expect.objectContaining({ eventType: "worker.retry_guidance" }));
+  });
+
+  it("reads retry guidance from rawFields when the payload omits it (X4 fallback)", async () => {
+    const repos = createRepos();
+    repos.getJobForWorker.mockResolvedValue({ ...job, rawFields: { retryGuidance: "From rawFields." } });
+    let seenGuidance: string | undefined;
+    const executor = vi.fn().mockImplementation(async (input) => {
+      seenGuidance = input.retryGuidance;
+      await writeFile(join(input.run.workspacePath, "PR_BODY.md"), "Generated body");
+      return completedResult;
+    });
+    const publisher = vi.fn().mockResolvedValue({
+      repository: "acme/web",
+      targetBranch: "main",
+      workBranch: "ticket-to-pr/job_1",
+      baseSha: "base",
+      headSha: "head",
+      pushSha: "0123456789abcdef0123456789abcdef01234567",
+      commitShas: ["abc"],
+      prUrl: "https://github.local/acme/web/pull/mock-job_1",
+      prNumber: 1,
+      prTitle: "Fix login",
+      prBody: "Generated body",
+    });
+
+    await processAgentJob(
+      { jobId: "job_1", ticketSnapshotId: "ts_1" },
+      {
+        repos,
+        executor,
+        publisher,
+        policyConfig: { repositoryAllowlist: ["acme/web"], protectedPathDenylist: [] },
+        ids: { runId: () => "run_1", artifactId: (kind) => `artifact_${kind}`, pullRequestId: () => "pr_1" },
+      },
+    );
+
+    expect(seenGuidance).toBe("From rawFields.");
+  });
+
+  it("GCs the workspace and writes heartbeats around a successful run (L1)", async () => {
+    const repos = createRepos();
+    const touchRunHeartbeat = vi.fn().mockResolvedValue(undefined);
+    const executor = vi.fn().mockImplementation(async (input) => {
+      await writeFile(join(input.run.workspacePath, "PR_BODY.md"), "Generated body");
+      return completedResult;
+    });
+    const publisher = vi.fn().mockResolvedValue({
+      repository: "acme/web",
+      targetBranch: "main",
+      workBranch: "ticket-to-pr/job_1",
+      baseSha: "base",
+      headSha: "head",
+      pushSha: "0123456789abcdef0123456789abcdef01234567",
+      commitShas: ["abc"],
+      prUrl: "https://github.local/acme/web/pull/mock-job_1",
+      prNumber: 1,
+      prTitle: "Fix login",
+      prBody: "Generated body",
+    });
+    const gcWorkspaceOnSuccess = vi.fn().mockResolvedValue(undefined);
+
+    const outcome = await processAgentJob(
+      { jobId: "job_1", ticketSnapshotId: "ts_1" },
+      {
+        repos: { ...repos, touchRunHeartbeat },
+        executor,
+        publisher,
+        gcWorkspaceOnSuccess,
+        // Heartbeat disabled (interval 0) here to keep the test deterministic; the
+        // GC call is the assertion of record.
+        heartbeatIntervalMs: 0,
+        policyConfig: { repositoryAllowlist: ["acme/web"], protectedPathDenylist: [] },
+        ids: { runId: () => "run_1", artifactId: (kind) => `artifact_${kind}`, pullRequestId: () => "pr_1" },
+      },
+    );
+
+    expect(outcome).toEqual({ status: "completed", runId: "run_1" });
+    expect(gcWorkspaceOnSuccess).toHaveBeenCalledWith("job_1");
+  });
+
+  it("does not GC the workspace when the job fails policy (L1 retention)", async () => {
+    const repos = createRepos();
+    const executor = vi.fn().mockResolvedValue({ ...completedResult, changedFiles: ["infra/prod.tf"] });
+    const publisher = vi.fn();
+    const gcWorkspaceOnSuccess = vi.fn().mockResolvedValue(undefined);
+
+    const outcome = await processAgentJob(
+      { jobId: "job_1", ticketSnapshotId: "ts_1" },
+      {
+        repos,
+        executor,
+        publisher,
+        gcWorkspaceOnSuccess,
+        policyConfig: { repositoryAllowlist: ["acme/web"], protectedPathDenylist: ["infra/**"] },
+        ids: { runId: () => "run_1", artifactId: (kind) => `artifact_${kind}`, pullRequestId: () => "pr_1" },
+      },
+    );
+
+    expect(outcome.status).toBe("policy_blocked");
+    // Failed/blocked workspaces are retained for post-mortem, not GC'd.
+    expect(gcWorkspaceOnSuccess).not.toHaveBeenCalled();
+  });
+
+  it("no-ops a redelivered job when another worker already holds the execution lock", async () => {
+    const repos = createRepos();
+    const executor = vi.fn();
+    const publisher = vi.fn();
+    const release = vi.fn().mockResolvedValue(undefined);
+    // The advisory lock is already held by a live worker -> acquired:false.
+    const acquireExecutionLock = vi.fn().mockResolvedValue({ acquired: false, release });
+
+    const outcome = await processAgentJob(
+      { jobId: "job_1", ticketSnapshotId: "ts_1" },
+      {
+        repos,
+        executor,
+        publisher,
+        acquireExecutionLock,
+        policyConfig: { repositoryAllowlist: ["acme/web"], protectedPathDenylist: [] },
+        ids: { runId: () => "run_1", artifactId: (kind) => `artifact_${kind}`, pullRequestId: () => "pr_1" },
+      },
+    );
+
+    expect(outcome).toEqual({ status: "dedup_skipped" });
+    // No work at all: no run, no executor, no publish, no state transition.
+    expect(acquireExecutionLock).toHaveBeenCalledWith("job_1");
+    expect(repos.getJobForWorker).not.toHaveBeenCalled();
+    expect(repos.createRun).not.toHaveBeenCalled();
+    expect(executor).not.toHaveBeenCalled();
+    expect(publisher).not.toHaveBeenCalled();
+  });
+
+  it("acquires and releases the execution lock around a normal run", async () => {
+    const repos = createRepos();
+    const executor = vi.fn().mockImplementation(async (input) => {
+      await writeFile(join(input.run.workspacePath, "PR_BODY.md"), "Generated body");
+      return completedResult;
+    });
+    const publisher = vi.fn().mockResolvedValue({
+      repository: "acme/web",
+      targetBranch: "main",
+      workBranch: "ticket-to-pr/job_1",
+      baseSha: "base",
+      headSha: "head",
+      pushSha: "0123456789abcdef0123456789abcdef01234567",
+      commitShas: ["abc"],
+      prUrl: "https://github.local/acme/web/pull/mock-job_1",
+      prNumber: 1,
+      prTitle: "Fix login",
+      prBody: "Generated body",
+    });
+    const release = vi.fn().mockResolvedValue(undefined);
+    const acquireExecutionLock = vi.fn().mockResolvedValue({ acquired: true, release });
+
+    const outcome = await processAgentJob(
+      { jobId: "job_1", ticketSnapshotId: "ts_1" },
+      {
+        repos,
+        executor,
+        publisher,
+        acquireExecutionLock,
+        policyConfig: { repositoryAllowlist: ["acme/web"], protectedPathDenylist: [] },
+        ids: { runId: () => "run_1", artifactId: (kind) => `artifact_${kind}`, pullRequestId: () => "pr_1" },
+      },
+    );
+
+    expect(outcome).toEqual({ status: "completed", runId: "run_1" });
+    expect(acquireExecutionLock).toHaveBeenCalledWith("job_1");
+    // The lock is released even on the happy path so the next delivery is free.
+    expect(release).toHaveBeenCalledTimes(1);
+  });
+
   it("stops before execution when cancel was already requested", async () => {
     const repos = createRepos();
     repos.getJobForWorker.mockResolvedValue({ ...job, phase: "CancelRequested", outcome: "Running" });

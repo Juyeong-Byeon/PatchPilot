@@ -1,5 +1,6 @@
 import { isProtectedPath, isRepositoryAllowed } from "@ticket-to-pr/core";
 import type { AgentResult } from "@ticket-to-pr/core";
+import { collectSecretScanTargets, scanForSecrets, type SecretFinding } from "./secret-scan.js";
 
 export interface WorkerPolicyConfig {
   repositoryAllowlist: string[];
@@ -9,6 +10,32 @@ export interface WorkerPolicyConfig {
 export interface PolicyGateInput extends WorkerPolicyConfig {
   repository: string;
   expectedTargetBranch?: string;
+}
+
+// git-forbidden ref characters: space, the special set `~ ^ : ? * [ \`, and ASCII
+// control chars (0x00-0x1f and DEL 0x7f). Built via fromCharCode so the source
+// carries no raw control bytes.
+const FORBIDDEN_BRANCH_CHARS = new RegExp(
+  `[ ${"~^:?*[\\\\"}${String.fromCharCode(0)}-${String.fromCharCode(0x1f)}${String.fromCharCode(0x7f)}]`,
+);
+
+/**
+ * Validate a git branch name against the parts of git's ref-format rules that
+ * matter for safety (X7 pre-exec gate). Rejects empty/over-long, surrounding
+ * whitespace, leading/trailing slashes, `//`, leading/trailing dots, `..`, a
+ * trailing `.lock`, git's forbidden characters, and the `@{` sequence. Catching a
+ * malformed target branch BEFORE the expensive agent run avoids a guaranteed-to-fail
+ * publish at the very end of a long job.
+ */
+export function isValidBranchName(branch: string): boolean {
+  if (!branch || branch.length > 255) return false;
+  if (branch.trim() !== branch) return false;
+  if (branch.startsWith("/") || branch.endsWith("/") || branch.includes("//")) return false;
+  if (branch.startsWith(".") || branch.endsWith(".") || branch.includes("..")) return false;
+  if (branch.endsWith(".lock")) return false;
+  if (FORBIDDEN_BRANCH_CHARS.test(branch)) return false;
+  if (branch.includes("@{")) return false;
+  return true;
 }
 
 export type VerificationVerdict = "passed" | "skipped" | "failed";
@@ -27,6 +54,12 @@ export interface PolicyGateArtifact {
    * platform PR footer and the admin evidence card — never an agent claim.
    */
   verification: VerificationVerdict;
+  /**
+   * Secret-scan findings over the agent's diff evidence (X7). Each entry names the
+   * rule and a masked snippet; the actual secret is never stored. Empty on a clean
+   * diff. Any non-empty value blocks the gate.
+   */
+  secretFindings?: SecretFinding[];
 }
 
 /**
@@ -46,11 +79,33 @@ export interface PolicyGateResult {
   artifact: PolicyGateArtifact;
 }
 
+/**
+ * Cheap checks run BEFORE the expensive agent run (X7). Catches the failures we can
+ * know up front — repository not allowlisted, a malformed target branch, or a
+ * target branch that is itself a protected path — so a doomed job never pays for a
+ * full runner launch. The changed-file denylist and secret scan still run in the
+ * post-run {@link evaluatePolicyGate} (those need the diff that only exists after
+ * the agent runs).
+ */
 export function evaluatePreExecutionPolicy(input: PolicyGateInput): PolicyGateResult {
   const repositoryAllowed = isRepositoryAllowed(input.repository, input.repositoryAllowlist);
-  const reasons = repositoryAllowed ? [] : [`Repository is not allowlisted: ${input.repository}`];
-  const allowed = reasons.length === 0;
+  const reasons: string[] = [];
 
+  if (!repositoryAllowed) {
+    reasons.push(`Repository is not allowlisted: ${input.repository}`);
+  }
+  if (input.expectedTargetBranch !== undefined && !isValidBranchName(input.expectedTargetBranch)) {
+    reasons.push(`Invalid target branch name: ${input.expectedTargetBranch}`);
+  } else if (
+    input.expectedTargetBranch !== undefined &&
+    isProtectedPath(input.expectedTargetBranch, input.protectedPathDenylist)
+  ) {
+    // A target branch that matches the protected-path denylist is a misconfiguration
+    // we can reject up front rather than after a full run.
+    reasons.push(`Target branch is protected: ${input.expectedTargetBranch}`);
+  }
+
+  const allowed = reasons.length === 0;
   return {
     allowed,
     reason: allowed ? undefined : reasons.join("; "),
@@ -98,6 +153,15 @@ export function evaluatePolicyGate(result: AgentResult, input: PolicyGateInput):
     reasons.push("Verification failed");
   }
 
+  // X7 secret scan: inspect the agent's diff evidence (changed file paths, commit
+  // messages, test summaries, the PR draft title) for leaked credentials. Any hit
+  // blocks the gate — a secret in the change is never an acceptable PR.
+  const secretFindings = scanForSecrets(collectSecretScanTargets(result));
+  if (secretFindings.length > 0) {
+    const rules = [...new Set(secretFindings.map((finding) => finding.rule))].join(", ");
+    reasons.push(`Potential secrets detected in diff (${rules})`);
+  }
+
   const allowed = reasons.length === 0;
   return {
     allowed,
@@ -110,6 +174,7 @@ export function evaluatePolicyGate(result: AgentResult, input: PolicyGateInput):
       deniedFiles,
       reasons,
       verification: summarizeVerification(result.tests),
+      secretFindings,
     },
   };
 }
