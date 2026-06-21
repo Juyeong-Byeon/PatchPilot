@@ -4,7 +4,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseAgentResult } from "@ticket-to-pr/core";
-import { getWorkspacePaths, writeJsonArtifact, writeTextArtifact } from "@ticket-to-pr/runner-contract";
+import {
+  getWorkspacePaths,
+  parseRunnerContext,
+  type RunnerContext,
+  writeJsonArtifact,
+  writeTextArtifact,
+} from "@ticket-to-pr/runner-contract";
 
 /**
  * Structured agent-failure report the agent (or a stage) may drop at
@@ -56,19 +62,15 @@ export interface CodexAgentRunnerInput {
   codexSkillsDir?: string;
 }
 
-export interface RunnerContext {
-  jobId: string;
-  ticketSnapshotId: string;
-  triggerVersion: string;
-  runId: string;
-  attempt: number;
-  workBranch: string;
-}
+// `RunnerContext` is validated at the `context.json` boundary by
+// `parseRunnerContext`; re-exported here so existing importers (e.g.
+// gstack-staged-runner) keep a single source of truth for the type.
+export type { RunnerContext };
 
 export async function runCodexAgentRunner(input: CodexAgentRunnerInput): Promise<void> {
   const paths = getWorkspacePaths(input.workspaceRoot);
   await mkdir(paths.outputDir, { recursive: true });
-  const context = JSON.parse(await readFile(paths.contextJson, "utf8")) as RunnerContext;
+  const context = parseRunnerContext(await readFile(paths.contextJson, "utf8"));
   await runWithStructuredFailure(input.workspaceRoot, async () => {
     const baseSha = await gitStdout(["rev-parse", "HEAD"], input.repoDir);
     const codexHome = await prepareCodexHome({
@@ -580,7 +582,7 @@ export async function runWithStructuredFailure(workspaceRoot: string, body: () =
   // otherwise "succeeded" (e.g. a stray commit) or one that threw.
   const needsInput = await readNeedsInput(paths.outputDir);
   if (needsInput) {
-    const context = JSON.parse(await readFile(paths.contextJson, "utf8")) as RunnerContext;
+    const context = parseRunnerContext(await readFile(paths.contextJson, "utf8"));
     console.warn("runner: agent requested operator input (needs-input.json); emitting result.needs_input (no push)");
     await writeNeedsInputResult({ workspaceRoot, context, needsInput });
     return;
@@ -591,7 +593,7 @@ export async function runWithStructuredFailure(workspaceRoot: string, body: () =
   // Precedence (2): structured failure converts a crash into an actionable result.
   const failure = await readStructuredFailure(paths.outputDir);
   if (!failure) throw bodyError;
-  const context = JSON.parse(await readFile(paths.contextJson, "utf8")) as RunnerContext;
+  const context = parseRunnerContext(await readFile(paths.contextJson, "utf8"));
   console.warn(
     `runner: agent reported structured failure (${failure.category}/${failure.stage}); emitting result.failure`,
   );
