@@ -7,3 +7,4 @@ dist/
 .superpowers/
 coverage/
 work/
+.claude/
