@@ -4,17 +4,22 @@ import { phasesAllowedToTransitionTo, TERMINAL_PHASES } from "./transition-guard
 import type {
   AppendAuditEventInput,
   AppendEventInput,
+  ArtifactRow,
   CancelRequestResult,
   AppendLogInput,
   CreateJobResult,
   CreateRunInput,
   JobAwaitingMergeReconcile,
+  JobDetailRow,
+  JobListRow,
+  JobLogRow,
   MarkPullRequestMergedInput,
   MarkPullRequestMergedResult,
   MetricsSummary,
   RecordWebhookDeliveryInput,
   RetryGuidanceInput,
   RetryPreflight,
+  RunEventRow,
   RunRecord,
   SaveArtifactInput,
   SavePullRequestInput,
@@ -414,8 +419,8 @@ export class Repositories {
     }
   }
 
-  async listJobs(): Promise<Array<Record<string, unknown>>> {
-    const result = await this.pool.query<Record<string, unknown>>(
+  async listJobs(): Promise<JobListRow[]> {
+    const result = await this.pool.query<JobListRow>(
       `select
          j.id,
          j.outcome,
@@ -462,8 +467,8 @@ export class Repositories {
     return result.rows;
   }
 
-  async getJob(jobId: string): Promise<Record<string, unknown> | null> {
-    const result = await this.pool.query<Record<string, unknown>>(
+  async getJob(jobId: string): Promise<JobDetailRow | null> {
+    const result = await this.pool.query<JobDetailRow>(
       `select
          j.*,
          ts.title,
@@ -500,8 +505,8 @@ export class Repositories {
     return result.rows[0] ?? null;
   }
 
-  async getJobEvents(jobId: string): Promise<Array<Record<string, unknown>>> {
-    const result = await this.pool.query<Record<string, unknown>>(
+  async getJobEvents(jobId: string): Promise<RunEventRow[]> {
+    const result = await this.pool.query<RunEventRow>(
       `select *
        from run_events
        where job_id=$1
@@ -511,8 +516,8 @@ export class Repositories {
     return result.rows;
   }
 
-  async getJobLogs(jobId: string): Promise<Array<Record<string, unknown>>> {
-    const result = await this.pool.query<Record<string, unknown>>(
+  async getJobLogs(jobId: string): Promise<JobLogRow[]> {
+    const result = await this.pool.query<JobLogRow>(
       `select *
        from job_logs
        where job_id=$1
@@ -522,8 +527,8 @@ export class Repositories {
     return result.rows;
   }
 
-  async getJobArtifacts(jobId: string): Promise<Array<Record<string, unknown>>> {
-    const result = await this.pool.query<Record<string, unknown>>(
+  async getJobArtifacts(jobId: string): Promise<ArtifactRow[]> {
+    const result = await this.pool.query<ArtifactRow>(
       `select *
        from artifacts
        where job_id=$1
