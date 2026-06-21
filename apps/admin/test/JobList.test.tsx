@@ -8,6 +8,11 @@ import { adminCopy } from "../src/i18n.js";
 describe("JobList", () => {
   afterEach(() => cleanup());
 
+  it("marks the list aria-busy while loading the first page", () => {
+    render(<JobList copy={adminCopy.ko} isLoading={true} jobs={[]} locale="ko" selectedJobId="" onOpenJob={vi.fn()} />);
+    expect(screen.getByRole("list")).toHaveAttribute("aria-busy", "true");
+  });
+
   it("keeps the list compact and opens the detail page", () => {
     const onOpenJob = vi.fn();
     const longEvent =

@@ -87,7 +87,7 @@ export function JobList({
           `md` we drop it for a vertical card list that needs no sideways scroll.
           Exactly one layout mounts (media-query gated) to keep the a11y tree clean. */}
       {isNarrow ? (
-        <ol className="m-0 grid list-none gap-2 p-3" aria-label={copy.jobs}>
+        <ol className="m-0 grid list-none gap-2 p-3" aria-label={copy.jobs} aria-busy={isLoading && jobs.length === 0}>
           {isLoading && jobs.length === 0 ? <JobCardSkeleton /> : null}
           {filteredJobs.map((job) => (
             <li key={job.id}>
@@ -119,7 +119,10 @@ export function JobList({
               <span>{copy.tableOutcome}</span>
               <span>{copy.tableAction}</span>
             </div>
-            <ol className="m-0 max-h-[calc(100vh-292px)] list-none overflow-auto p-0">
+            <ol
+              className="m-0 max-h-[calc(100vh-292px)] list-none overflow-auto p-0"
+              aria-busy={isLoading && jobs.length === 0}
+            >
               {isLoading && jobs.length === 0 ? <JobListSkeleton /> : null}
               {filteredJobs.map((job) => {
                 const selected = job.id === selectedJobId;
