@@ -58,8 +58,11 @@ export function readWorkerEnv(source: NodeJS.ProcessEnv = process.env): WorkerEn
     workspaceHostRoot: parseOptional(source.WORKER_WORKSPACE_HOST_ROOT ?? source.JOB_WORKSPACE_HOST_ROOT),
     gstackCommand: parseOptional(source.GSTACK_COMMAND),
     gstackArgs: parseOptional(source.GSTACK_ARGS),
-    gstackStagedArgs: parseOptional(source.GSTACK_STAGED_ARGS) ?? "ship --staged --no-push",
-    gstackSingleArgs: parseOptional(source.GSTACK_SINGLE_ARGS) ?? "ship --no-push",
+    // GSTACK_ARGS is the runner JS entrypoint path (run as `node <path>`), not a CLI string.
+    gstackStagedArgs:
+      parseOptional(source.GSTACK_STAGED_ARGS) ?? "/opt/runner/apps/runner/dist/gstack-staged-runner.js",
+    gstackSingleArgs:
+      parseOptional(source.GSTACK_SINGLE_ARGS) ?? "/opt/runner/apps/runner/dist/codex-agent-runner.js",
     codexAuthFile: parseOptional(source.CODEX_AUTH_FILE),
     codexConfigFile: parseOptional(source.CODEX_CONFIG_FILE),
     codexSkillsDir: parseOptional(source.CODEX_SKILLS_DIR),

@@ -46,7 +46,11 @@ export function createWorker(env: WorkerEnv = readWorkerEnv()): BullWorker<Agent
   // Back-compat: an explicit GSTACK_ARGS forces one pipeline for every job, so the
   // recorded executor mode must reflect that override rather than the priority.
   const executorModeOverride: ExecutorMode | undefined =
-    env.gstackArgs !== undefined ? (env.gstackArgs.includes("--staged") ? "staged" : "single-pass") : undefined;
+    env.gstackArgs !== undefined
+      ? env.gstackArgs.includes("staged-runner")
+        ? "staged"
+        : "single-pass"
+      : undefined;
 
   return new BullWorker<AgentJobPayload>(
     AGENT_JOB_QUEUE,
