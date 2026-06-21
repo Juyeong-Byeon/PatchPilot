@@ -796,7 +796,7 @@ async function parkJobAwaitingInput(
 // Lark write-back of the question keeps the cell readable; long questions are
 // truncated so the status field stays a one-line summary.
 const QUESTION_SUMMARY_MAX = 280;
-function summarizeQuestion(question: string): string {
+export function summarizeQuestion(question: string): string {
   const trimmed = question.trim();
   return trimmed.length > QUESTION_SUMMARY_MAX ? `${trimmed.slice(0, QUESTION_SUMMARY_MAX - 1)}…` : trimmed;
 }
