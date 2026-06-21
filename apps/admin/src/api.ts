@@ -18,6 +18,21 @@ export interface JobRecord extends JsonRecord {
   next_action?: string | null;
   pr_url?: string | null;
   last_event?: string | null;
+  // Ticket context joined in by getJob (ticket_snapshots). Both snake_case (raw
+  // API rows) and camelCase (worker-shaped records) are accepted so callers never
+  // depend on which serializer produced the record.
+  title?: string | null;
+  description?: string | null;
+  definition_of_done?: string | null;
+  definitionOfDone?: string | null;
+  raw_fields?: JsonRecord | null;
+  rawFields?: JsonRecord | null;
+  // Forward-compat: the executor/pipeline mode (single-pass vs staged) is added by
+  // a separate backend track. Rendered only when present; never required.
+  executor_mode?: string | null;
+  executorMode?: string | null;
+  pipeline_mode?: string | null;
+  pipelineMode?: string | null;
 }
 
 export interface RunEvent extends JsonRecord {

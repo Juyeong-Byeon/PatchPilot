@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { JobDetail } from "../src/components/JobDetail.js";
 import { adminCopy } from "../src/i18n.js";
@@ -304,6 +304,183 @@ describe("JobDetail", () => {
     );
 
     expect(screen.queryByText("에이전트 단계")).not.toBeInTheDocument();
+  });
+
+  it("renders a single primary status badge for a Completed+NeedsReview job", () => {
+    render(
+      <JobDetail
+        {...baseProps}
+        job={{ id: "job_1", phase: "Completed", outcome: "NeedsReview", repository: "acme/web" }}
+      />,
+    );
+
+    // The (Completed, NeedsReview) pair collapses to ONE operator-facing status.
+    const status = screen.getByLabelText(adminCopy.ko.primaryStatus);
+    expect(status).toHaveTextContent("PR 리뷰 대기중");
+    // The status-badge group holds a single primary badge (no second "완료" badge
+    // sitting beside it as it did with the old dual-badge contradiction).
+    const badgeGroup = status.parentElement as HTMLElement;
+    expect(within(badgeGroup).queryByText("완료")).not.toBeInTheDocument();
+    expect(within(badgeGroup).getAllByText(/대기|완료|실패|구현/).length).toBe(1);
+  });
+
+  it("renders the ticket / DoD panel as a checklist when DoD is enumerable", () => {
+    render(
+      <JobDetail
+        {...baseProps}
+        job={{
+          id: "job_1",
+          phase: "Completed",
+          outcome: "NeedsReview",
+          repository: "acme/web",
+          title: "완료 항목 일괄 삭제 버튼 추가",
+          description: "할 일 목록에서 완료된 항목을 한 번에 지우는 버튼이 필요합니다.",
+          definition_of_done: "- 버튼이 보인다\n- 클릭하면 완료 항목이 삭제된다\n- e2e 테스트 통과",
+        }}
+      />,
+    );
+
+    expect(screen.getByText(adminCopy.ko.ticketPanel)).toBeInTheDocument();
+    expect(screen.getByText("완료 항목 일괄 삭제 버튼 추가")).toBeInTheDocument();
+    const checklist = screen.getByRole("list", { name: adminCopy.ko.definitionOfDone });
+    expect(within(checklist).getAllByRole("listitem")).toHaveLength(3);
+    expect(within(checklist).getByText("클릭하면 완료 항목이 삭제된다")).toBeInTheDocument();
+  });
+
+  it("shows a no-ticket-context fallback when ticket fields are absent", () => {
+    render(
+      <JobDetail {...baseProps} job={{ id: "job_1", phase: "Planning", outcome: "Running", repository: "acme/web" }} />,
+    );
+    expect(screen.getByText(adminCopy.ko.noTicketContext)).toBeInTheDocument();
+  });
+
+  it("renders the evidence card with a clean protected-path badge and no-verification when tests are skipped", () => {
+    render(
+      <JobDetail
+        {...baseProps}
+        job={{
+          id: "job_1",
+          phase: "Completed",
+          outcome: "NeedsReview",
+          repository: "acme/web",
+          target_branch: "main",
+        }}
+        artifacts={[
+          {
+            id: "art_policy",
+            run_id: "run_1",
+            kind: "policy-gate",
+            content: {
+              status: "passed",
+              repository: "acme/web",
+              changedFiles: ["src/a.ts", "src/b.ts"],
+              deniedFiles: [],
+              reasons: [],
+            },
+            created_at: "2026-06-20T00:01:00.000Z",
+          },
+          {
+            id: "art_result",
+            run_id: "run_1",
+            kind: "agent-result",
+            content: {
+              status: "completed",
+              targetBranch: "main",
+              baseSha: "7092a07000000000000000000000000000000000",
+              headSha: "9a067b6000000000000000000000000000000000",
+              changedFiles: ["src/a.ts", "src/b.ts"],
+              tests: [{ command: "git diff --name-only", status: "skipped", summary: "no tests run" }],
+            },
+            created_at: "2026-06-20T00:01:05.000Z",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText(adminCopy.ko.evidenceTitle)).toBeInTheDocument();
+    // deniedFiles empty → emphasized "보호경로 위반 0".
+    expect(screen.getByText(adminCopy.ko.evidenceProtectedClean)).toBeInTheDocument();
+    // Skipped tests must be surfaced as "검증 없음", never as a green pass.
+    expect(screen.getAllByText(adminCopy.ko.evidenceTestsSkipped).length).toBeGreaterThan(0);
+    expect(screen.queryByText(adminCopy.ko.evidenceTestsPassed)).not.toBeInTheDocument();
+    // target branch matches → match badge present.
+    expect(screen.getByText(adminCopy.ko.evidenceTargetMatch)).toBeInTheDocument();
+  });
+
+  it("warns in the evidence card when protected paths were changed", () => {
+    render(
+      <JobDetail
+        {...baseProps}
+        job={{ id: "job_1", phase: "PolicyChecking", outcome: "Running", repository: "acme/web" }}
+        artifacts={[
+          {
+            id: "art_policy",
+            run_id: "run_1",
+            kind: "policy-gate",
+            content: {
+              status: "failed",
+              repository: "acme/web",
+              changedFiles: [".github/workflows/ci.yml"],
+              deniedFiles: [".github/workflows/ci.yml"],
+              reasons: ["Protected files changed: .github/workflows/ci.yml"],
+            },
+            created_at: "2026-06-20T00:01:00.000Z",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText(adminCopy.ko.evidenceProtectedViolation(1))).toBeInTheDocument();
+    expect(screen.getByText(adminCopy.ko.evidencePolicyFailed)).toBeInTheDocument();
+    expect(screen.getByText(".github/workflows/ci.yml")).toBeInTheDocument();
+  });
+
+  it("keeps the raw evidence JSON behind a collapsible 원본 보기 toggle", () => {
+    render(
+      <JobDetail
+        {...baseProps}
+        job={{ id: "job_1", phase: "Completed", outcome: "NeedsReview", repository: "acme/web" }}
+        artifacts={[
+          {
+            id: "art_policy",
+            run_id: "run_1",
+            kind: "policy-gate",
+            content: { status: "passed", changedFiles: [], deniedFiles: [], reasons: [] },
+            created_at: "2026-06-20T00:01:00.000Z",
+          },
+        ]}
+      />,
+    );
+
+    // The evidence card's raw region is collapsed until the operator expands it.
+    expect(screen.queryByTestId("evidence-raw")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: adminCopy.ko.evidenceShowRaw }));
+    const raw = screen.getByTestId("evidence-raw");
+    expect(within(raw).getByText(/"status": "passed"/)).toBeInTheDocument();
+  });
+
+  it("renders an executor-mode badge only when the record carries the field", () => {
+    const { rerender } = render(
+      <JobDetail
+        {...baseProps}
+        job={{ id: "job_1", phase: "Implementing", outcome: "Running", repository: "acme/web" }}
+      />,
+    );
+    expect(screen.queryByText(adminCopy.ko.executorModeStaged)).not.toBeInTheDocument();
+
+    rerender(
+      <JobDetail
+        {...baseProps}
+        job={{
+          id: "job_1",
+          phase: "Implementing",
+          outcome: "Running",
+          repository: "acme/web",
+          executor_mode: "staged",
+        }}
+      />,
+    );
+    expect(screen.getByText(adminCopy.ko.executorModeStaged)).toBeInTheDocument();
   });
 });
 
