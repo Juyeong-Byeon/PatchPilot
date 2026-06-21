@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../src/App.js";
 
@@ -86,4 +86,89 @@ describe("App", () => {
       fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/api/jobs/job_1/logs")).length,
     ).toBeGreaterThanOrEqual(2);
   });
+
+  it("renders a Needs Review filter chip distinct from Completed", async () => {
+    window.localStorage.setItem("ADMIN_TOKEN", "access-key");
+    window.history.pushState(null, "", "/jobs");
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      const body = url.endsWith("/api/jobs")
+        ? [
+            { id: "job_review", phase: "Completed", outcome: "NeedsReview", repository: "acme/web" },
+            { id: "job_done", phase: "Completed", outcome: "Completed", repository: "acme/web" },
+          ]
+        : [];
+      return jsonResponse(body);
+    });
+
+    render(<App />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Scope to the filter chip group so the row's "PR 리뷰 대기중" pill is excluded.
+    const filterGroup = screen.getByRole("group", { name: "작업 필터" });
+    const reviewChip = within(filterGroup).getByRole("button", { name: /리뷰 대기/ });
+    expect(reviewChip).toBeInTheDocument();
+    // The Needs-Review chip counts the review job; Completed counts only the merged one.
+    expect(reviewChip).toHaveTextContent("1");
+    const completedChip = within(filterGroup).getByRole("button", { name: /^완료/ });
+    expect(completedChip).toHaveTextContent("1");
+
+    // Activating the chip filters the list down to the review job.
+    await act(async () => {
+      reviewChip.click();
+      await Promise.resolve();
+    });
+    expect(reviewChip).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("surfaces a single session-expired state and stops polling on a 401", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem("ADMIN_TOKEN", "stale-key");
+    window.history.pushState(null, "", "/jobs");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => unauthorizedResponse());
+
+    render(<App />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Single re-auth boundary surfaced (prominent banner + status line), not a
+    // silently frozen screen.
+    expect(screen.getAllByText("세션 만료 — 재인증 필요").length).toBeGreaterThan(0);
+    expect(screen.getByRole("alert")).toHaveTextContent("세션 만료");
+
+    const callsAfterAuthFail = fetchMock.mock.calls.length;
+    // Advancing the poll interval must NOT issue further requests while expired.
+    await act(async () => {
+      vi.advanceTimersByTime(10000);
+      await Promise.resolve();
+    });
+    expect(fetchMock.mock.calls.length).toBe(callsAfterAuthFail);
+  });
 });
+
+function jsonResponse(body: unknown): Response {
+  return {
+    ok: true,
+    status: 200,
+    statusText: "OK",
+    headers: new Headers({ "content-type": "application/json" }),
+    json: async () => body,
+    text: async () => JSON.stringify(body),
+  } as Response;
+}
+
+function unauthorizedResponse(): Response {
+  return {
+    ok: false,
+    status: 401,
+    statusText: "Unauthorized",
+    headers: new Headers({ "content-type": "application/json" }),
+    json: async () => ({ error: "admin_access_key_invalid" }),
+    text: async () => "admin_access_key_invalid",
+  } as Response;
+}

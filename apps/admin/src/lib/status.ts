@@ -28,6 +28,44 @@ export function isCompletedJob(phase: unknown, outcome: unknown): boolean {
 }
 
 /**
+ * A job that finished its pipeline (phase Completed) but is parked at outcome
+ * NeedsReview, waiting on a human to review/merge the PR. This is the dominant
+ * terminal state of a successful run, so it gets its own operator-facing label
+ * ("PR 리뷰 대기") and list chip instead of being collapsed under "완료".
+ */
+export function isNeedsReviewJob(phase: unknown, outcome: unknown): boolean {
+  return String(outcome) === "NeedsReview" || String(phase) === "NeedsReview";
+}
+
+/**
+ * The single operator-facing primary status for a job. The backend models status
+ * as a (phase, outcome) pair, which previously surfaced as two badges that could
+ * read as a contradiction (phase=Completed + outcome=NeedsReview). This collapses
+ * the pair into one canonical state code so the UI shows ONE primary badge.
+ *
+ * Returned `code` is a state token translatable via `translateState`; callers map
+ * it to a badge variant with `statusBadgeVariant`.
+ */
+export function resolvePrimaryStatus(job: { phase?: unknown; outcome?: unknown }): string {
+  const phase = String(job.phase ?? "");
+  const outcome = String(job.outcome ?? "");
+
+  // A requested-but-not-finalized cancel keeps outcome="Running"; surface the
+  // cancel intent so the badge never reads "Running" after a cancel. Both in-flight
+  // cancel phases (CancelRequested / Cancelling) collapse to one operator-facing
+  // state ("취소 중") — the distinction is internal, not operator-relevant.
+  if (isCancellingPhase(phase)) return "Cancelling";
+
+  // Successful pipeline completion parked on human review → one dedicated state.
+  if (isNeedsReviewJob(phase, outcome)) return "NeedsReview";
+
+  // Failures and explicit terminal outcomes win over the running phase.
+  if (outcome && outcome !== "Running") return outcome;
+  if (phase) return phase;
+  return outcome || "";
+}
+
+/**
  * Single source of truth for status badge color. Keeps the taxonomy distinct so
  * a Completed job never looks like a Cancelled one (the previous logic collapsed
  * both to the neutral blue badge).
@@ -202,16 +240,20 @@ export function deriveStageStates(
   return states;
 }
 
-export type StatusFilter = "all" | "running" | "failed" | "completed";
+export type StatusFilter = "all" | "running" | "needsReview" | "failed" | "completed";
 
 export function matchesStatusFilter(job: { phase?: unknown; outcome?: unknown }, filter: StatusFilter): boolean {
   switch (filter) {
     case "running":
       return isRunningPhase(job.phase);
+    case "needsReview":
+      return isNeedsReviewJob(job.phase, job.outcome);
     case "failed":
       return isFailedJob(job.phase, job.outcome);
     case "completed":
-      return isCompletedJob(job.phase, job.outcome);
+      // "완료" means merged/sealed — exclude jobs still parked on PR review so the
+      // two chips stay mutually exclusive and the operator can tell them apart.
+      return isCompletedJob(job.phase, job.outcome) && !isNeedsReviewJob(job.phase, job.outcome);
     default:
       return true;
   }

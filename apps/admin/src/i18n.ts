@@ -22,8 +22,11 @@ export const adminCopy = {
     tokenRequired: "관리자 인증키를 입력하세요.",
     tokenInvalid: "관리자 인증키가 올바르지 않습니다.",
     apiUnavailable: "관리자 API에 연결할 수 없습니다. 서버 연결 상태를 확인하세요.",
+    sessionExpired: "세션 만료 — 재인증 필요",
+    sessionExpiredHint: "관리자 인증키를 다시 입력해 세션을 갱신하세요. 자동 새로고침이 중단되었습니다.",
     totalJobs: "전체 작업",
     runningJobs: "실행 중",
+    needsReviewJobs: "리뷰 대기",
     failedJobs: "실패",
     completedJobs: "완료",
     loadedJobs: (count: number) => `작업 ${count}개를 불러왔습니다.`,
@@ -69,6 +72,36 @@ export const adminCopy = {
     inlineContent: "인라인 콘텐츠",
     noArtifacts: "기록된 아티팩트가 없습니다.",
     cancelInfo: "취소 정보",
+    ticketPanel: "티켓 / 완료 조건(DoD)",
+    ticketDescription: "설명",
+    definitionOfDone: "완료 조건(DoD)",
+    noDefinitionOfDone: "완료 조건이 지정되지 않았습니다.",
+    noTicketContext: "티켓 정보가 없습니다.",
+    primaryStatus: "현재 상태",
+    evidenceTitle: "정책 · 검증 증거",
+    evidenceSubtitle: "플랫폼이 검증한 신뢰 신호",
+    evidenceNone: "아직 수집된 증거가 없습니다.",
+    evidenceChangedFiles: "변경 파일",
+    evidenceChangedFilesUnit: (count: number) => `${count}개`,
+    evidenceProtectedClean: "보호경로 위반 0",
+    evidenceProtectedViolation: (count: number) => `보호경로 위반 ${count}건`,
+    evidenceProtectedList: "위반된 보호경로",
+    evidencePolicyPassed: "정책 통과",
+    evidencePolicyFailed: "정책 차단",
+    evidencePolicyUnknown: "정책 미평가",
+    evidenceTests: "검증",
+    evidenceTestsPassed: "검증 통과",
+    evidenceTestsFailed: "검증 실패",
+    evidenceTestsSkipped: "검증 없음",
+    evidenceTargetBranch: "대상 브랜치",
+    evidenceTargetMatch: "대상 브랜치 일치",
+    evidenceTargetMismatch: "대상 브랜치 불일치",
+    evidenceBaseHead: "감사 SHA (base..head)",
+    evidenceShowRaw: "원본 보기",
+    evidenceHideRaw: "원본 숨기기",
+    executorMode: "실행 모드",
+    executorModeSingle: "단일 패스",
+    executorModeStaged: "단계형",
     stageNotes: "파이프라인 단계 노트",
     stageNotesHint: "계획 → 구현 → 리뷰 → 검증 단계의 에이전트 기록",
     stagePlan: "계획",
@@ -128,8 +161,11 @@ export const adminCopy = {
     tokenRequired: "Enter the admin access key.",
     tokenInvalid: "The admin access key is not valid.",
     apiUnavailable: "Cannot connect to the admin API. Check the server connection.",
+    sessionExpired: "Session expired — re-authenticate",
+    sessionExpiredHint: "Re-enter the admin access key to refresh the session. Auto-refresh is paused.",
     totalJobs: "Total Jobs",
     runningJobs: "Running",
+    needsReviewJobs: "Needs Review",
     failedJobs: "Failed",
     completedJobs: "Completed",
     loadedJobs: (count: number) => `Loaded ${count} job${count === 1 ? "" : "s"}.`,
@@ -175,6 +211,36 @@ export const adminCopy = {
     inlineContent: "inline content",
     noArtifacts: "No artifacts recorded.",
     cancelInfo: "Cancellation",
+    ticketPanel: "Ticket / Definition of Done",
+    ticketDescription: "Description",
+    definitionOfDone: "Definition of Done",
+    noDefinitionOfDone: "No definition of done specified.",
+    noTicketContext: "No ticket context available.",
+    primaryStatus: "Status",
+    evidenceTitle: "Policy & verification evidence",
+    evidenceSubtitle: "Platform-verified trust signals",
+    evidenceNone: "No evidence collected yet.",
+    evidenceChangedFiles: "Changed files",
+    evidenceChangedFilesUnit: (count: number) => `${count}`,
+    evidenceProtectedClean: "0 protected-path violations",
+    evidenceProtectedViolation: (count: number) => `${count} protected-path violation${count === 1 ? "" : "s"}`,
+    evidenceProtectedList: "Violated protected paths",
+    evidencePolicyPassed: "Policy passed",
+    evidencePolicyFailed: "Policy blocked",
+    evidencePolicyUnknown: "Policy not evaluated",
+    evidenceTests: "Verification",
+    evidenceTestsPassed: "Verified",
+    evidenceTestsFailed: "Verification failed",
+    evidenceTestsSkipped: "No verification",
+    evidenceTargetBranch: "Target branch",
+    evidenceTargetMatch: "Target branch matches",
+    evidenceTargetMismatch: "Target branch mismatch",
+    evidenceBaseHead: "Audited SHA (base..head)",
+    evidenceShowRaw: "Show raw",
+    evidenceHideRaw: "Hide raw",
+    executorMode: "Executor mode",
+    executorModeSingle: "Single-pass",
+    executorModeStaged: "Staged",
     stageNotes: "Pipeline stage notes",
     stageNotesHint: "Agent notes from plan → implement → review → verify",
     stagePlan: "Plan",
@@ -306,6 +372,23 @@ export function translateFailureCategory(value: unknown, locale: Locale): string
   if (value === null || value === undefined || value === "") return adminCopy[locale].empty;
   const text = String(value);
   return failureCategoryLabels[locale][text] ?? text;
+}
+
+// Display label for an executor/pipeline mode badge. Unknown tokens fall back to
+// the raw value so a future backend mode still renders something legible.
+export function executorModeLabel(
+  normalized: "single-pass" | "staged" | "other",
+  raw: string,
+  copy: AdminCopy,
+): string {
+  switch (normalized) {
+    case "single-pass":
+      return copy.executorModeSingle;
+    case "staged":
+      return copy.executorModeStaged;
+    default:
+      return raw;
+  }
 }
 
 // Display label for a staged-runner sub-stage key. Shared by the agent sub-track

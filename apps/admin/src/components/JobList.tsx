@@ -1,12 +1,13 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
 import { ArrowRight, LoaderCircle, Search } from "lucide-react";
 import type { JobRecord } from "../api.js";
-import { translateState, type AdminCopy, type Locale } from "../i18n.js";
+import { executorModeLabel, translateState, type AdminCopy, type Locale } from "../i18n.js";
 import { cn } from "../lib/utils.js";
+import { normalizeExecutorMode, readExecutorMode } from "../lib/evidence.js";
 import {
-  isCancellingPhase,
   isRunningPhase,
   matchesStatusFilter,
+  resolvePrimaryStatus,
   statusBadgeVariant,
   type StatusFilter,
 } from "../lib/status.js";
@@ -141,6 +142,7 @@ export function JobList({
                           />
                         ) : null}
                         <StatusPill value={status.value} label={status.label} />
+                        <ExecutorModePill job={job} copy={copy} />
                       </span>
                     </span>
                     <span className="flex min-w-0 items-start">
@@ -203,23 +205,12 @@ function getPrimaryStatus(
     return { value: "Running", label: formatRunningPhase(job, locale, copy) };
   }
 
-  const phase = getValue(job, "phase");
-  // A requested-but-not-finalized cancel keeps outcome="Running"; show the cancel
-  // state from the phase so the row never keeps reading as "Running" after a cancel.
-  if (phase && isCancellingPhase(phase)) {
-    return { value: phase, label: copy.cancelling };
-  }
-
-  const outcome = getValue(job, "outcome");
-  if (outcome) {
-    return { value: outcome, label: translateState(outcome, locale) };
-  }
-
-  if (phase) {
-    return { value: phase, label: translateState(phase, locale) };
-  }
-
-  return { value: copy.unknown, label: copy.unknown };
+  // Single source of truth shared with JobDetail: collapses the (phase, outcome)
+  // pair to one canonical state (e.g. Completed+NeedsReview → "PR 리뷰 대기"), and
+  // surfaces an in-flight cancel from the phase instead of a stale "Running".
+  const primary = resolvePrimaryStatus(job);
+  if (!primary) return { value: copy.unknown, label: copy.unknown };
+  return { value: primary, label: translateState(primary, locale) };
 }
 
 function formatRunningPhase(job: JobRecord, locale: Locale, copy: AdminCopy): string {
@@ -232,6 +223,18 @@ function StatusPill({ value, label }: { value: string; label: string }) {
   return (
     <Badge data-testid="job-status-pill" variant={statusBadgeVariant(value)}>
       {label}
+    </Badge>
+  );
+}
+
+// Forward-compat: render the executor/pipeline mode chip only when the backend
+// record carries the field (added later by another track). Absent → nothing.
+function ExecutorModePill({ job, copy }: { job: JobRecord; copy: AdminCopy }) {
+  const mode = readExecutorMode(job);
+  if (!mode) return null;
+  return (
+    <Badge data-testid="job-executor-pill" variant="outline">
+      {executorModeLabel(normalizeExecutorMode(mode), mode, copy)}
     </Badge>
   );
 }
