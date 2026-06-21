@@ -3,6 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../src/App.js";
+import { adminCopy } from "../src/i18n.js";
 
 describe("App", () => {
   beforeEach(() => {
@@ -37,6 +38,13 @@ describe("App", () => {
     // The normal job console (its level-1 heading + nav button) is not rendered.
     expect(screen.queryByRole("heading", { level: 1, name: "작업" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "작업" })).not.toBeInTheDocument();
+  });
+
+  it("renders a visible onboarding heading and subtitle above the access-key form", () => {
+    render(<App />);
+
+    expect(screen.getByRole("heading", { name: adminCopy.ko.onboardingHeading })).toBeInTheDocument();
+    expect(screen.getByText(adminCopy.ko.onboardingSubtitle)).toBeInTheDocument();
   });
 
   it("keeps the sidebar minimal: theme toggle only, no token input or locale control", async () => {

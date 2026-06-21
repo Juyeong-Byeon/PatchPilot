@@ -345,6 +345,11 @@ function AppInner() {
       <div className="admin-shell flex min-h-screen flex-col items-center justify-center px-4 py-10 text-true-black">
         <Card className="w-full max-w-[420px]">
           <div className="grid gap-3 px-6 py-7">
+            <div className="grid gap-1 text-left">
+              <h1 className="text-[20px] font-semibold leading-6 text-forest-ink">{copy.onboardingHeading}</h1>
+              <p className="text-[13px] leading-5 text-charcoal">{copy.onboardingSubtitle}</p>
+            </div>
+
             {sessionExpired ? (
               <div role="alert" className="rounded-lg border border-danger bg-danger-wash px-3 py-2 text-danger">
                 <strong className="block text-[12px] font-semibold leading-4">{copy.sessionExpired}</strong>
