@@ -145,6 +145,22 @@ describe("JobDetail", () => {
     );
   });
 
+  it("surfaces the fetch error in the empty state instead of the select-a-job prompt", () => {
+    const { rerender } = render(
+      <JobDetail {...baseProps} job={null} isLoading={false} error="작업 상세를 불러오지 못했습니다." />,
+    );
+
+    // A failed open with no cached job must show the real error, not the misleading
+    // "select a job to inspect…" prompt.
+    expect(screen.getByRole("alert")).toHaveTextContent("작업 상세를 불러오지 못했습니다.");
+    expect(screen.queryByText(adminCopy.ko.selectJob)).not.toBeInTheDocument();
+
+    // The genuine no-selection case (no error) still shows the select prompt.
+    rerender(<JobDetail {...baseProps} job={null} isLoading={false} />);
+    expect(screen.getByText(adminCopy.ko.selectJob)).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("shows the latest retry attempt as current when an earlier attempt failed", () => {
     render(
       <JobDetail
