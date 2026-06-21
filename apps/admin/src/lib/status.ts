@@ -8,6 +8,25 @@ export function isRunningPhase(phase: unknown): boolean {
   return RUNNING_PHASES.includes(String(phase));
 }
 
+/**
+ * A job that is in the running set but has not actually started executing — it is
+ * still parked in the queue. Visually this must be distinguishable from an active
+ * run: a queued job is not "doing work" yet, so it should not show the same active
+ * spinner/treatment as Planning/Implementing/etc. (accessibility: color- and
+ * motion-independent, the caller pairs this with a distinct icon + label).
+ */
+export function isQueuedPhase(phase: unknown): boolean {
+  return String(phase) === "Queued";
+}
+
+/**
+ * Actively executing: in the running set AND past the queue. This is the set that
+ * earns the live spinner + "running" affordance; Queued is deliberately excluded.
+ */
+export function isActiveRunningPhase(phase: unknown): boolean {
+  return isRunningPhase(phase) && !isQueuedPhase(phase);
+}
+
 export function isFailedJob(phase: unknown, outcome: unknown): boolean {
   return String(phase).startsWith("Failed") || String(outcome).startsWith("Failed");
 }
@@ -75,7 +94,11 @@ export function statusBadgeVariant(value: unknown): StatusBadgeVariant {
   if (normalized.includes("failed")) return "danger"; // FailedActionable / FailedInternal / CancelFailed
   if (normalized.includes("cancel")) return "outline"; // Cancelled / CancelRequested — muted, intentional stop
   if (normalized === "completed") return "dark"; // sealed / done
-  if (normalized.includes("review") || normalized === "queued") return "warning"; // needs attention / waiting
+  // Queued is a passive "not started yet" wait → muted neutral, deliberately
+  // distinct from the amber "needs human attention" of NeedsReview and from the
+  // blue active-running phases, so the three never read alike.
+  if (normalized === "queued") return "outline";
+  if (normalized.includes("review")) return "warning"; // needs attention / waiting
   return "default"; // Running / in-flight phases
 }
 

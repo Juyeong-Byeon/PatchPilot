@@ -3,9 +3,18 @@ import {
   extractJobEvidence,
   normalizeExecutorMode,
   parseDefinitionOfDone,
+  prFileDeepLink,
+  prFilesUrl,
   readExecutorMode,
 } from "../src/lib/evidence.js";
-import { resolvePrimaryStatus, matchesStatusFilter, isNeedsReviewJob } from "../src/lib/status.js";
+import {
+  isActiveRunningPhase,
+  isNeedsReviewJob,
+  isQueuedPhase,
+  matchesStatusFilter,
+  resolvePrimaryStatus,
+  statusBadgeVariant,
+} from "../src/lib/status.js";
 
 describe("extractJobEvidence", () => {
   it("returns present=false when no policy/result artifacts exist", () => {
@@ -134,5 +143,45 @@ describe("needsReview filter mutual exclusivity", () => {
     expect(isNeedsReviewJob(reviewJob.phase, reviewJob.outcome)).toBe(true);
     expect(matchesStatusFilter(reviewJob, "needsReview")).toBe(true);
     expect(matchesStatusFilter(reviewJob, "completed")).toBe(false);
+  });
+});
+
+describe("prFilesUrl / prFileDeepLink", () => {
+  it("derives the PR Files tab URL from a github pull URL", () => {
+    expect(prFilesUrl("https://github.com/acme/web/pull/42")).toBe("https://github.com/acme/web/pull/42/files");
+  });
+
+  it("tolerates a trailing slash and existing /files suffix", () => {
+    expect(prFilesUrl("https://github.com/acme/web/pull/42/")).toBe("https://github.com/acme/web/pull/42/files");
+    expect(prFilesUrl("https://github.com/acme/web/pull/42/files")).toBe("https://github.com/acme/web/pull/42/files");
+  });
+
+  it("returns null for absent or non-PR URLs (graceful, no broken link)", () => {
+    expect(prFilesUrl(null)).toBeNull();
+    expect(prFilesUrl(undefined)).toBeNull();
+    expect(prFilesUrl("")).toBeNull();
+    expect(prFilesUrl("https://example.com/not/a/pr")).toBeNull();
+    expect(prFilesUrl("https://github.com/acme/web/issues/42")).toBeNull();
+  });
+
+  it("builds the per-file anchor when a hash is known, else links to the Files tab", () => {
+    const filesUrl = "https://github.com/acme/web/pull/42/files";
+    expect(prFileDeepLink(filesUrl, "abc123")).toBe(`${filesUrl}#diff-abc123`);
+    expect(prFileDeepLink(filesUrl, undefined)).toBe(filesUrl);
+  });
+});
+
+describe("queued vs active-running status", () => {
+  it("treats Queued as not-yet-active so it never shows the running affordance", () => {
+    expect(isQueuedPhase("Queued")).toBe(true);
+    expect(isActiveRunningPhase("Queued")).toBe(false);
+    expect(isActiveRunningPhase("Implementing")).toBe(true);
+    expect(isQueuedPhase("Implementing")).toBe(false);
+  });
+
+  it("gives Queued a badge variant distinct from running and needs-review", () => {
+    expect(statusBadgeVariant("Queued")).toBe("outline");
+    expect(statusBadgeVariant("Implementing")).toBe("default");
+    expect(statusBadgeVariant("NeedsReview")).toBe("warning");
   });
 });

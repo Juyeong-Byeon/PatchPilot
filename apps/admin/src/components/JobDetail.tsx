@@ -21,9 +21,12 @@ import {
   extractJobEvidence,
   normalizeExecutorMode,
   parseDefinitionOfDone,
+  prFileDeepLink,
+  prFilesUrl,
   readExecutorMode,
   type JobEvidence,
 } from "../lib/evidence.js";
+import { usePrFileAnchors } from "../lib/use-pr-file-anchors.js";
 import { LogViewer } from "./LogViewer.js";
 import { RunStepGraph } from "./RunStepGraph.js";
 import { RunTimeline, type SpanSelection } from "./RunTimeline.js";
@@ -302,6 +305,7 @@ export function JobDetail({
         artifacts={currentArtifacts}
         totalCount={currentArtifacts.length}
         expectedTargetBranch={expectedTargetBranch}
+        prUrl={stringOrNull(job.pr_url)}
         copy={copy}
         locale={locale}
       />
@@ -432,11 +436,16 @@ function TicketPanel({
   );
 }
 
+// Cap the inline changed-files list; long diffs fall back to a "+N more" note that
+// points at the PR's Files tab so the card never becomes a wall of paths.
+const MAX_CHANGED_FILES = 20;
+
 function EvidenceCard({
   evidence,
   artifacts,
   totalCount,
   expectedTargetBranch,
+  prUrl,
   copy,
   locale,
 }: {
@@ -444,10 +453,17 @@ function EvidenceCard({
   artifacts: Artifact[];
   totalCount?: number;
   expectedTargetBranch: string | null;
+  prUrl: string | null;
   copy: AdminCopy;
   locale: Locale;
 }) {
   const [rawOpen, setRawOpen] = useState(false);
+
+  const filesUrl = useMemo(() => prFilesUrl(prUrl), [prUrl]);
+  const shownFiles = useMemo(() => evidence.changedFiles.slice(0, MAX_CHANGED_FILES), [evidence.changedFiles]);
+  // Compute GitHub per-file diff anchors only when we actually have a PR to link to.
+  const fileAnchors = usePrFileAnchors(shownFiles, Boolean(filesUrl));
+  const hiddenFileCount = Math.max(0, evidence.changedFiles.length - shownFiles.length);
 
   // The two trust artifacts the worker records: gate verdict + executor evidence.
   const evidenceArtifacts = useMemo(
@@ -524,6 +540,58 @@ function EvidenceCard({
                 </dd>
               </div>
             </dl>
+
+            {/* Changed-file deeplinks (L3): each file links to its diff on the PR's
+                Files tab. When pr_url is absent or unparseable, files render as plain
+                paths (no broken links). */}
+            {shownFiles.length > 0 ? (
+              <div>
+                <p className="mb-2 text-[12px] leading-4 text-charcoal">{copy.evidenceChangedFilesList}</p>
+                <ul className="m-0 grid list-none gap-1.5 p-0" aria-label={copy.evidenceChangedFilesList}>
+                  {shownFiles.map((file) => {
+                    const href = filesUrl ? prFileDeepLink(filesUrl, fileAnchors[file]) : null;
+                    return (
+                      <li key={file}>
+                        {href ? (
+                          <a
+                            className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-hairline-gray bg-linen-white px-3 py-1.5 font-mono text-[12px] leading-5 text-cobalt-surface no-underline shadow-sm transition-colors hover:border-electric-blue hover:bg-mist-blue"
+                            href={href}
+                            rel="noreferrer"
+                            target="_blank"
+                            title={`${copy.evidenceOpenChangedFile} · ${file}`}
+                          >
+                            <FileDiff aria-hidden="true" size={13} strokeWidth={2.2} className="shrink-0" />
+                            <span className="truncate">{file}</span>
+                            <ExternalLink aria-hidden="true" size={12} strokeWidth={2.2} className="shrink-0" />
+                          </a>
+                        ) : (
+                          <span className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-hairline-gray bg-linen-white px-3 py-1.5 font-mono text-[12px] leading-5 text-true-black">
+                            <FileDiff aria-hidden="true" size={13} strokeWidth={2.2} className="shrink-0" />
+                            <span className="truncate">{file}</span>
+                          </span>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+                {hiddenFileCount > 0 ? (
+                  filesUrl ? (
+                    <a
+                      className="mt-2 inline-block text-[12px] leading-4 text-cobalt-surface"
+                      href={filesUrl}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      {copy.evidenceChangedFilesMore(hiddenFileCount)}
+                    </a>
+                  ) : (
+                    <p className="m-0 mt-2 text-[12px] leading-4 text-charcoal">
+                      {copy.evidenceChangedFilesMore(hiddenFileCount)}
+                    </p>
+                  )
+                ) : null}
+              </div>
+            ) : null}
 
             {evidence.tests.length > 0 ? (
               <ul className="m-0 grid list-none gap-2 p-0" aria-label={copy.evidenceTests}>
