@@ -307,3 +307,24 @@ export function translateFailureCategory(value: unknown, locale: Locale): string
   const text = String(value);
   return failureCategoryLabels[locale][text] ?? text;
 }
+
+// Display label for a staged-runner sub-stage key. Shared by the agent sub-track
+// (StagePipeline) and the nested view inside the step graph so both stay in sync.
+// `implement` reads as "코드 작성" to avoid clashing with the platform "구현" phase.
+export function stageKeyLabel(key: string, copy: AdminCopy): string {
+  switch (key) {
+    case "plan":
+      return copy.stagePlan;
+    case "implement":
+      return copy.stageCode;
+    case "review":
+      return copy.stageReview;
+    case "verify":
+    case "qa":
+      return copy.stageQa;
+    case "document":
+      return copy.stageDocument;
+    default:
+      return key;
+  }
+}

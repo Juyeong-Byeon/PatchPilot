@@ -204,6 +204,42 @@ describe("RunStepGraph", () => {
     expect(container.querySelector("[data-step-graph-item]")).toHaveClass("min-h-[132px]");
   });
 
+  it("nests the gstack sub-stages under the Implementing node when provided", () => {
+    const { container } = render(
+      <RunStepGraph
+        copy={adminCopy.ko}
+        locale="ko"
+        currentPhase="Implementing"
+        events={[
+          {
+            id: "1",
+            phase: "Implementing",
+            event_type: "worker.started",
+            source: "worker",
+            message: "runner started",
+            created_at: "2026-06-20T00:00:05.000Z",
+          },
+        ]}
+        stageStates={[
+          { index: 1, key: "plan", status: "complete", startMs: 0, endMs: 1 },
+          { index: 2, key: "implement", status: "active", startMs: 1, endMs: null },
+          { index: 3, key: "review", status: "pending", startMs: null, endMs: null },
+          { index: 4, key: "verify", status: "pending", startMs: null, endMs: null },
+          { index: 5, key: "document", status: "pending", startMs: null, endMs: null },
+        ]}
+      />,
+    );
+
+    const graph = screen.getByRole("list", { name: "처리 단계 그래프" });
+    const subTrack = within(graph).getByRole("list", { name: adminCopy.ko.agentStages });
+    // implement is relabelled to avoid clashing with the "구현" phase node.
+    expect(within(subTrack).getByText("코드 작성")).toBeInTheDocument();
+    expect(within(subTrack).getByText("PR 설명")).toBeInTheDocument();
+    // Completed sub-stage uses the ink dot, the active one the cobalt dot.
+    expect(container.querySelector(".bg-forest-ink")).toBeInTheDocument();
+    expect(container.querySelector(".bg-cobalt-surface")).toBeInTheDocument();
+  });
+
   it("marks intermediate standard phases complete when the run is completed", () => {
     render(
       <RunStepGraph

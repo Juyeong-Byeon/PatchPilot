@@ -35,15 +35,16 @@ export function StageNotesPanel({ notes, copy }: { notes: Artifact[]; copy: Admi
       </div>
       <div className="grid gap-2 p-3">
         {ordered.map((note, index) => (
-          <StageNote key={String(note.id ?? note.kind ?? index)} note={note} copy={copy} defaultOpen={index < 2} />
+          <StageNote key={String(note.id ?? note.kind ?? index)} note={note} copy={copy} />
         ))}
       </div>
     </section>
   );
 }
 
-function StageNote({ note, copy, defaultOpen }: { note: Artifact; copy: AdminCopy; defaultOpen: boolean }) {
-  const [open, setOpen] = useState(defaultOpen);
+function StageNote({ note, copy }: { note: Artifact; copy: AdminCopy }) {
+  // Collapsed by default — operators expand the stage note they care about.
+  const [open, setOpen] = useState(false);
   const meta = STAGE_META[String(note.kind)];
   const Icon = meta.icon;
   const text = typeof note.content === "string" ? note.content : safeStringify(note.content);
