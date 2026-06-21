@@ -30,7 +30,7 @@ export function StagePipeline({ stages, nowMs, copy }: StagePipelineProps) {
       <CardContent className="px-4 py-3">
         <div className="overflow-x-auto overflow-y-visible px-1 py-4">
           <ol
-            className="m-0 grid min-w-[420px] auto-cols-[minmax(92px,1fr)] grid-flow-col list-none p-0"
+            className="m-0 grid min-w-[480px] auto-cols-[minmax(92px,1fr)] grid-flow-col list-none p-0"
             aria-label={copy.agentStages}
           >
             {stages.map((stage, index) => {
@@ -78,6 +78,7 @@ function stageLabel(key: string, copy: AdminCopy): string {
     review: copy.stageReview,
     verify: copy.stageQa,
     qa: copy.stageQa,
+    document: copy.stageDocument,
   };
   return labels[key] ?? key;
 }

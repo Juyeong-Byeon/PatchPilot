@@ -158,12 +158,14 @@ Use real mode only against a disposable test repository in the allowlist.
    container as read-only seed inputs. `GSTACK_SKILL_SOURCE_DIR` should point at
    the gstack checkout root so Codex skill symlinks can resolve helper binaries.
    In `.env` (no shell expansion) use absolute paths, not `$HOME`. To run the
-   staged gstack pipeline (plan → implement → review → verify) keep
+   staged gstack pipeline (plan → implement → review → verify → document) keep
    `GSTACK_COMMAND=node` and set
    `GSTACK_ARGS=/opt/runner/apps/runner/dist/gstack-staged-runner.js` instead of
-   the single-pass `codex-agent-runner.js`. Staged runs cost ~4× the tokens (four
-   Codex passes) and a failing verify stage fails the run. A cancel request stops
-   the running runner container mid-execution and records the cancelled phase.
+   the single-pass `codex-agent-runner.js`. Staged runs cost ~4–5× the tokens
+   (four engineering passes plus a short PR-description pass) and a failing verify
+   stage fails the run. The final document stage authors the PR description and is
+   best-effort (never blocks the PR). A cancel request stops the running runner
+   container mid-execution and records the cancelled phase.
    Roll back by pointing `GSTACK_ARGS` at `codex-agent-runner.js`.
    Do not use `EXECUTOR_MODE=gstack` until `docker run --rm
 ticket-to-pr-runner:local sh -lc 'command -v codex'` succeeds, or until

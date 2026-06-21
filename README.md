@@ -266,7 +266,7 @@ Codex skills directory can contain symlinks to gstack helper binaries.
 > Unlike shell command examples, `.env` values are not shell-expanded, so
 > `$HOME/...` will not resolve when the worker mounts them into the runner.
 
-### gstack staged pipeline (plan → implement → review → verify)
+### gstack staged pipeline (plan → implement → review → verify → document)
 
 `codex-agent-runner.js` runs the agent in a single pass. To run the agent through
 gstack's staged workflow instead — a separate Codex pass per stage (plan and
@@ -287,17 +287,24 @@ Stages run sequentially and fail fast (the stage name is included in the failure
 4. **verify** — runs the project's tests/build and writes a structured
    `output/qa.json` (`{passed, command, summary}`). A failing verification **fails
    the run**, and the result is recorded in the policy-gated `tests` field.
+5. **document** — synthesizes a reviewer-facing PR description from the final diff
+   and the stage notes into `output/pr-description.md`, with six fixed sections:
+   아키텍처 변경점 · 새로 추가된 컴포넌트 · 데이터 플로우 · 실패 시나리오 ·
+   트레이드오프 · 테스트 전략. Best-effort — if it produces nothing the PR still
+   ships with the stage notes below.
 
-Each stage's notes are folded into the PR body **and surfaced in the admin
-console** (a "Pipeline stage notes" panel on the job detail), and the platform
-still derives the PR's trusted git evidence after the run. The same `CODEX_*` /
-`GSTACK_SKILL_SOURCE_DIR` mounts apply; the runner image bundles `ripgrep`, which
-gstack skills require.
+The authored description leads the PR body, followed by each stage's notes, which
+are also **surfaced in the admin console** (a "Pipeline stage notes" panel on the
+job detail) — and the live sub-stages render as an "에이전트 단계" sub-track under
+the Implementing phase. The platform still derives the PR's trusted git evidence
+after the run. The same `CODEX_*` / `GSTACK_SKILL_SOURCE_DIR` mounts apply; the
+runner image bundles `ripgrep`, which gstack skills require.
 
 Operational notes:
 
-- **Cost:** four Codex passes each reload a large gstack skill, so a staged run
-  costs roughly 4× the single-pass runner. Prefer it for higher-stakes tickets.
+- **Cost:** five Codex passes (four engineering stages each reload a large gstack
+  skill, plus a short description pass), so a staged run costs roughly 4–5× the
+  single-pass runner. Prefer it for higher-stakes tickets.
 - **Cancel:** a cancel request stops the running runner container mid-execution
   and records the phase it was cancelled in. The whole pipeline shares one
   timeout, split evenly across stages.

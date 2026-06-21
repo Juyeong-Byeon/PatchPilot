@@ -249,6 +249,24 @@ describe("JobDetail", () => {
     expect(screen.getByText("검증")).toBeInTheDocument();
   });
 
+  it("renders the final PR-description stage label for a completed staged run", () => {
+    render(
+      <JobDetail
+        {...baseProps}
+        job={{ id: "job_1", phase: "Completed", outcome: "NeedsReview", repository: "example-org/example-repo" }}
+        events={[
+          stageEvent("event_1", 1, "plan", "2026-06-20T00:00:00.000Z"),
+          stageEvent("event_2", 2, "implement", "2026-06-20T00:00:05.000Z"),
+          stageEvent("event_3", 3, "review", "2026-06-20T00:00:10.000Z"),
+          stageEvent("event_4", 4, "verify", "2026-06-20T00:00:15.000Z"),
+          stageEvent("event_5", 5, "document", "2026-06-20T00:00:20.000Z"),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("PR 설명")).toBeInTheDocument();
+  });
+
   it("hides the agent sub-stage track for non-staged runs that emit no stage events", () => {
     render(
       <JobDetail
@@ -278,8 +296,8 @@ function stageEvent(id: string, index: number, key: string, createdAt: string) {
     phase: "Implementing",
     event_type: "gstack.stage",
     source: "gstack",
-    message: `gstack stage ${index}/4: ${key}`,
-    metadata: { stageIndex: index, stageTotal: 4, stageKey: key },
+    message: `gstack stage ${index}/5: ${key}`,
+    metadata: { stageIndex: index, stageTotal: 5, stageKey: key },
     created_at: createdAt,
   };
 }

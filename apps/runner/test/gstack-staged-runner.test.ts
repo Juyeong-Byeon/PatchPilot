@@ -75,16 +75,19 @@ const IMPLEMENT =
 const REVIEW = "writeFileSync(path.join(outputDir, 'review.md'), '# Review\\n- No blocking issues\\n');";
 const VERIFY_PASS =
   "writeFileSync(path.join(outputDir, 'qa.json'), JSON.stringify({ passed: true, command: 'npm test', summary: 'all green' })); writeFileSync(path.join(outputDir, 'qa.md'), '# QA\\n- npm test passed\\n');";
+const DOCUMENT =
+  "writeFileSync(path.join(outputDir, 'pr-description.md'), '## 아키텍처 변경점\\n- README 변경\\n## 새로 추가된 컴포넌트\\n- 해당 없음 — 신규 컴포넌트 없음\\n## 데이터 플로우\\n- 변경 없음\\n## 실패 시나리오\\n- 없음\\n## 트레이드오프\\n- 없음\\n## 테스트 전략\\n- npm test\\n');";
 
 describe("runGstackStagedRunner", () => {
-  it("runs plan -> implement -> review -> verify, gates on qa.json, folds notes into the PR body", async () => {
+  it("runs plan -> implement -> review -> verify -> document, gates on qa.json, folds notes + description into the PR body", async () => {
     const { workspaceRoot, repoDir } = await setupWorkspace();
     const fakeCodex = join(workspaceRoot, "fake.mjs");
     await writeFakeCodex(fakeCodex, {
-      "STAGE 1 of 4": PLAN,
-      "STAGE 2 of 4": IMPLEMENT,
-      "STAGE 3 of 4": REVIEW,
-      "STAGE 4 of 4": VERIFY_PASS,
+      "STAGE 1 of 5": PLAN,
+      "STAGE 2 of 5": IMPLEMENT,
+      "STAGE 3 of 5": REVIEW,
+      "STAGE 4 of 5": VERIFY_PASS,
+      "STAGE 5 of 5": DOCUMENT,
     });
 
     await runGstackStagedRunner({
@@ -109,19 +112,59 @@ describe("runGstackStagedRunner", () => {
     });
 
     const prBody = await readFile(join(workspaceRoot, "output", "pr-body.md"), "utf8");
+    // Agent-authored description: the six structured sections lead the detailed stage notes.
+    for (const header of [
+      "## 아키텍처 변경점",
+      "## 새로 추가된 컴포넌트",
+      "## 데이터 플로우",
+      "## 실패 시나리오",
+      "## 트레이드오프",
+      "## 테스트 전략",
+    ]) {
+      expect(prBody).toContain(header);
+    }
     expect(prBody).toContain("## Implementation plan (gstack-autoplan)");
     expect(prBody).toContain("## Review (gstack-review)");
     expect(prBody).toContain("## Verification (gstack verify)");
+    // The description precedes the appendix of raw stage notes.
+    expect(prBody.indexOf("## 아키텍처 변경점")).toBeLessThan(
+      prBody.indexOf("## Implementation plan (gstack-autoplan)"),
+    );
+  });
+
+  it("still ships the PR with stage notes when the document stage produces nothing", async () => {
+    const { workspaceRoot, repoDir } = await setupWorkspace();
+    const fakeCodex = join(workspaceRoot, "fake.mjs");
+    // No "STAGE 5 of 5" handler: the document stage's fake codex exits non-zero and is swallowed.
+    await writeFakeCodex(fakeCodex, {
+      "STAGE 1 of 5": PLAN,
+      "STAGE 2 of 5": IMPLEMENT,
+      "STAGE 3 of 5": REVIEW,
+      "STAGE 4 of 5": VERIFY_PASS,
+    });
+
+    await runGstackStagedRunner({
+      workspaceRoot,
+      repoDir,
+      targetBranch: "main",
+      codexCommand: "node",
+      codexArgs: [fakeCodex],
+      codexHome: join(workspaceRoot, "codex-home"),
+    });
+
+    const prBody = await readFile(join(workspaceRoot, "output", "pr-body.md"), "utf8");
+    expect(prBody).toContain("## Implementation plan (gstack-autoplan)");
+    expect(prBody).not.toContain("## 아키텍처 변경점");
   });
 
   it("fails the run when the verify stage reports failing verification", async () => {
     const { workspaceRoot, repoDir } = await setupWorkspace();
     const fakeCodex = join(workspaceRoot, "fake.mjs");
     await writeFakeCodex(fakeCodex, {
-      "STAGE 1 of 4": PLAN,
-      "STAGE 2 of 4": IMPLEMENT,
-      "STAGE 3 of 4": REVIEW,
-      "STAGE 4 of 4":
+      "STAGE 1 of 5": PLAN,
+      "STAGE 2 of 5": IMPLEMENT,
+      "STAGE 3 of 5": REVIEW,
+      "STAGE 4 of 5":
         "writeFileSync(path.join(outputDir, 'qa.json'), JSON.stringify({ passed: false, command: 'npm test', summary: '2 tests failed' }));",
     });
 
@@ -142,11 +185,12 @@ describe("runGstackStagedRunner", () => {
     const fakeCodex = join(workspaceRoot, "fake.mjs");
     await writeFakeCodex(fakeCodex, {
       // Plan also (wrongly) drops a note inside the repo; it must not be committed.
-      "STAGE 1 of 4": `${PLAN} writeFileSync(path.join(repoDir, 'plan.md'), 'stray note inside repo');`,
-      "STAGE 2 of 4": IMPLEMENT,
+      "STAGE 1 of 5": `${PLAN} writeFileSync(path.join(repoDir, 'plan.md'), 'stray note inside repo');`,
+      "STAGE 2 of 5": IMPLEMENT,
       // Review leaves an uncommitted fix; the runner's commitIfDirty must commit it.
-      "STAGE 3 of 4": `${REVIEW} appendFileSync(path.join(repoDir, 'README.md'), '\\nreview fix\\n');`,
-      "STAGE 4 of 4": VERIFY_PASS,
+      "STAGE 3 of 5": `${REVIEW} appendFileSync(path.join(repoDir, 'README.md'), '\\nreview fix\\n');`,
+      "STAGE 4 of 5": VERIFY_PASS,
+      "STAGE 5 of 5": DOCUMENT,
     });
 
     await runGstackStagedRunner({
