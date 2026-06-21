@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Copy, Download, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Check, Copy, Download, X } from "lucide-react";
 import type { LogLine } from "../api.js";
 import type { AdminCopy } from "../i18n.js";
 import { isStageBannerText } from "../lib/status.js";
@@ -30,6 +30,7 @@ export function LogViewer({
 }: LogViewerProps) {
   const [source, setSource] = useState("all");
   const [query, setQuery] = useState("");
+  const [copied, setCopied] = useState(false);
   const sources = useMemo(
     () => Array.from(new Set(logs.map((line) => line.source).filter(Boolean) as string[])).sort(),
     [logs],
@@ -43,11 +44,32 @@ export function LogViewer({
     });
   }, [logs, query, source]);
   const text = filteredLogs.map((line) => formatLine(line, copy)).join("\n");
+
+  // Briefly show a "copied" confirmation after a successful clipboard write.
+  useEffect(() => {
+    if (!copied) return;
+    const id = window.setTimeout(() => setCopied(false), 2000);
+    return () => window.clearTimeout(id);
+  }, [copied]);
+
+  async function copyLogs(): Promise<void> {
+    if (!navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+    } catch {
+      // Clipboard write denied/unavailable — leave the button in its default state.
+    }
+  }
+
   const shellClassName =
     variant === "embedded" ? "surface-card-soft rounded-xl border border-hairline-gray bg-linen-white" : "";
 
   const content = (
     <>
+      <span className="sr-only" role="status" aria-live="polite">
+        {copied ? copy.copied : ""}
+      </span>
       <div className="flex flex-col items-stretch justify-between gap-3 border-b border-hairline-gray p-4 xl:flex-row xl:items-center">
         <div>
           <CardTitle>{copy.logs}</CardTitle>
@@ -74,11 +96,15 @@ export function LogViewer({
             type="button"
             variant="outline"
             size="icon"
-            aria-label={copy.copy}
-            title={copy.copy}
-            onClick={() => void navigator.clipboard?.writeText(text)}
+            aria-label={copied ? copy.copied : copy.copy}
+            title={copied ? copy.copied : copy.copy}
+            onClick={() => void copyLogs()}
           >
-            <Copy data-icon aria-hidden="true" strokeWidth={2.2} />
+            {copied ? (
+              <Check data-icon aria-hidden="true" strokeWidth={2.2} />
+            ) : (
+              <Copy data-icon aria-hidden="true" strokeWidth={2.2} />
+            )}
           </Button>
           <Button
             type="button"
