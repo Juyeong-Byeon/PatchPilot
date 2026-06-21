@@ -1,15 +1,15 @@
 import type { AgentJobPayload } from "@ticket-to-pr/queue";
 import type { InternalPhase, UserOutcome } from "@ticket-to-pr/core";
-import type { MetricsSummary } from "@ticket-to-pr/db";
+import type { ArtifactRow, JobDetailRow, JobListRow, JobLogRow, MetricsSummary, RunEventRow } from "@ticket-to-pr/db";
 import type { FastifyInstance } from "fastify";
 import { assertAdminToken } from "./auth.js";
 
 export interface AdminRepositories {
-  listJobs(): Promise<Array<Record<string, unknown>>>;
-  getJob(jobId: string): Promise<Record<string, unknown> | null>;
-  getJobEvents(jobId: string): Promise<Array<Record<string, unknown>>>;
-  getJobLogs(jobId: string): Promise<Array<Record<string, unknown>>>;
-  getJobArtifacts(jobId: string): Promise<Array<Record<string, unknown>>>;
+  listJobs(): Promise<JobListRow[]>;
+  getJob(jobId: string): Promise<JobDetailRow | null>;
+  getJobEvents(jobId: string): Promise<RunEventRow[]>;
+  getJobLogs(jobId: string): Promise<JobLogRow[]>;
+  getJobArtifacts(jobId: string): Promise<ArtifactRow[]>;
   requestCancel(jobId: string, actor: string): Promise<CancelRequestView>;
   getRetryPreflight(jobId: string): Promise<RetryPreflightView | null>;
   createRetryAttempt(
