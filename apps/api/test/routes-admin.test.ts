@@ -114,7 +114,7 @@ describe("admin routes", () => {
         runId: "run_2",
         attempt: 2,
       },
-      { jobId: "job_1:run_2" },
+      { jobId: "job_1__run_2" },
     );
     await app.close();
   });
@@ -365,7 +365,7 @@ describe("answer a NeedsInput job (POST /api/jobs/:id/answer)", () => {
     expect(queue.add).toHaveBeenCalledWith(
       "job_1",
       { jobId: "job_1", runId: "run_2", attempt: 2 },
-      { jobId: "job_1:run_2" },
+      { jobId: "job_1__run_2" },
     );
     await app.close();
   });
