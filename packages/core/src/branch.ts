@@ -1,4 +1,4 @@
-export function slugifyTitle(title: string): string {
+function slugifyTitle(title: string): string {
   const slug = title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")

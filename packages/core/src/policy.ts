@@ -1,8 +1,3 @@
-export interface PolicyConfig {
-  repositoryAllowlist: string[];
-  protectedPathDenylist: string[];
-}
-
 export function isRepositoryAllowed(repository: string, allowlist: string[]): boolean {
   return allowlist.includes(repository);
 }
