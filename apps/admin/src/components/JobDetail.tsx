@@ -128,7 +128,16 @@ export function JobDetail({
           <CardTitle>{copy.jobDetail}</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-[13px] leading-5 text-charcoal">{isLoading ? copy.loadingDetail : copy.selectJob}</p>
+          {/* When a detail fetch fails with no cached job to fall back on, surface the
+              real error instead of the misleading "select a job" prompt. Loading and
+              genuine no-selection (no error) states are unchanged. */}
+          {!isLoading && error ? (
+            <p role="alert" className="rounded-lg bg-danger px-3 py-2 text-[13px] leading-5 text-white">
+              {error}
+            </p>
+          ) : (
+            <p className="text-[13px] leading-5 text-charcoal">{isLoading ? copy.loadingDetail : copy.selectJob}</p>
+          )}
         </CardContent>
       </Card>
     );
