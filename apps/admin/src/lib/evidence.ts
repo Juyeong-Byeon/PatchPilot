@@ -157,6 +157,27 @@ export function readExecutorMode(job: JobRecord | null | undefined): ExecutorMod
   return value.length > 0 ? value : null;
 }
 
+// Build the GitHub "Files changed" tab URL for a PR from its pr_url. Returns null
+// when the pr_url is absent or not a recognizable GitHub PR URL, so the caller can
+// render a plain (non-linked) file path instead of a broken link.
+export function prFilesUrl(prUrl: unknown): string | null {
+  if (typeof prUrl !== "string") return null;
+  const trimmed = prUrl.trim();
+  // .../owner/repo/pull/<n>  (tolerate a trailing slash or existing /files suffix)
+  const match = trimmed.match(/^(https?:\/\/[^\s/]+\/[^\s/]+\/[^\s/]+\/pull\/\d+)(?:\/.*)?$/i);
+  if (!match) return null;
+  return `${match[1]}/files`;
+}
+
+// Per-file deeplink into a PR's diff. GitHub anchors each file as
+// `#diff-<sha256hex(path)>`; the SHA is computed asynchronously by the caller (it
+// needs SubtleCrypto). When the anchor isn't available yet, we still return the
+// Files tab URL, which is a valid, non-broken link — so the link degrades to the
+// PR file list rather than failing.
+export function prFileDeepLink(filesUrl: string, anchorHex: string | undefined): string {
+  return anchorHex ? `${filesUrl}#diff-${anchorHex}` : filesUrl;
+}
+
 // Map a raw mode token to a stable display key. Unknown tokens pass through so a
 // future mode value still renders (just without a localized label).
 export function normalizeExecutorMode(mode: ExecutorMode): "single-pass" | "staged" | "other" {

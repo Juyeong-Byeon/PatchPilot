@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ListChecks } from "lucide-react";
+import { ChevronLeft, ListChecks, Monitor, Moon, Sun } from "lucide-react";
 import adminLogo from "./assets/patchpilot-logo.svg";
 import {
   cancelJob,
@@ -22,10 +22,24 @@ import { Button } from "./components/ui/button.js";
 import { Input } from "./components/ui/input.js";
 import { cn } from "./lib/utils.js";
 import { isCompletedJob, isFailedJob, isNeedsReviewJob, isRunningPhase, type StatusFilter } from "./lib/status.js";
+import { applyTheme, getInitialTheme, storeTheme, type ThemePreference } from "./lib/theme.js";
+import { MetricsPanel } from "./components/MetricsPanel.js";
 import { adminCopy, getInitialLocale, localeNames, storeLocale, type AdminCopy, type Locale } from "./i18n.js";
 
 const LIST_REFRESH_RUNNING_MS = 2000;
 const LIST_REFRESH_IDLE_MS = 5000;
+
+// Light / dark / system toggle. Labels come from i18n; icons keep the control
+// compact in the sidebar. labelKey is a string-valued AdminCopy key.
+const THEME_OPTIONS: ReadonlyArray<{
+  value: ThemePreference;
+  Icon: typeof Sun;
+  labelKey: "themeLight" | "themeDark" | "themeSystem";
+}> = [
+  { value: "light", Icon: Sun, labelKey: "themeLight" },
+  { value: "dark", Icon: Moon, labelKey: "themeDark" },
+  { value: "system", Icon: Monitor, labelKey: "themeSystem" },
+];
 
 interface DetailState {
   job: JobRecord | null;
@@ -62,6 +76,7 @@ const emptyDetail: DetailState = {
 export default function App() {
   const [route, setRoute] = useState<AdminRoute>(() => readRoute());
   const [locale, setLocale] = useState<Locale>(() => getInitialLocale());
+  const [theme, setTheme] = useState<ThemePreference>(() => getInitialTheme());
   const copy = adminCopy[locale];
   const [token, setToken] = useState(() => getStoredAdminToken());
   const [jobs, setJobs] = useState<JobRecord[]>([]);
@@ -133,6 +148,10 @@ export default function App() {
     document.documentElement.lang = locale;
     document.title = copy.documentTitle;
   }, [copy.documentTitle, locale]);
+
+  useEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
 
   useEffect(() => {
     if (!selectedJobId || !token) {
@@ -266,6 +285,11 @@ export default function App() {
     storeLocale(nextLocale);
   }
 
+  function changeTheme(nextTheme: ThemePreference) {
+    setTheme(nextTheme);
+    storeTheme(nextTheme);
+  }
+
   function openJob(jobId: string) {
     navigate({ page: "detail", jobId });
   }
@@ -366,19 +390,42 @@ export default function App() {
               </div>
             </section>
 
-            <div className="flex items-center gap-1 rounded-lg bg-mist-blue p-1">
-              {(["ko", "en"] as Locale[]).map((entry) => (
-                <Button
-                  key={entry}
-                  type="button"
-                  size="sm"
-                  variant={locale === entry ? "default" : "ghost"}
-                  className="h-8 flex-1"
-                  onClick={() => changeLocale(entry)}
-                >
-                  {localeNames[entry]}
-                </Button>
-              ))}
+            <div className="grid gap-2">
+              <div
+                className="flex items-center gap-1 rounded-lg bg-mist-blue p-1"
+                role="group"
+                aria-label={copy.themeLabel}
+              >
+                {THEME_OPTIONS.map(({ value, Icon, labelKey }) => (
+                  <Button
+                    key={value}
+                    type="button"
+                    size="sm"
+                    variant={theme === value ? "default" : "ghost"}
+                    className="h-8 flex-1 px-0"
+                    aria-pressed={theme === value}
+                    aria-label={copy[labelKey]}
+                    title={copy[labelKey]}
+                    onClick={() => changeTheme(value)}
+                  >
+                    <Icon data-icon aria-hidden="true" strokeWidth={2.2} />
+                  </Button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1 rounded-lg bg-mist-blue p-1">
+                {(["ko", "en"] as Locale[]).map((entry) => (
+                  <Button
+                    key={entry}
+                    type="button"
+                    size="sm"
+                    variant={locale === entry ? "default" : "ghost"}
+                    className="h-8 flex-1"
+                    onClick={() => changeLocale(entry)}
+                  >
+                    {localeNames[entry]}
+                  </Button>
+                ))}
+              </div>
             </div>
             <footer className="border-t border-hairline-gray pt-4 text-[12px] leading-5 text-charcoal">
               <p className="m-0 font-medium text-forest-ink">{copy.appTitle}</p>
@@ -452,15 +499,23 @@ export default function App() {
 
         <main className="mx-auto w-full max-w-[var(--page-max-width)] flex-1 px-4 py-5 md:px-6">
           {route.page === "list" ? (
-            <JobList
-              jobs={jobs}
-              selectedJobId={selectedJobId}
-              isLoading={isLoadingJobs}
-              copy={copy}
-              locale={locale}
-              statusFilter={statusFilter}
-              onOpenJob={openJob}
-            />
+            <div className="grid gap-4">
+              <MetricsPanel
+                token={token}
+                copy={copy}
+                sessionExpired={sessionExpired}
+                onSessionExpired={handleSessionExpiry}
+              />
+              <JobList
+                jobs={jobs}
+                selectedJobId={selectedJobId}
+                isLoading={isLoadingJobs}
+                copy={copy}
+                locale={locale}
+                statusFilter={statusFilter}
+                onOpenJob={openJob}
+              />
+            </div>
           ) : (
             <JobDetail
               job={selectedJob}

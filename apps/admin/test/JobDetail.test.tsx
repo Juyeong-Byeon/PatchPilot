@@ -463,7 +463,9 @@ describe("JobDetail", () => {
 
     expect(screen.getByText(adminCopy.ko.evidenceProtectedViolation(1))).toBeInTheDocument();
     expect(screen.getByText(adminCopy.ko.evidencePolicyFailed)).toBeInTheDocument();
-    expect(screen.getByText(".github/workflows/ci.yml")).toBeInTheDocument();
+    // The path now appears both in the changed-files deeplink list and the denied
+    // list, so allow more than one occurrence.
+    expect(screen.getAllByText(".github/workflows/ci.yml").length).toBeGreaterThan(0);
   });
 
   it("keeps the raw evidence JSON behind a collapsible 원본 보기 toggle", () => {
