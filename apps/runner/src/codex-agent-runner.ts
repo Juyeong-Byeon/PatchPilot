@@ -241,11 +241,14 @@ export async function writeResultArtifacts(input: {
     pushSha: headSha,
     changedFiles,
     commits,
+    // Honest default: the single-pass runner does NOT run project verification, so it must
+    // not claim a passing test. `skipped` is truthful; the platform/policy layer surfaces it
+    // as "no verification". Staged runs pass a real `tests` result derived from qa.json.
     tests: input.tests ?? [
       {
-        command: "git diff --name-only",
-        status: "passed",
-        summary: changedFiles.join(", "),
+        command: "project verification",
+        status: "skipped",
+        summary: "Single-pass runner did not run project verification.",
       },
     ],
     review: {
@@ -262,18 +265,35 @@ export async function writeResultArtifacts(input: {
     retryable: false,
   });
 
-  const body = [
-    "## Summary",
-    "- Implemented by Codex CLI through the Ticket-to-PR runner.",
-    `- Changed files: ${changedFiles.join(", ")}`,
-    "",
-    "## Verification",
-    "- git diff --name-only",
-    ...(input.prBodySections && input.prBodySections.length > 0 ? ["", ...input.prBodySections] : []),
-  ].join("\n");
+  const body = composePrBody({ changedFiles, prBodySections: input.prBodySections });
   await writeTextArtifact(paths.prTitle, `${title}\n`);
   await writeTextArtifact(paths.prBody, body);
   await writeJsonArtifact(paths.resultJson, result);
+}
+
+/**
+ * Builds the reviewer-facing PR body from agent-authored content only.
+ *
+ * The platform trust footer (audited SHAs, policy verdict, tests) is appended later by the
+ * publisher/worker track — this builder deliberately does NOT emit it, and must never emit a
+ * fabricated verification line (the legacy `## Verification\n- git diff --name-only` block
+ * falsely contradicted the real `npm run ci` evidence in staged PR bodies).
+ *
+ * - Staged runs supply rich `prBodySections` (agent-authored description + stage notes); the
+ *   body is exactly those sections, with no platform-injected preamble.
+ * - Single-pass has no rich sections yet, so we emit a minimal, honest `## Summary` listing the
+ *   changed files — and nothing claiming verification ran.
+ */
+export function composePrBody(input: { changedFiles: string[]; prBodySections?: string[] }): string {
+  const sections = (input.prBodySections ?? []).filter((section) => section.trim().length > 0);
+  if (sections.length > 0) {
+    return sections.join("\n\n");
+  }
+  return [
+    "## Summary",
+    "- Implemented by Codex CLI through the Ticket-to-PR runner.",
+    `- Changed files: ${input.changedFiles.join(", ")}`,
+  ].join("\n");
 }
 
 export async function gitStdout(args: string[], cwd: string): Promise<string> {
