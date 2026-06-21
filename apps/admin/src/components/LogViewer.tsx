@@ -136,16 +136,20 @@ export function LogViewer({
       ) : null}
       <div>
         <pre className="terminal-surface m-0 max-h-[320px] min-h-[180px] overflow-auto p-4 text-[12px] leading-5 whitespace-pre-wrap text-true-black">
-          {filteredLogs.length === 0
-            ? copy.noLogs
-            : filteredLogs.map((line, index) => (
-                <span
-                  key={String(line.id ?? index)}
-                  className={cn("block", isStageBannerText(line.text) && "mt-1 font-semibold text-cobalt-surface")}
-                >
-                  {formatLine(line, copy)}
-                </span>
-              ))}
+          {filteredLogs.length === 0 ? (
+            <p className="m-0" role="status">
+              {copy.noLogs}
+            </p>
+          ) : (
+            filteredLogs.map((line, index) => (
+              <span
+                key={String(line.id ?? index)}
+                className={cn("block", isStageBannerText(line.text) && "mt-1 font-semibold text-cobalt-surface")}
+              >
+                {formatLine(line, copy)}
+              </span>
+            ))
+          )}
         </pre>
       </div>
     </>
