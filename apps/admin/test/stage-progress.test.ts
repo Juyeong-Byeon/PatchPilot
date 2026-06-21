@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { deriveStageStates, isStageBannerText, type StageStatus } from "../src/lib/status.js";
+import { deriveStageStates, isCancellingPhase, isStageBannerText, type StageStatus } from "../src/lib/status.js";
+
+describe("isCancellingPhase", () => {
+  it("flags only the in-flight cancel phases (outcome still reads Running)", () => {
+    expect(isCancellingPhase("CancelRequested")).toBe(true);
+    expect(isCancellingPhase("Cancelling")).toBe(true);
+    // Terminal cancel states already carry a settled outcome, so they are not in-flight.
+    expect(isCancellingPhase("Cancelled")).toBe(false);
+    expect(isCancellingPhase("CancelFailed")).toBe(false);
+    expect(isCancellingPhase("Implementing")).toBe(false);
+  });
+});
 
 describe("isStageBannerText", () => {
   it("detects gstack stage banners", () => {

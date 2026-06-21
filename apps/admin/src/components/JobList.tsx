@@ -3,7 +3,13 @@ import { ArrowRight, LoaderCircle, Search } from "lucide-react";
 import type { JobRecord } from "../api.js";
 import { translateState, type AdminCopy, type Locale } from "../i18n.js";
 import { cn } from "../lib/utils.js";
-import { isRunningPhase, matchesStatusFilter, statusBadgeVariant, type StatusFilter } from "../lib/status.js";
+import {
+  isCancellingPhase,
+  isRunningPhase,
+  matchesStatusFilter,
+  statusBadgeVariant,
+  type StatusFilter,
+} from "../lib/status.js";
 import { Badge } from "./ui/badge.js";
 import { Card, CardHeader, CardTitle } from "./ui/card.js";
 import { Input } from "./ui/input.js";
@@ -197,12 +203,18 @@ function getPrimaryStatus(
     return { value: "Running", label: formatRunningPhase(job, locale, copy) };
   }
 
+  const phase = getValue(job, "phase");
+  // A requested-but-not-finalized cancel keeps outcome="Running"; show the cancel
+  // state from the phase so the row never keeps reading as "Running" after a cancel.
+  if (phase && isCancellingPhase(phase)) {
+    return { value: phase, label: copy.cancelling };
+  }
+
   const outcome = getValue(job, "outcome");
   if (outcome) {
     return { value: outcome, label: translateState(outcome, locale) };
   }
 
-  const phase = getValue(job, "phase");
   if (phase) {
     return { value: phase, label: translateState(phase, locale) };
   }

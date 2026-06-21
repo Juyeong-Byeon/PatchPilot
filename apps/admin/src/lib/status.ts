@@ -12,6 +12,17 @@ export function isFailedJob(phase: unknown, outcome: unknown): boolean {
   return String(phase).startsWith("Failed") || String(outcome).startsWith("Failed");
 }
 
+/**
+ * A cancel that has been requested but not yet finalized. The backend keeps the
+ * job's `outcome` at "Running" through CancelRequested/Cancelling (it only flips
+ * to "Cancelled" once the runner actually stops), so callers that summarize a job
+ * by its outcome must special-case these phases or the row keeps reading "Running"
+ * after a cancel — possibly forever if the cancel never finalizes.
+ */
+export function isCancellingPhase(phase: unknown): boolean {
+  return phase === "CancelRequested" || phase === "Cancelling";
+}
+
 export function isCompletedJob(phase: unknown, outcome: unknown): boolean {
   return phase === "Completed" || outcome === "Completed";
 }
