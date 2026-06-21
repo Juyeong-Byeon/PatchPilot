@@ -48,6 +48,12 @@ describe("RunTimeline", () => {
     const flow = screen.getByRole("region", { name: "실행 흐름" });
     const table = within(flow).getByRole("table", { name: "실행 흐름" });
 
+    // Column headers carry scope="col" so screen readers associate each header
+    // with its column when navigating the grid cell-by-cell (WCAG 1.3.1).
+    const headers = within(table).getAllByRole("columnheader");
+    expect(headers).toHaveLength(5);
+    headers.forEach((header) => expect(header).toHaveAttribute("scope", "col"));
+
     expect(within(table).getByText("#")).toBeInTheDocument();
     expect(within(table).getByText("단계")).toBeInTheDocument();
     expect(within(table).getAllByText("대기").length).toBeGreaterThan(0);
