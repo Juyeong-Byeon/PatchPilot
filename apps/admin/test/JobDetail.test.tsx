@@ -562,6 +562,30 @@ describe("JobDetail", () => {
     expect(within(raw).getByText(/"status": "passed"/)).toBeInTheDocument();
   });
 
+  it("exposes the scrollable artifact output as a keyboard-focusable, labeled region", () => {
+    render(
+      <JobDetail
+        {...baseProps}
+        job={{ id: "job_1", phase: "Completed", outcome: "NeedsReview", repository: "acme/web" }}
+        artifacts={[
+          {
+            id: "artifact_1",
+            run_id: "run_1",
+            kind: "agent-result",
+            content: { status: "passed" },
+            created_at: "2026-06-20T00:01:05.000Z",
+          },
+        ]}
+      />,
+    );
+
+    // The clipped, scrollable artifact <pre> has no focusable children, so it must
+    // itself be keyboard-focusable and named for WCAG 2.1.1 keyboard access.
+    const region = screen.getByRole("group", { name: adminCopy.ko.artifacts });
+    expect(region).toHaveAttribute("tabindex", "0");
+    expect(region.tagName).toBe("PRE");
+  });
+
   it("renders an executor-mode badge only when the record carries the field", () => {
     const { rerender } = render(
       <JobDetail
