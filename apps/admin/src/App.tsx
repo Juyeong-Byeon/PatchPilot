@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ListChecks, Monitor, Moon, Sun } from "lucide-react";
+import { ChevronLeft, ListChecks, Monitor, Moon, Pencil, ShieldCheck, Sun } from "lucide-react";
 import adminLogo from "./assets/patchpilot-logo.svg";
 import {
   cancelJob,
@@ -19,6 +19,7 @@ import {
 import { JobDetail } from "./components/JobDetail.js";
 import { JobList } from "./components/JobList.js";
 import { Button } from "./components/ui/button.js";
+import { Card } from "./components/ui/card.js";
 import { Input } from "./components/ui/input.js";
 import { cn } from "./lib/utils.js";
 import { isCompletedJob, isFailedJob, isNeedsReviewJob, isRunningPhase, type StatusFilter } from "./lib/status.js";
@@ -91,8 +92,14 @@ export default function App() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   // Once a 401 lands, all polling is frozen until the operator re-authenticates.
   const [sessionExpired, setSessionExpired] = useState(false);
+  // The sidebar shows a compact "authenticated" block by default; the token input
+  // only appears once the operator opts into editing it.
+  const [editingToken, setEditingToken] = useState(false);
   const tokenInputRef = useRef<HTMLInputElement | null>(null);
   const selectedJobId = route.page === "detail" ? route.jobId : "";
+  // No saved token, or the session expired: gate the whole app behind onboarding
+  // instead of the sidebar+content grid.
+  const showOnboarding = !token.trim() || sessionExpired;
 
   // Single re-auth boundary: stop polling, surface one state, focus the token form.
   function handleSessionExpiry() {
@@ -152,6 +159,12 @@ export default function App() {
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
+
+  // Focus the access-key field whenever the onboarding gate appears (initial load
+  // or session-expiry re-auth) so the operator can type immediately.
+  useEffect(() => {
+    if (showOnboarding) tokenInputRef.current?.focus();
+  }, [showOnboarding]);
 
   useEffect(() => {
     if (!selectedJobId || !token) {
@@ -247,8 +260,10 @@ export default function App() {
 
   function saveToken() {
     storeAdminToken(token);
-    // Re-authentication clears the expiry boundary and resumes polling.
+    // Re-authentication clears the expiry boundary and resumes polling. Applying a
+    // token also leaves the sidebar edit stage / dismisses the onboarding gate.
     setSessionExpired(false);
+    setEditingToken(false);
     setListError("");
     setStatus(token.trim() ? { kind: "ready" } : { kind: "enterToken" });
     void refreshJobs(token);
@@ -304,6 +319,88 @@ export default function App() {
   }
 
   const pageTitle = route.page === "list" ? copy.jobs : copy.jobDetail;
+
+  // Onboarding gate: with no saved token (or after a session-expiry 401) render a
+  // dedicated, centered access-key screen instead of the sidebar+content grid.
+  if (showOnboarding) {
+    return (
+      <div className="admin-shell flex min-h-screen flex-col items-center justify-center px-4 py-10 text-true-black">
+        <Card className="w-full max-w-[420px]">
+          <div className="grid gap-5 px-6 py-7">
+            <div className="flex flex-col items-center gap-3 text-center">
+              <img
+                src={adminLogo}
+                alt=""
+                aria-hidden="true"
+                className="status-glow-active size-12 shrink-0 rounded-2xl border border-electric-blue/20 bg-mist-blue object-contain p-1.5"
+              />
+              <div>
+                <p className="text-[12px] font-medium leading-4 text-cobalt-surface">{copy.appEyebrow}</p>
+                <strong className="block text-[20px] font-semibold leading-6 text-forest-ink">{copy.appTitle}</strong>
+              </div>
+            </div>
+
+            <div className="text-center">
+              <h1 className="text-[18px] font-semibold leading-6 text-forest-ink">{copy.onboardingHeading}</h1>
+              <p className="mt-1 text-[13px] leading-5 text-charcoal">{copy.onboardingSubtitle}</p>
+            </div>
+
+            {sessionExpired ? (
+              <div role="alert" className="rounded-lg border border-danger bg-danger-wash px-3 py-2 text-danger">
+                <strong className="block text-[12px] font-semibold leading-4">{copy.sessionExpired}</strong>
+                <span className="mt-1 block text-[11px] font-normal leading-4">{copy.sessionExpiredHint}</span>
+              </div>
+            ) : null}
+
+            <form
+              className="grid gap-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                saveToken();
+              }}
+            >
+              <label className="grid gap-1.5 text-left">
+                <span className="text-[13px] font-medium text-forest-ink">{copy.tokenLabel}</span>
+                <Input
+                  id="onboarding-token"
+                  ref={tokenInputRef}
+                  value={token}
+                  type="password"
+                  autoComplete="off"
+                  placeholder={copy.tokenPlaceholder}
+                  aria-invalid={sessionExpired || undefined}
+                  onChange={(event) => setToken(event.target.value)}
+                />
+              </label>
+              <Button type="submit" className="w-full">
+                {copy.onboardingSubmit}
+              </Button>
+            </form>
+
+            {listError && !sessionExpired ? (
+              <strong
+                role="alert"
+                className="block rounded-lg bg-danger px-3 py-2 text-xs font-normal leading-4 text-white"
+              >
+                {listError}
+              </strong>
+            ) : null}
+          </div>
+        </Card>
+
+        <div className="mt-5">
+          <ThemeLocaleToggle
+            copy={copy}
+            theme={theme}
+            locale={locale}
+            onChangeTheme={changeTheme}
+            onChangeLocale={changeLocale}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="admin-shell grid min-h-screen text-true-black lg:grid-cols-[236px_minmax(0,1fr)]">
       <aside className="admin-sidebar border-b border-hairline-gray bg-linen-white/95 lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
@@ -339,42 +436,63 @@ export default function App() {
               <div className="mb-2">
                 <strong className="text-[13px] font-semibold text-forest-ink">{copy.tokenLabel}</strong>
               </div>
-              <form
-                className="grid gap-2"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  saveToken();
-                }}
-              >
-                <label className="sr-only" htmlFor="admin-token">
-                  {copy.tokenLabel}
-                </label>
-                <Input
-                  id="admin-token"
-                  ref={tokenInputRef}
-                  value={token}
-                  type="password"
-                  autoComplete="off"
-                  placeholder={copy.tokenPlaceholder}
-                  aria-invalid={sessionExpired || undefined}
-                  onChange={(event) => setToken(event.target.value)}
-                />
-                <div className="grid grid-cols-2 gap-2">
-                  <Button type="submit">{copy.apply}</Button>
-                  <Button type="button" variant="outline" onClick={() => void refreshJobs(token)}>
-                    {copy.refresh}
-                  </Button>
-                </div>
-              </form>
-              {sessionExpired ? (
-                <div
-                  role="alert"
-                  className="mt-2 rounded-lg border border-danger bg-danger-wash px-2.5 py-2 text-danger"
+              {editingToken ? (
+                // Edit stage: reveal the access-key input with 적용 / 취소 controls.
+                <form
+                  className="grid gap-2"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    saveToken();
+                  }}
                 >
-                  <strong className="block text-[12px] font-semibold leading-4">{copy.sessionExpired}</strong>
-                  <span className="mt-1 block text-[11px] font-normal leading-4">{copy.sessionExpiredHint}</span>
+                  <label className="sr-only" htmlFor="admin-token">
+                    {copy.tokenLabel}
+                  </label>
+                  <Input
+                    id="admin-token"
+                    ref={tokenInputRef}
+                    value={token}
+                    type="password"
+                    autoComplete="off"
+                    placeholder={copy.tokenPlaceholder}
+                    aria-invalid={sessionExpired || undefined}
+                    onChange={(event) => setToken(event.target.value)}
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button type="submit">{copy.apply}</Button>
+                    <Button type="button" variant="outline" onClick={() => setEditingToken(false)}>
+                      {copy.tokenCancel}
+                    </Button>
+                  </div>
+                </form>
+              ) : (
+                // Default stage: compact authenticated indicator + 수정 / 새로고침.
+                <div className="grid gap-2">
+                  <div className="inline-flex items-center gap-2 rounded-lg border border-electric-blue/20 bg-mist-blue px-2.5 py-1.5 text-cobalt-surface">
+                    <ShieldCheck aria-hidden="true" size={16} strokeWidth={2.2} />
+                    <span className="text-[12px] font-semibold leading-4">{copy.tokenAuthenticated}</span>
+                    <span className="ml-auto font-mono text-[12px] leading-4 tracking-[0.2em] text-charcoal">
+                      ••••••••
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setEditingToken(true);
+                        window.setTimeout(() => tokenInputRef.current?.focus(), 0);
+                      }}
+                    >
+                      <Pencil data-icon aria-hidden="true" strokeWidth={2.2} />
+                      {copy.tokenEdit}
+                    </Button>
+                    <Button type="button" variant="outline" onClick={() => void refreshJobs(token)}>
+                      {copy.refresh}
+                    </Button>
+                  </div>
                 </div>
-              ) : null}
+              )}
               <div className="mt-2">
                 <span className="block text-[12px] leading-4 text-charcoal" aria-live="polite">
                   {renderStatus(status, copy)}
@@ -390,43 +508,13 @@ export default function App() {
               </div>
             </section>
 
-            <div className="grid gap-2">
-              <div
-                className="flex items-center gap-1 rounded-lg bg-mist-blue p-1"
-                role="group"
-                aria-label={copy.themeLabel}
-              >
-                {THEME_OPTIONS.map(({ value, Icon, labelKey }) => (
-                  <Button
-                    key={value}
-                    type="button"
-                    size="sm"
-                    variant={theme === value ? "default" : "ghost"}
-                    className="h-8 flex-1 px-0"
-                    aria-pressed={theme === value}
-                    aria-label={copy[labelKey]}
-                    title={copy[labelKey]}
-                    onClick={() => changeTheme(value)}
-                  >
-                    <Icon data-icon aria-hidden="true" strokeWidth={2.2} />
-                  </Button>
-                ))}
-              </div>
-              <div className="flex items-center gap-1 rounded-lg bg-mist-blue p-1">
-                {(["ko", "en"] as Locale[]).map((entry) => (
-                  <Button
-                    key={entry}
-                    type="button"
-                    size="sm"
-                    variant={locale === entry ? "default" : "ghost"}
-                    className="h-8 flex-1"
-                    onClick={() => changeLocale(entry)}
-                  >
-                    {localeNames[entry]}
-                  </Button>
-                ))}
-              </div>
-            </div>
+            <ThemeLocaleToggle
+              copy={copy}
+              theme={theme}
+              locale={locale}
+              onChangeTheme={changeTheme}
+              onChangeLocale={changeLocale}
+            />
             <footer className="border-t border-hairline-gray pt-4 text-[12px] leading-5 text-charcoal">
               <p className="m-0 font-medium text-forest-ink">{copy.appTitle}</p>
               <p className="m-0 mt-1">{copy.footerScope}</p>
@@ -572,6 +660,58 @@ function renderStatus(status: StatusState, copy: AdminCopy): string {
   if (status.kind === "refreshFailed") return copy.refreshFailed;
   if (status.kind === "retryQueued") return copy.retryQueued(status.attempt);
   return copy.cancelRequested(status.phase);
+}
+
+// Theme + locale switchers, shared by the sidebar and the pre-auth onboarding view
+// so an operator can adjust appearance and language before signing in.
+function ThemeLocaleToggle({
+  copy,
+  theme,
+  locale,
+  onChangeTheme,
+  onChangeLocale,
+}: {
+  copy: AdminCopy;
+  theme: ThemePreference;
+  locale: Locale;
+  onChangeTheme(next: ThemePreference): void;
+  onChangeLocale(next: Locale): void;
+}) {
+  return (
+    <div className="grid gap-2">
+      <div className="flex items-center gap-1 rounded-lg bg-mist-blue p-1" role="group" aria-label={copy.themeLabel}>
+        {THEME_OPTIONS.map(({ value, Icon, labelKey }) => (
+          <Button
+            key={value}
+            type="button"
+            size="sm"
+            variant={theme === value ? "default" : "ghost"}
+            className="h-8 flex-1 px-0"
+            aria-pressed={theme === value}
+            aria-label={copy[labelKey]}
+            title={copy[labelKey]}
+            onClick={() => onChangeTheme(value)}
+          >
+            <Icon data-icon aria-hidden="true" strokeWidth={2.2} />
+          </Button>
+        ))}
+      </div>
+      <div className="flex items-center gap-1 rounded-lg bg-mist-blue p-1">
+        {(["ko", "en"] as Locale[]).map((entry) => (
+          <Button
+            key={entry}
+            type="button"
+            size="sm"
+            variant={locale === entry ? "default" : "ghost"}
+            className="h-8 flex-1"
+            onClick={() => onChangeLocale(entry)}
+          >
+            {localeNames[entry]}
+          </Button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function MetricPill({
