@@ -1,6 +1,13 @@
 import { mkdir, readFile } from "node:fs/promises";
 import { isAbsolute, join, resolve, sep } from "node:path";
-import { createArtifactId, createPrefixedId, createRunId, deriveOutcome, parseAgentResult } from "@ticket-to-pr/core";
+import {
+  createArtifactId,
+  createPrefixedId,
+  createRunId,
+  deriveOutcome,
+  parseAgentResult,
+  parseStageBanner,
+} from "@ticket-to-pr/core";
 import type { AgentResult, InternalPhase, LarkStatusUpdater, Priority, UserOutcome } from "@ticket-to-pr/core";
 import type { AgentJobPayload } from "@ticket-to-pr/queue";
 import { getWorkspacePaths } from "@ticket-to-pr/runner-contract";
@@ -299,16 +306,50 @@ export async function processAgentJob(
         .catch(() => undefined);
     }, options.cancelPollMs ?? CANCEL_POLL_MS);
 
+    // Detect the staged runner's per-stage banners in the streamed stdout and record
+    // each as a structured `gstack.stage` event (line-buffered so a banner split across
+    // log chunks is never missed). This keeps the job in Implementing — it is sub-stage
+    // telemetry, not a phase change — and gives the admin a robust, replayable signal.
+    let stageBuffer = "";
+    const seenStageIndexes = new Set<number>();
+    let stageEventChain: Promise<void> = Promise.resolve();
+    const detectStageBanners = (text: string | undefined) => {
+      if (!text) return;
+      stageBuffer += text;
+      const lines = stageBuffer.split("\n");
+      stageBuffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const banner = parseStageBanner(line);
+        if (!banner || seenStageIndexes.has(banner.index)) continue;
+        seenStageIndexes.add(banner.index);
+        stageEventChain = stageEventChain
+          .then(() =>
+            appendEvent(
+              "Implementing",
+              "gstack.stage",
+              `gstack stage ${banner.index}/${banner.total}: ${banner.key}`,
+              { stageIndex: banner.index, stageTotal: banner.total, stageKey: banner.key },
+              "gstack",
+            ),
+          )
+          .catch(() => undefined);
+      }
+    };
+
     let rawResult: AgentResult;
     try {
       rawResult = await options.executor({
         job,
         run,
-        appendLog: (log) => options.repos.appendLog({ jobId: job.jobId, runId: run.runId, ...log }),
+        appendLog: (log) => {
+          detectStageBanners(log.text);
+          return options.repos.appendLog({ jobId: job.jobId, runId: run.runId, ...log });
+        },
         signal: abortController.signal,
       });
     } catch (error) {
       clearInterval(cancelPoll);
+      await stageEventChain;
       if (abortController.signal.aborted) {
         // Cancelled mid-run: record where it stopped and tidy up (the runner container is killed).
         await transitionJob("Cancelled", "Cancelled", "구현 단계 실행 중 취소되었습니다.", { status: "Cancelled" });
@@ -321,6 +362,8 @@ export async function processAgentJob(
       throw error;
     }
     clearInterval(cancelPoll);
+    detectStageBanners("\n");
+    await stageEventChain;
 
     const result = parseAgentResult(rawResult);
     await appendProgressLog("Implementing", "gstack", "AI runner 결과를 수집하고 있습니다.");

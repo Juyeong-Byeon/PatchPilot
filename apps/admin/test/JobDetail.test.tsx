@@ -229,24 +229,57 @@ describe("JobDetail", () => {
     expect(screen.getByRole("button", { name: "구현 진행 중" })).toBeInTheDocument();
   });
 
-  it("shows the live gstack sub-stage under the Implementing node while running", () => {
+  it("renders the agent sub-stage track from gstack.stage events while running", () => {
     render(
       <JobDetail
         {...baseProps}
         job={{ id: "job_1", phase: "Implementing", outcome: "Running", repository: "example-org/example-repo" }}
-        logs={[
+        events={[
+          stageEvent("event_1", 1, "plan", "2026-06-20T00:00:00.000Z"),
+          stageEvent("event_2", 2, "implement", "2026-06-20T00:00:05.000Z"),
+          stageEvent("event_3", 3, "review", "2026-06-20T00:00:10.000Z"),
+        ]}
+      />,
+    );
+
+    // Brand-free heading, with the implement stage relabelled to avoid clashing
+    // with the platform "구현" phase chip.
+    expect(screen.getByText("에이전트 단계")).toBeInTheDocument();
+    expect(screen.getByText("코드 작성")).toBeInTheDocument();
+    expect(screen.getByText("검증")).toBeInTheDocument();
+  });
+
+  it("hides the agent sub-stage track for non-staged runs that emit no stage events", () => {
+    render(
+      <JobDetail
+        {...baseProps}
+        job={{ id: "job_1", phase: "Implementing", outcome: "Running", repository: "example-org/example-repo" }}
+        events={[
           {
-            id: "log_1",
+            id: "event_1",
+            phase: "Implementing",
+            event_type: "runner.started",
             source: "gstack",
-            stream: "stdout",
-            sequence: 0,
-            text: "=== gstack stage 3/4: review ===",
+            message: "AI runner started",
             created_at: "2026-06-20T00:00:00.000Z",
           },
         ]}
       />,
     );
 
-    expect(screen.getByText("리뷰 3/4")).toBeInTheDocument();
+    expect(screen.queryByText("에이전트 단계")).not.toBeInTheDocument();
   });
 });
+
+function stageEvent(id: string, index: number, key: string, createdAt: string) {
+  return {
+    id,
+    run_id: "run_1",
+    phase: "Implementing",
+    event_type: "gstack.stage",
+    source: "gstack",
+    message: `gstack stage ${index}/4: ${key}`,
+    metadata: { stageIndex: index, stageTotal: 4, stageKey: key },
+    created_at: createdAt,
+  };
+}

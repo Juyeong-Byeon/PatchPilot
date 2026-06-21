@@ -11,8 +11,6 @@ interface RunStepGraphProps {
   copy: AdminCopy;
   locale: Locale;
   selectedStep?: SpanSelection | null;
-  /** Live gstack sub-stage label shown under the active Implementing node (e.g. "리뷰 3/4"). */
-  subStageLabel?: string;
   onSelectStep?(selection: SpanSelection): void;
 }
 
@@ -25,15 +23,7 @@ interface GraphStep {
 
 const standardPhaseFlow = ["Queued", "Planning", "Implementing", "PolicyChecking", "Publishing", "Completed"];
 
-export function RunStepGraph({
-  events,
-  currentPhase,
-  copy,
-  locale,
-  selectedStep,
-  subStageLabel,
-  onSelectStep,
-}: RunStepGraphProps) {
+export function RunStepGraph({ events, currentPhase, copy, locale, selectedStep, onSelectStep }: RunStepGraphProps) {
   const orderedEvents = useMemo(() => sortEvents(events), [events]);
   const steps = useMemo(() => buildGraphSteps(orderedEvents, currentPhase), [currentPhase, orderedEvents]);
 
@@ -85,11 +75,6 @@ export function RunStepGraph({
                         {translateState(step.phase, locale)}
                       </strong>
                       <span className="text-[12px] leading-4 text-charcoal">{statusLabel(step.status, copy)}</span>
-                      {step.phase === "Implementing" && step.status === "active" && subStageLabel ? (
-                        <span className="truncate text-[11px] font-medium leading-4 text-cobalt-surface">
-                          {subStageLabel}
-                        </span>
-                      ) : null}
                     </span>
                   </button>
                 </li>

@@ -195,6 +195,63 @@ describe("processAgentJob", () => {
     );
   });
 
+  it("emits a structured gstack.stage event per stage banner, line-buffered and deduped", async () => {
+    const repos = createRepos();
+    const executor = vi.fn().mockImplementation(async (input) => {
+      // Banner split across two chunks, then a duplicate of the same stage, then the next stage.
+      input.appendLog({ source: "gstack", stream: "stdout", sequence: 0, text: "=== gstack stage 1/4: pl" });
+      input.appendLog({
+        source: "gstack",
+        stream: "stdout",
+        sequence: 1,
+        text: "an ===\n=== gstack stage 1/4: plan ===\n",
+      });
+      input.appendLog({
+        source: "gstack",
+        stream: "stdout",
+        sequence: 2,
+        text: "=== gstack stage 2/4: implement ===\n",
+      });
+      await writeFile(join(input.run.workspacePath, "PR_BODY.md"), "Generated body");
+      return completedResult;
+    });
+    const publisher = vi.fn().mockResolvedValue({
+      repository: "acme/web",
+      targetBranch: "main",
+      workBranch: "ticket-to-pr/job_1",
+      baseSha: "base",
+      headSha: "head",
+      pushSha: "0123456789abcdef0123456789abcdef01234567",
+      commitShas: ["abc"],
+      prUrl: "https://github.local/acme/web/pull/mock-job_1",
+      prNumber: 1,
+      prTitle: "Fix login",
+      prBody: "Generated body",
+    });
+
+    await processAgentJob(
+      { jobId: "job_1", ticketSnapshotId: "ts_1", larkRecordId: "rec_1", triggerVersion: "v1" },
+      {
+        repos,
+        executor,
+        publisher,
+        policyConfig: { repositoryAllowlist: ["acme/web"], protectedPathDenylist: [] },
+        ids: { runId: () => "run_1", artifactId: (kind) => `artifact_${kind}`, pullRequestId: () => "pr_1" },
+      },
+    );
+
+    const stageEvents = repos.appendEvent.mock.calls
+      .map(([entry]) => entry)
+      .filter((entry) => entry.eventType === "gstack.stage");
+
+    // Chunk-split banner reassembled into one event; the duplicate stage-1 banner is dropped.
+    expect(stageEvents.map((entry) => entry.metadata)).toEqual([
+      { stageIndex: 1, stageTotal: 4, stageKey: "plan" },
+      { stageIndex: 2, stageTotal: 4, stageKey: "implement" },
+    ]);
+    expect(stageEvents.every((entry) => entry.phase === "Implementing" && entry.source === "gstack")).toBe(true);
+  });
+
   it("stores policy gate artifacts and fails actionable when protected files change", async () => {
     const repos = createRepos();
     const executor = vi.fn().mockResolvedValue({ ...completedResult, changedFiles: ["infra/prod.tf"] });

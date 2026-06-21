@@ -2,6 +2,7 @@ import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { formatStageBanner, GSTACK_STAGE_KEYS } from "@ticket-to-pr/core";
 import { getWorkspacePaths } from "@ticket-to-pr/runner-contract";
 import {
   commitDirtyWorktreeIfNeeded,
@@ -34,7 +35,7 @@ interface QaResult {
   summary?: string;
 }
 
-const STAGE_KEYS = ["plan", "implement", "review", "verify"] as const;
+const STAGE_KEYS = GSTACK_STAGE_KEYS;
 // Stage note files; also added to .git/info/exclude so a stray in-repo write can't be committed.
 const NOTE_FILES = ["plan.md", "review.md", "qa.md", "qa.json"];
 
@@ -79,7 +80,7 @@ export async function runGstackStagedRunner(input: GstackStagedRunnerInput): Pro
 
   const runStage = async (key: (typeof STAGE_KEYS)[number], prompt: string): Promise<void> => {
     const index = STAGE_KEYS.indexOf(key) + 1;
-    console.log(`\n=== gstack stage ${index}/${STAGE_KEYS.length}: ${key} ===`);
+    console.log(`\n${formatStageBanner(index, STAGE_KEYS.length, key)}`);
     try {
       await runCodexCommand({ repoDir: input.repoDir, codexHome, command, args, prompt, timeoutMs: perStageTimeoutMs });
     } catch (error) {
