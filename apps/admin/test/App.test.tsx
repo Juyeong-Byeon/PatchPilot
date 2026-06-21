@@ -213,6 +213,31 @@ describe("App", () => {
     expect(inputChip).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("badges the tab title with the count of jobs needing an operator", async () => {
+    window.localStorage.setItem("ADMIN_TOKEN", "access-key");
+    window.history.pushState(null, "", "/jobs");
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      const body = url.endsWith("/api/jobs")
+        ? [
+            { id: "job_parked", phase: "AwaitingInput", outcome: "NeedsInput", repository: "acme/web" },
+            { id: "job_review", phase: "Completed", outcome: "NeedsReview", repository: "acme/web" },
+            { id: "job_done", phase: "Completed", outcome: "Completed", repository: "acme/web" },
+          ]
+        : [];
+      return jsonResponse(body);
+    });
+
+    render(<App />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // NeedsInput (1) + NeedsReview (1) = 2 jobs awaiting an operator → "(2)" prefix.
+    expect(document.title).toMatch(/^\(2\) /);
+  });
+
   it("surfaces a single session-expired state and stops polling on a 401", async () => {
     vi.useFakeTimers();
     window.localStorage.setItem("ADMIN_TOKEN", "stale-key");
