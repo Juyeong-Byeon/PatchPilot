@@ -43,6 +43,12 @@ The Tier-2 pilots were taken on the same day, each as its own reviewed PR.
 - `@vitest/coverage-v8` + `test:coverage` (opt-in; baseline ~74% lines).
 - `zod` for the **API** env (`apps/api/src/env.ts`): fail-fast aggregation of all
   missing vars + PORT coercion/validation, no new dependency.
+- `@tanstack/react-query` — the **full App.tsx migration** (not the declined slice
+  below). Job-list + detail polling moved to `useQuery` with adaptive
+  `refetchInterval` and a centralized `retry: false` / `enabled: !sessionExpired`
+  401 boundary. The load-bearing timing tests pass byte-for-byte unchanged; the
+  test-only microtask scheduler lives in `vitest.setup.ts` so production keeps
+  React Query's default scheduler. (PR #36)
 
 **Evaluated → declined** (the narrow first-scope was net-negative):
 
@@ -57,8 +63,9 @@ The Tier-2 pilots were taken on the same day, each as its own reviewed PR.
   apply; the slice would add the dependency + a global `QueryClientProvider` + a
   full rewrite of the panel's test harness (provider wrapper + async settling,
   flakiness risk) for negligible value. The real win is App.tsx's hand-rolled
-  pollers (adaptive intervals + the 401-freeze boundary). **Recommendation: do
-  react-query as a dedicated, reviewed App.tsx migration — not a low-value slice.**
+  pollers (adaptive intervals + the 401-freeze boundary). **The slice was
+  declined; the full App.tsx migration was instead shipped as a dedicated reviewed
+  PR — see Shipped above.**
 
 `zod` for the admin `api-schemas.ts` stays deferred (reverses the intentional
 zero-extra-dep browser bundle).
