@@ -31,8 +31,7 @@ describe("App", () => {
   it("shows the onboarding view and hides the job console when no token is saved", () => {
     render(<App />);
 
-    // Dedicated onboarding gate, not the sidebar+content grid.
-    expect(screen.getByRole("heading", { level: 1, name: "관리자 콘솔 접속" })).toBeInTheDocument();
+    // Dedicated onboarding gate, not the sidebar+content grid: just the key input + submit.
     expect(screen.getByLabelText("관리자 인증키")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "접속" })).toBeInTheDocument();
     // The normal job console (its level-1 heading + nav button) is not rendered.
@@ -79,7 +78,7 @@ describe("App", () => {
     });
 
     // Onboarding gone; the job console is rendered.
-    expect(screen.queryByRole("heading", { level: 1, name: "관리자 콘솔 접속" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "접속" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 1, name: "작업" })).toBeInTheDocument();
   });
 

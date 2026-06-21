@@ -326,25 +326,7 @@ export default function App() {
     return (
       <div className="admin-shell flex min-h-screen flex-col items-center justify-center px-4 py-10 text-true-black">
         <Card className="w-full max-w-[420px]">
-          <div className="grid gap-5 px-6 py-7">
-            <div className="flex flex-col items-center gap-3 text-center">
-              <img
-                src={adminLogo}
-                alt=""
-                aria-hidden="true"
-                className="status-glow-active size-12 shrink-0 rounded-2xl border border-electric-blue/20 bg-mist-blue object-contain p-1.5"
-              />
-              <div>
-                <p className="text-[12px] font-medium leading-4 text-cobalt-surface">{copy.appEyebrow}</p>
-                <strong className="block text-[20px] font-semibold leading-6 text-forest-ink">{copy.appTitle}</strong>
-              </div>
-            </div>
-
-            <div className="text-center">
-              <h1 className="text-[18px] font-semibold leading-6 text-forest-ink">{copy.onboardingHeading}</h1>
-              <p className="mt-1 text-[13px] leading-5 text-charcoal">{copy.onboardingSubtitle}</p>
-            </div>
-
+          <div className="grid gap-3 px-6 py-7">
             {sessionExpired ? (
               <div role="alert" className="rounded-lg border border-danger bg-danger-wash px-3 py-2 text-danger">
                 <strong className="block text-[12px] font-semibold leading-4">{copy.sessionExpired}</strong>
@@ -360,7 +342,7 @@ export default function App() {
               }}
             >
               <label className="grid gap-1.5 text-left">
-                <span className="text-[13px] font-medium text-forest-ink">{copy.tokenLabel}</span>
+                <span className="sr-only">{copy.tokenLabel}</span>
                 <Input
                   id="onboarding-token"
                   ref={tokenInputRef}
@@ -387,16 +369,6 @@ export default function App() {
             ) : null}
           </div>
         </Card>
-
-        <div className="mt-5">
-          <ThemeLocaleToggle
-            copy={copy}
-            theme={theme}
-            locale={locale}
-            onChangeTheme={changeTheme}
-            onChangeLocale={changeLocale}
-          />
-        </div>
       </div>
     );
   }
