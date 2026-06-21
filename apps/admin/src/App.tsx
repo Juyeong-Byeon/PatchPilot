@@ -11,12 +11,14 @@ import {
   fetchJobLogs,
   fetchJobs,
   getStoredAdminToken,
+  getVersion,
   retryJob,
   storeAdminToken,
   type Artifact,
   type JobRecord,
   type LogLine,
   type RunEvent,
+  type VersionInfo,
 } from "./api.js";
 import { JobDetail } from "./components/JobDetail.js";
 import { JobList } from "./components/JobList.js";
@@ -35,6 +37,7 @@ import {
 import { applyTheme, getInitialTheme, storeTheme, type ThemePreference } from "./lib/theme.js";
 import { MetricsPanel } from "./components/MetricsPanel.js";
 import { SettingsPanel } from "./components/SettingsPanel.js";
+import { VersionBadge } from "./components/VersionBadge.js";
 import { adminCopy, getInitialLocale, storeLocale, type AdminCopy, type Locale } from "./i18n.js";
 import { createQueryClient } from "./lib/query-client.js";
 
@@ -157,6 +160,20 @@ function AppInner() {
     refetchInterval: (query) => (sessionExpired ? false : isRunningPhase(query.state.data?.job?.phase) ? 1000 : 3000),
   });
   const detail = detailQuery.data ?? emptyDetail;
+
+  // The running build's version + git SHA, shown in the sidebar footer so operators can
+  // verify which build is serving traffic. `/api/version` is public (no token, like
+  // /api/health) and informational, so the query runs unconditionally, never refetches
+  // (the build only changes on redeploy → a fresh page load), and is silent on failure:
+  // getVersion throws VERSION_UNAVAILABLE and the badge simply renders nothing.
+  const versionQuery = useQuery({
+    queryKey: ["version"],
+    queryFn: getVersion,
+    staleTime: Infinity,
+    refetchInterval: false,
+    retry: false,
+  });
+  const version: VersionInfo | null = versionQuery.data ?? null;
 
   const selectedJob = useMemo(
     () => (route.page === "detail" ? (detail.job ?? jobs.find((job) => job.id === route.jobId) ?? null) : null),
@@ -441,6 +458,7 @@ function AppInner() {
             <footer className="border-t border-hairline-gray pt-4 text-[12px] leading-5 text-charcoal">
               <p className="m-0 font-medium text-forest-ink">{copy.appTitle}</p>
               <p className="m-0 mt-1">{copy.footerScope}</p>
+              <VersionBadge version={version} copy={copy} />
             </footer>
           </div>
         </div>

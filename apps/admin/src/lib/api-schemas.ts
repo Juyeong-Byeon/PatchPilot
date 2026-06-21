@@ -10,7 +10,14 @@
 // expected shape degrades gracefully instead of letting an unchecked cast leak a
 // wrong-typed value into a render.
 
-import type { JobMetrics, RetryResponse, SettingsFieldView, SettingsSectionView, SettingsView } from "../api.js";
+import type {
+  JobMetrics,
+  RetryResponse,
+  SettingsFieldView,
+  SettingsSectionView,
+  SettingsView,
+  VersionInfo,
+} from "../api.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -155,4 +162,18 @@ export function parseCancelResponse(value: unknown): { ok: boolean; phase: strin
   if (typeof ok !== "boolean") return null;
   if (typeof phase !== "string") return null;
   return { ok, phase };
+}
+
+/**
+ * Validate the GET /api/version body: `{ version: string; sha: string | null }`. Both
+ * fields are read by the badge (version always shown; sha shortened when present), so a
+ * missing/wrong-typed `version` or a `sha` that is neither string nor null is rejected.
+ * Returns the typed value, or `null` so the caller can fall back to VERSION_UNAVAILABLE.
+ */
+export function parseVersionInfo(value: unknown): VersionInfo | null {
+  if (!isRecord(value)) return null;
+  const { version, sha } = value;
+  if (typeof version !== "string") return null;
+  if (sha !== null && typeof sha !== "string") return null;
+  return { version, sha };
 }
