@@ -176,6 +176,9 @@ function AppInner() {
     }),
     [jobs],
   );
+  // Jobs that need an operator to act — a parked question to answer or a PR to
+  // review. Surfaced in the tab title so the work is noticeable from another tab.
+  const needsAttention = jobStats.needsInput + jobStats.needsReview;
 
   // Single re-auth boundary: a 401 on either query freezes polling, surfaces one
   // re-auth state, and focuses the token form.
@@ -224,8 +227,10 @@ function AppInner() {
 
   useEffect(() => {
     document.documentElement.lang = locale;
-    document.title = copy.documentTitle;
-  }, [copy.documentTitle, locale]);
+    // Prefix the tab title with the count of jobs needing an operator so the work
+    // is noticeable from another tab/window — e.g. "(3) PatchPilot …".
+    document.title = needsAttention > 0 ? `(${needsAttention}) ${copy.documentTitle}` : copy.documentTitle;
+  }, [copy.documentTitle, locale, needsAttention]);
 
   useEffect(() => {
     applyTheme(theme);
