@@ -44,11 +44,14 @@ jobs:
       - name: Prettier (format check)
         run: npm run format:check
 
-      - name: ESLint
-        run: npm run lint
-
+      # Typecheck runs before lint because it emits each workspace's dist/ .d.ts
+      # (tsc -p, not --noEmit). The type-aware ESLint rules (and the tests) resolve
+      # @ticket-to-pr/* through those declarations, so they must exist first.
       - name: Typecheck
         run: npm run typecheck
+
+      - name: ESLint
+        run: npm run lint
 
       - name: Test
         run: npm test
