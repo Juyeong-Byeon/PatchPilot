@@ -4,43 +4,69 @@
   <img src="docs/assets/patchpilot-brand.svg" alt="PatchPilot brand mark" width="520" />
 </p>
 
-Lark Base tickets in, audited GitHub pull requests out.
+<p align="center">
+  <strong>A ticket goes in. An AI agent implements the change. An audited pull request comes out.</strong>
+</p>
 
-This repository is a Docker Compose MVP for routing approved Lark Base records
-to an agent runner, collecting logs/artifacts, applying repository policy gates,
-and publishing pull requests. It includes an admin console for Korean and
-English operations teams to inspect job state, retry or cancel jobs, read logs,
-and debug execution with a Datadog-style span flow.
+PatchPilot is an autonomous **ticket-to-PR** system. An approved Lark Base record
+(or a GitHub event) becomes a durable job; a worker hands it to a gstack-compatible
+AI runner that clones the target repository, implements the change, and drafts a
+PR; a policy gate validates the result; and only then does the platform push the
+branch and open a pull request. A Korean-first admin console (the "PatchPilot
+운영 관리자") gives operations teams a Datadog-style view of every job's phases,
+logs, artifacts, and failures.
 
-## What It Does
+> The repo runs as a Docker Compose MVP. A fully mock executor and publisher
+> (`EXECUTOR_MODE=mock`, `PUBLISHER_MODE=mock`) let you exercise the entire
+> ticket → PR → merge loop locally with no AI CLI, no GitHub token, and no real
+> pull requests.
 
-- Accepts Lark webhook events after a shared-secret check.
-- Normalizes approved ticket records into durable jobs.
-- Runs a mock executor for local development or a gstack-compatible runner in
-  an isolated Docker workspace.
-- Stores job phases, run attempts, logs, artifacts, policy results, and pull
-  request metadata in Postgres.
-- Publishes GitHub pull requests only after policy checks pass.
-- Writes job status, PR metadata, and failure summaries back to the source Lark
-  Base record.
-- Provides an admin UI with Korean-first i18n, Tailwind v4, shadcn-style
-  primitives, and Ease Health visual tokens.
+## Highlights
+
+- **Ticket in, PR out.** Approved Lark Base records turn into pull requests with
+  no human in the implementation loop.
+- **Platform owns trust.** The agent only writes local commits and PR text; the
+  platform owns branch push and PR creation, enforces a repository allowlist and
+  a protected-path denylist, and requires real 40-character Git SHAs.
+- **Mock stack for local dev.** `EXECUTOR_MODE=mock` / `PUBLISHER_MODE=mock`
+  drives the full loop with no external dependencies — the basis of the
+  `npm run e2e:smoke` gate.
+- **Pluggable AI runner.** Swap in any gstack-compatible CLI; a Codex-backed
+  runner and a multi-stage gstack pipeline (plan → implement → review → verify →
+  document) are supported out of the box.
+- **Observability built in.** A Korean/English admin console renders job phase
+  spans, span-to-log correlation, agent sub-stages, artifacts, retry, and cancel.
+- **Two-way status.** Job status, PR metadata, and failure summaries are written
+  back to the source Lark Base record at every major state transition.
 
 ## Architecture
 
+PatchPilot is an npm-workspaces monorepo (Node 24) with four apps and four
+shared packages. Data flows in one direction — from ticket to pull request —
+with the database as the durable record of every phase.
+
 ```text
-Lark Base
-  -> API webhook
-  -> Postgres job + audit records
-  -> Redis/BullMQ queue
-  -> Worker
-  -> Docker runner workspace
-  -> Policy gate
-  -> GitHub pull request
-  -> Admin console for observability
+Lark Base ticket  ──┐
+                    ├─▶  apps/api      verify secret · upsert job · enqueue
+GitHub PR webhook ──┘        │
+                             ▼
+                        Postgres + Redis/BullMQ
+                             │
+                             ▼
+                      apps/worker      consume job · policy gate · publish
+                             │
+                             ▼
+                      apps/runner      isolated Docker workspace · AI agent
+                             │
+                             ▼
+                        GitHub pull request
+                             │
+                             ▼
+                      apps/admin       observe · retry · cancel · debug
 ```
 
-## End-to-End Sequence
+<details>
+<summary>Full end-to-end sequence (Mermaid)</summary>
 
 ```mermaid
 sequenceDiagram
@@ -99,42 +125,93 @@ sequenceDiagram
   API-->>Admin: Phase graph, timeline, logs, artifacts
 ```
 
-Workspaces:
+</details>
 
-- `apps/api`: Fastify API, Lark webhook, admin endpoints.
-- `apps/worker`: BullMQ worker, executor orchestration, policy gate, publisher.
-- `apps/runner`: container entrypoint that clones/fetches a repository and runs
-  the agent command.
-- `apps/admin`: React admin console.
-- `packages/core`: shared schemas, result validation, masking, state helpers.
-- `packages/db`: Postgres schema and repositories.
-- `packages/queue`: queue payload contracts.
-- `packages/runner-contract`: runner workspace path contracts.
+## Project Layout
+
+```text
+ticket-to-pr/
+├── apps/
+│   ├── api/      Fastify API: Lark + GitHub webhooks, admin endpoints
+│   ├── worker/   BullMQ worker: executor orchestration, policy gate, publisher
+│   ├── runner/   Container entrypoint: clones/fetches a repo and runs the agent
+│   └── admin/    React + Vite admin console ("PatchPilot 운영 관리자")
+├── packages/
+│   ├── core/             shared schemas, result validation, masking, state helpers
+│   ├── db/               Postgres schema and repositories
+│   ├── queue/            queue payload contracts
+│   └── runner-contract/  runner workspace path contracts
+├── docker/       Dockerfiles for api, worker, and the runner image
+├── scripts/      setup, preflight, status, e2e-smoke, and other operator tooling
+└── docs/         agent-setup, operations, and adoption/improvement plans
+```
+
+Workspaces are published under the `@ticket-to-pr/*` scope (e.g.
+`@ticket-to-pr/api`, `@ticket-to-pr/core`).
 
 ## Requirements
 
-- Node.js 24 — the version pinned in [`.nvmrc`](.nvmrc) and used by CI (`nvm use` to match)
-- npm
-- Docker and Docker Compose
-- A GitHub personal access token with repository access for target repos
-- Lark app credentials and a webhook shared secret for real webhook ingestion
+- **Node.js 24** — the version pinned in [`.nvmrc`](.nvmrc) and used by CI; run
+  `nvm use` in the repo root to match.
+- **npm** (the repo uses npm workspaces; no other package manager is required).
+- **Docker** and **Docker Compose** for the local stack.
+- For real (non-mock) runs:
+  - A **GitHub personal access token** with repository access for the target repos.
+  - **Lark app credentials** and a **webhook shared secret** for real webhook ingestion.
 
 ## Quickstart
 
-One command runs preflight checks, brings up Postgres/Redis/API/worker,
-migrates the database (handling the host-vs-container database URL for you), and
-waits for the API to report ready:
-
 ```bash
+# 1. Use the pinned Node version.
+nvm use            # reads .nvmrc -> Node 24
+
+# 2. Install workspace dependencies.
+npm install
+
+# 3. Create your env file (defaults are mock-mode and run with no real secrets).
+cp .env.example .env
+
+# 4. Bring up the whole stack: preflight -> Postgres/Redis/API/worker ->
+#    migrate -> wait for /api/ready.
 npm run setup
+
+# 5. With the stack up, run the mock end-to-end smoke
+#    (Lark ticket -> NeedsReview -> merge -> Completed).
+npm run e2e:smoke
 ```
 
-On success it prints the admin console URL (`http://localhost:3000`) and the
-`ADMIN_TOKEN` to paste. `npm run setup` is idempotent and safe to re-run.
+`npm run setup` is idempotent and safe to re-run. On success it prints the admin
+console URL (`http://localhost:3000`) and the `ADMIN_TOKEN` to paste. Open the
+console and enter that token to watch jobs flow through.
+
+`npm run e2e:smoke` drives the full loop against an **already-running** mock stack
+— it does not start or stop containers, so run `npm run setup` (or otherwise bring
+the stack up) first.
 
 > **For AI coding agents:** see [docs/agent-setup.md](docs/agent-setup.md) for a
-> deterministic, copy-pasteable setup-and-verify runbook with expected output
-> and failure recovery. Point your agent at that file.
+> deterministic, copy-pasteable setup-and-verify runbook with expected output and
+> failure recovery. Point your agent at that file.
+
+### Manual setup
+
+Equivalent steps if you prefer to run them yourself:
+
+```bash
+cp .env.example .env
+npm install
+docker compose build
+docker compose up -d --wait postgres redis
+DATABASE_URL=postgres://ticket_to_pr:ticket_to_pr@localhost:5432/ticket_to_pr \
+  npm run db:migrate
+npm run docker:build-runtime
+docker compose up -d --wait api
+npm run docker:recreate-worker
+docker compose logs -f api worker
+```
+
+The checked-in `.env.example` uses Docker service hostnames (`@postgres`) for
+containers. When running migrations from the host shell, use the `localhost`
+database URL shown above — `npm run setup` does this rewrite automatically.
 
 ### Stack management
 
@@ -147,76 +224,47 @@ On success it prints the admin console URL (`http://localhost:3000`) and the
 | `npm run down`     | Stop the stack                                                       |
 | `npm run reset:db` | Wipe the Postgres volume and re-migrate (destructive)                |
 
-### Manual setup
+### Develop a single app
 
-Equivalent steps if you prefer to run them yourself:
+Run one workspace's dev server directly during focused work:
 
 ```bash
-cp .env.example .env
-npm install
-docker compose build
-docker compose up -d --wait postgres redis
-DATABASE_URL=postgres://ticket_to_pr:ticket_to_pr@localhost:5432/ticket_to_pr npm --workspace @ticket-to-pr/db run migrate
-npm run docker:build-runtime
-docker compose up -d --wait api
-npm run docker:recreate-worker
-docker compose logs -f api worker
+npm run dev:api       # Fastify API
+npm run dev:worker    # BullMQ worker
+npm run dev:admin     # React admin console
 ```
-
-Open the admin console at `http://localhost:3000` and enter `ADMIN_TOKEN` from
-your local `.env`.
-
-The checked-in `.env.example` uses Docker service hostnames (`@postgres`) for
-containers. When running migrations from the host shell, use the `localhost`
-database URL shown above — `npm run setup` does this rewrite automatically.
 
 ## Environment
 
 [`.env.example`](.env.example) is the canonical, commented list of every
 variable — copy it to `.env` and edit. `npm run doctor` validates `.env` against
 the selected executor/publisher modes (and rejects placeholder secrets in real
-mode). The snapshot below is a convenience reference; if it ever disagrees with
-`.env.example`, the file wins.
+mode). The defaults are mock-mode, so a fresh copy runs the full local loop with
+no real credentials.
 
-```env
-ADMIN_TOKEN=change-me-admin-token
-DATABASE_URL=postgres://ticket_to_pr:ticket_to_pr@postgres:5432/ticket_to_pr
-REDIS_URL=redis://redis:6379
-LARK_APP_ID=cli_xxx
-LARK_APP_SECRET=secret_xxx
-LARK_WEBHOOK_SECRET=webhook_secret_xxx
-LARK_BASE_APP_TOKEN=base_app_token_xxx
-LARK_BASE_TABLE_ID=table_xxx
-LARK_STATUS_FIELD=PatchPilot Status
-LARK_JOB_ID_FIELD=PatchPilot Job ID
-LARK_PR_URL_FIELD=PR URL
-LARK_PR_NUMBER_FIELD=PR Number
-LARK_FAILURE_FIELD=PatchPilot Failure
-LARK_UPDATED_AT_FIELD=PatchPilot Updated At
-GITHUB_TOKEN=github_pat_xxx
-GITHUB_WEBHOOK_SECRET=github_webhook_secret_xxx
-REPOSITORY_ALLOWLIST=owner/repo
-PROTECTED_PATH_DENYLIST=.env,.env.*,infra/**,terraform/**,secrets/**,migrations/prod/**
-EXECUTOR_MODE=mock
-PUBLISHER_MODE=mock
-RUNNER_IMAGE=ticket-to-pr-runner:local
-WORKER_WORKSPACE_ROOT=/work/jobs
-WORKER_WORKSPACE_HOST_ROOT=/absolute/path/to/ticket-to-pr/work/jobs
-GSTACK_COMMAND=
-GSTACK_ARGS=
-CODEX_AUTH_FILE=
-CODEX_CONFIG_FILE=
-CODEX_SKILLS_DIR=
-GSTACK_SKILL_SOURCE_DIR=
-```
+Key variables:
 
-Use `WORKER_EXECUTOR_MODE` and `WORKER_PUBLISHER_MODE` to override worker modes
-without changing app-wide variables.
+| Variable                                     | Purpose                                                     |
+| -------------------------------------------- | ----------------------------------------------------------- |
+| `ADMIN_TOKEN`                                | Bearer token for admin API and console                      |
+| `DATABASE_URL` / `REDIS_URL`                 | Postgres and Redis connection strings                       |
+| `LARK_WEBHOOK_SECRET`                        | Shared secret required on inbound Lark webhooks             |
+| `LARK_APP_ID` / `LARK_APP_SECRET`            | Lark app credentials for status write-back                  |
+| `LARK_BASE_APP_TOKEN` / `LARK_BASE_TABLE_ID` | Source Lark Base record location for write-back             |
+| `GITHUB_TOKEN`                               | Token used for git/GitHub operations in real mode           |
+| `GITHUB_WEBHOOK_SECRET`                      | Secret for verifying GitHub `pull_request` webhooks         |
+| `REPOSITORY_ALLOWLIST`                       | Comma-separated `owner/repo` allowlist enforced before runs |
+| `PROTECTED_PATH_DENYLIST`                    | Glob denylist of paths the agent may not change             |
+| `EXECUTOR_MODE` / `PUBLISHER_MODE`           | `mock` for local dev; `gstack` / `github` for real runs     |
+| `RUNNER_IMAGE`                               | Runner image tag the worker launches                        |
+
+Use `WORKER_EXECUTOR_MODE` and `WORKER_PUBLISHER_MODE` to override the worker's
+modes without changing the app-wide variables.
 
 `gstack` is an executor mode, not a publisher mode. Use `PUBLISHER_MODE=github`
-for real PR creation. Older local `.env` files with
-`PUBLISHER_MODE=gstack` are treated as `github` by the worker for compatibility,
-but new configs should use `github` explicitly.
+for real PR creation. Older local `.env` files with `PUBLISHER_MODE=gstack` are
+treated as `github` by the worker for compatibility, but new configs should use
+`github` explicitly.
 
 Production-like GitHub publishing requires:
 
@@ -231,20 +279,34 @@ REPOSITORY_ALLOWLIST=owner/example-repo
 The worker service mounts `/var/run/docker.sock` so `EXECUTOR_MODE=gstack` can
 launch isolated runner containers. Keep real-mode runs limited to disposable,
 allowlisted repositories because that mount grants the worker access to the host
-Docker daemon. `WORKER_WORKSPACE_HOST_ROOT` is the same workspace directory as
-`WORKER_WORKSPACE_ROOT`, but from the host Docker daemon's point of view; the
-checked-in compose file defaults it to `${PWD}/work/jobs`.
+Docker daemon.
 
-For a deterministic platform smoke without a real AI CLI, rebuild the runner
-image and run with:
+## AI Runner
 
-```env
-GSTACK_COMMAND=node
-GSTACK_ARGS=/opt/runner/apps/runner/dist/e2e-smoke-runner.js
+The runner clones (or fetches) the target repository into an isolated Docker
+workspace and invokes a gstack-compatible agent command. The default runner
+Dockerfile intentionally ships **no** specific agent CLI — build a runner image
+with the toolchain you want:
+
+```bash
+docker build \
+  -f docker/runner.Dockerfile \
+  --build-arg GSTACK_INSTALL_COMMAND='<install gstack-compatible CLI here>' \
+  -t ticket-to-pr-runner:local .
 ```
 
-For a real Codex CLI runner smoke, package Codex into the runner image and pass
-Codex login/config as read-only runtime mounts:
+In mock mode no external agent CLI is required. After changing worker or runner
+source, rebuild and recreate those containers before an E2E smoke (a stale image
+can keep old behavior even when the checkout has newer code):
+
+```bash
+npm run docker:refresh-runtime
+```
+
+### Codex-backed runner
+
+For the Codex-backed runner used by local real-mode smoke tests, package Codex
+into the image and pass login/config as read-only runtime mounts:
 
 ```env
 GSTACK_INSTALL_COMMAND=npm install -g @openai/codex@0.141.0
@@ -256,105 +318,83 @@ CODEX_SKILLS_DIR=/Users/me/.codex/skills
 GSTACK_SKILL_SOURCE_DIR=/Users/me/gstack
 ```
 
-`CODEX_AUTH_FILE` and `CODEX_CONFIG_FILE` are mounted into runner containers as
-read-only seed files and copied into a temporary `CODEX_HOME` inside the
-container. They must not be baked into the runner image. `GSTACK_SKILL_SOURCE_DIR`
-should point at the gstack checkout root, not only `.agents/skills`, because the
-Codex skills directory can contain symlinks to gstack helper binaries.
+`CODEX_AUTH_FILE` and `CODEX_CONFIG_FILE` are mounted read-only and copied into a
+temporary `CODEX_HOME` inside the container; they must not be baked into the
+image. `GSTACK_SKILL_SOURCE_DIR` should point at the gstack checkout root.
 
 > In `.env`, set `CODEX_*` and `GSTACK_SKILL_SOURCE_DIR` to **absolute paths**.
 > Unlike shell command examples, `.env` values are not shell-expanded, so
 > `$HOME/...` will not resolve when the worker mounts them into the runner.
 
-### gstack staged pipeline (plan → implement → review → verify → document)
+`codex-agent-runner.js` runs the agent in a single pass. Set `CODEX_SELF_REVIEW=1`
+to add one optional lightweight self-review/verify pass (the agent re-reads its
+own diff, fixes obvious defects, runs the project's quick checks, and records the
+result as real `tests` evidence). It is off by default; a failing self-review
+check fails the run.
 
-`codex-agent-runner.js` runs the agent in a single pass. By default it runs no
-project verification, so its `tests` evidence is honestly `skipped`. Set
-`CODEX_SELF_REVIEW=1` to add one optional lightweight self-review/verify pass
-(the agent re-reads its own diff, fixes obvious defects, runs the project's quick
-checks, and records the result as real `tests` evidence via `output/qa.json`). It
-is off by default and is **not** the full staged pipeline — just one extra pass;
-a failing self-review check fails the run.
+### gstack staged pipeline
 
 To run the agent through gstack's staged workflow instead — a separate Codex pass
-per stage (plan and review use gstack skills) — point `GSTACK_ARGS` at the staged
-runner (keep `GSTACK_COMMAND=node`):
+per stage — point `GSTACK_ARGS` at the staged runner (keep `GSTACK_COMMAND=node`):
 
 ```env
 GSTACK_COMMAND=node
 GSTACK_ARGS=/opt/runner/apps/runner/dist/gstack-staged-runner.js
 ```
 
-Stages run sequentially and fail fast (the stage name is included in the failure):
+Stages run sequentially and fail fast (the failing stage name is reported):
 
 1. **plan** — `gstack-autoplan` writes an implementation plan to `output/plan.md`.
-2. **implement** — plain Codex coding driven by the plan; creates local commits
-   (committed before review so review/verify see the full diff).
+2. **implement** — Codex coding driven by the plan; creates local commits (before
+   review, so review/verify see the full diff).
 3. **review** — `gstack-review` analyzes the diff and fixes blocking issues.
 4. **verify** — runs the project's tests/build and writes a structured
-   `output/qa.json` (`{passed, command, summary}`). A failing verification **fails
-   the run**, and the result is recorded in the policy-gated `tests` field.
+   `output/qa.json`. A failing verification **fails the run** and is recorded in
+   the policy-gated `tests` field.
 5. **document** — synthesizes a reviewer-facing PR description from the final diff
-   and the stage notes into `output/pr-description.md`, with six fixed sections:
-   아키텍처 변경점 · 새로 추가된 컴포넌트 · 데이터 플로우 · 실패 시나리오 ·
-   트레이드오프 · 테스트 전략. Best-effort — if it produces nothing the PR still
-   ships with the stage notes below.
+   into `output/pr-description.md` (best-effort).
 
-The authored description leads the PR body, followed by each stage's notes, which
-are also **surfaced in the admin console** (a "Pipeline stage notes" panel on the
-job detail) — and the live sub-stages render as an "에이전트 단계" sub-track under
-the Implementing phase. The platform still derives the PR's trusted git evidence
-after the run. The same `CODEX_*` / `GSTACK_SKILL_SOURCE_DIR` mounts apply; the
-runner image bundles `ripgrep`, which gstack skills require.
-
-Operational notes:
-
-- **Cost:** five Codex passes (four engineering stages each reload a large gstack
-  skill, plus a short description pass), so a staged run costs roughly 4–5× the
-  single-pass runner. Prefer it for higher-stakes tickets.
-- **Cancel:** a cancel request stops the running runner container mid-execution
-  and records the phase it was cancelled in. The whole pipeline shares one
-  timeout, split evenly across stages.
-- **Rollback:** point `GSTACK_ARGS` back at `codex-agent-runner.js` for single-pass.
-- Browser-based QA via `gstack-qa` needs a headless browser in the runner image
-  (not bundled); the verify stage uses test/build checks, not browser QA.
+Stage notes are surfaced in the admin console, and live sub-stages render under
+the Implementing phase. A staged run costs roughly 4–5× a single-pass run, so it
+is best reserved for higher-stakes tickets. To roll back, point `GSTACK_ARGS`
+back at `codex-agent-runner.js`.
 
 ### Structured agent failures
 
-When the agent (single-pass or any staged stage) cannot complete a ticket, it
-writes `output/failure.json` (`{stage, category, message, nextAction}`) instead
-of crashing opaquely. The runner converts that into a schema-valid result with
-`status: failed` and the structured failure, so Admin's `Failure`/`Next Action`
-fields carry the agent's own explanation. `category` drives retry policy: `infra`
-(also `internal`/`transient`/`timeout`) is treated as retryable; `agent` and
-`policy` are actionable and need the ticket or rules changed before retry. An
-optional `retryable` boolean in the file overrides the category default. If no
-valid `failure.json` is present, the original error still propagates unchanged.
+When the agent cannot complete a ticket it writes
+`output/failure.json` (`{stage, category, message, nextAction}`) instead of
+crashing opaquely. The runner converts that into a schema-valid `status: failed`
+result, so Admin's `Failure` / `Next Action` fields carry the agent's own
+explanation. `category` drives retry policy: `infra` (also
+`internal`/`transient`/`timeout`) is retryable; `agent` and `policy` are
+actionable and need the ticket or rules changed before retry. An optional
+`retryable` boolean overrides the category default.
 
-## Lark Webhook
+## Webhooks
 
-Webhook requests must include:
+### Lark
+
+Inbound Lark webhook requests must include the shared secret; requests without it
+are rejected before any ticket processing:
 
 ```http
 x-lark-webhook-secret: <LARK_WEBHOOK_SECRET>
 ```
 
-Requests without the shared secret are rejected before ticket processing.
+### GitHub
 
-## GitHub Webhook
-
-Configure a GitHub repository webhook for pull request events:
+Configure a GitHub repository webhook for pull-request events, using
+`GITHUB_WEBHOOK_SECRET` as the secret:
 
 ```http
 POST <PUBLIC_BASE_URL>/webhooks/github
 x-hub-signature-256: sha256=<HMAC>
 ```
 
-Use `GITHUB_WEBHOOK_SECRET` as the webhook secret. When GitHub sends a merged
-`pull_request.closed` event, PatchPilot marks the matching job `Completed` and
-writes `PatchPilot Status=Completed` back to Lark.
+When GitHub sends a merged `pull_request.closed` event, PatchPilot marks the
+matching job `Completed` and writes `PatchPilot Status=Completed` back to Lark.
 
-## Lark Status Write-back
+### Lark status write-back
 
 Set `LARK_BASE_APP_TOKEN` and `LARK_BASE_TABLE_ID` to let PatchPilot update the
 source Lark Base record after each major state transition. The default field
@@ -367,70 +407,25 @@ mapping writes:
 - `PatchPilot Failure`: latest failure summary.
 - `PatchPilot Updated At`: ISO timestamp of the write-back.
 
-## Runner Image
-
-The default runner Dockerfile intentionally does not install a specific agent
-CLI. Build a runner image with the toolchain you want:
-
-```bash
-docker build \
-  -f docker/runner.Dockerfile \
-  --build-arg GSTACK_INSTALL_COMMAND='<install gstack-compatible CLI here>' \
-  -t ticket-to-pr-runner:local .
-```
-
-For the Codex-backed runner used by local real-mode smoke tests:
-
-```bash
-GSTACK_INSTALL_COMMAND='npm install -g @openai/codex@0.141.0' \
-GSTACK_COMMAND=node \
-GSTACK_ARGS=/opt/runner/apps/runner/dist/codex-agent-runner.js \
-CODEX_AUTH_FILE="$HOME/.codex/auth.json" \
-CODEX_CONFIG_FILE="$HOME/.codex/config.toml" \
-CODEX_SKILLS_DIR="$HOME/.codex/skills" \
-GSTACK_SKILL_SOURCE_DIR="$HOME/gstack" \
-npm run docker:refresh-runtime
-```
-
-Package the image with a source/version tag such as
-`ghcr.io/<owner>/ticket-to-pr-runner:codex-0.141.0-<git-sha>`. Keep credentials,
-repository allowlists, and GitHub tokens outside the image and inject them only
-at runtime.
-
-In mock mode, no external agent CLI is required.
-
-After changing worker or runner source, rebuild and recreate those containers
-before running an E2E smoke. A stale image can keep old GitHub auth behavior even
-when the checkout has newer code:
-
-```bash
-npm run docker:refresh-runtime
-```
-
-The runner image is registered in Compose as the `runner-image` build target
-under the `build` profile, so the worker image and the runner image can be
-rebuilt from the same checkout in one command.
-
 ## Admin Console
 
-The admin UI supports:
+The admin UI (`apps/admin`, branded with
+[`patchpilot-logo.svg`](apps/admin/src/assets/patchpilot-logo.svg)) supports:
 
 - Korean default copy with a fully translated English language toggle.
-- Job queue scanning with status-first rows and auto-refresh (paused when the
-  tab is hidden).
-- Clickable status metrics that filter the list (All / Running / Failed /
-  Completed).
-- Job detail with failure summary, failure category, and next action first.
-- Copy-to-clipboard for job id and PR URL.
+- Job queue scanning with status-first rows and auto-refresh (paused when the tab
+  is hidden), plus clickable status metrics that filter the list (All / Running /
+  Failed / Completed).
+- Job detail leading with failure summary, failure category, and next action;
+  copy-to-clipboard for job id and PR URL.
 - Datadog-style phase spans for `Queued -> Planning -> Implementing ->
-PolicyChecking -> Publishing -> Completed`.
-- Span-to-log correlation by source for faster debugging.
-- Pipeline stage notes (plan / review / verify) rendered from the staged runner,
-  plus a live sub-stage indicator on the Implementing step (e.g. "리뷰 3/4") and
-  highlighted stage dividers in the log stream.
+PolicyChecking -> Publishing -> Completed`, with span-to-log correlation.
+- Pipeline stage notes (plan / review / verify) from the staged runner, a live
+  sub-stage indicator on the Implementing step, and highlighted stage dividers in
+  the log stream.
 - Artifacts, raw logs, retry, and cancel actions. Retry is enabled only for
-  internally-failed jobs, matching the backend retry preflight. Cancelling a
-  running job stops the runner container and shows where it was cancelled.
+  internally-failed jobs; cancelling a running job stops the runner container and
+  shows where it was cancelled.
 
 Run it directly during frontend work:
 
@@ -458,36 +453,32 @@ npm run build
 git diff --check
 ```
 
-These mirror the gates CI enforces (`.github/workflows/ci.yml`). The database
-repository test is skipped unless `DATABASE_URL` points at a live Postgres
-database.
+These mirror the gates CI enforces (`.github/workflows/ci.yml`), which also runs
+`npm run scan:secrets` and a mock end-to-end smoke
+(`.github/workflows/e2e-smoke.yml`). The database repository test is skipped
+unless `DATABASE_URL` points at a live Postgres database.
 
 ## Security Boundary
 
 - `.env` is gitignored and must never be committed.
 - Admin API calls require `Authorization: Bearer <ADMIN_TOKEN>`.
-- Lark webhook calls require `x-lark-webhook-secret`.
+- Lark webhook calls require `x-lark-webhook-secret`; GitHub webhooks require a
+  valid `x-hub-signature-256`.
 - GitHub tokens are passed only to git/GitHub operations and are masked from
   retained runner logs.
-- The worker enforces `REPOSITORY_ALLOWLIST` before execution and publishing.
-- Protected path denylist blocks sensitive files from being changed by agent
+- The worker enforces `REPOSITORY_ALLOWLIST` before execution and publishing, and
+  a protected-path denylist blocks sensitive files from being changed by agent
   output.
 - Completed agent results must include full 40-character Git SHAs and a real PR
   body artifact.
-- The platform owns push and PR creation. The agent creates local commits and
-  PR text drafts only.
+- The platform owns push and PR creation. The agent creates local commits and PR
+  text drafts only.
 
 ## Operations
 
-See [docs/operations.md](docs/operations.md) for:
-
-- Lark field mapping
-- Required environment variables
-- GitHub token scopes
-- Smoke-test steps
-- Retry/cancel behavior
-- Workspace retention
-- Security and policy boundaries
+See [docs/operations.md](docs/operations.md) for Lark field mapping, required
+environment variables, GitHub token scopes, smoke-test steps, retry/cancel
+behavior, workspace retention, and the full security and policy boundaries.
 
 ## License
 
@@ -498,5 +489,7 @@ PatchPilot is source-available under the Business Source License 1.1. See
 - Competitive hosted services, managed services, developer tools, agent
   platforms, or ticket-to-pull-request automation products require a commercial
   license.
-- Each version converts to the Apache License, Version 2.0 four years after it
-  is first publicly distributed.
+- Each version converts to the Apache License, Version 2.0 four years after it is
+  first publicly distributed.
+  </content>
+  </invoke>
