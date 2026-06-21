@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseAgentResult } from "@ticket-to-pr/core";
-import { getWorkspacePaths } from "@ticket-to-pr/runner-contract";
+import { getWorkspacePaths, parseRunnerContext } from "@ticket-to-pr/runner-contract";
 
 export interface E2eSmokeRunnerInput {
   workspaceRoot: string;
@@ -11,17 +11,9 @@ export interface E2eSmokeRunnerInput {
   targetBranch: string;
 }
 
-interface RunnerContext {
-  jobId: string;
-  ticketSnapshotId: string;
-  triggerVersion: string;
-  runId: string;
-  workBranch: string;
-}
-
 export async function runE2eSmokeRunner(input: E2eSmokeRunnerInput): Promise<void> {
   const paths = getWorkspacePaths(input.workspaceRoot);
-  const context = JSON.parse(await readFile(paths.contextJson, "utf8")) as RunnerContext;
+  const context = parseRunnerContext(await readFile(paths.contextJson, "utf8"));
   const baseSha = (await runGit(["rev-parse", "HEAD"], input.repoDir)).stdout.trim();
 
   await runGit(["config", "user.name", "Ticket-to-PR Bot"], input.repoDir);

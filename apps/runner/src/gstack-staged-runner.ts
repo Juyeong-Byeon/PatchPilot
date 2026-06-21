@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { formatStageBanner, GSTACK_STAGE_KEYS } from "@ticket-to-pr/core";
-import { getWorkspacePaths } from "@ticket-to-pr/runner-contract";
+import { getWorkspacePaths, parseRunnerContext } from "@ticket-to-pr/runner-contract";
 import {
   commitDirtyWorktreeIfNeeded,
   defaultCodexArgs,
@@ -13,7 +13,6 @@ import {
   runCodexCommand,
   runWithStructuredFailure,
   writeResultArtifacts,
-  type RunnerContext,
 } from "./codex-agent-runner.js";
 
 export interface GstackStagedRunnerInput {
@@ -76,7 +75,7 @@ export async function runGstackStagedRunner(input: GstackStagedRunnerInput): Pro
 
 async function runGstackStagedPipeline(input: GstackStagedRunnerInput): Promise<void> {
   const paths = getWorkspacePaths(input.workspaceRoot);
-  const context = JSON.parse(await readFile(paths.contextJson, "utf8")) as RunnerContext;
+  const context = parseRunnerContext(await readFile(paths.contextJson, "utf8"));
   const ticket = await readFile(paths.ticketMd, "utf8");
   const baseSha = await gitStdout(["rev-parse", "HEAD"], input.repoDir);
   await hardenGitExclude(input.repoDir);
