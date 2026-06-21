@@ -127,6 +127,16 @@ export function parseDefinitionOfDone(value: unknown): string[] {
     .filter(Boolean);
   if (lines.length === 0) return [];
 
+  // A single physical line that packs several "N)" criteria, e.g.
+  // "1) 버튼 추가 2) 완료만 제거 3) 비활성화" — split into one item per number so each
+  // DoD criterion is independently scannable instead of a crammed run-on line. Runs
+  // before the bullet check below, which (the line starts with "1)") would otherwise
+  // return the whole line as a single item.
+  if (lines.length === 1) {
+    const inline = splitInlineEnumeration(lines[0]);
+    if (inline.length >= 2) return inline;
+  }
+
   const bulletPattern = /^(?:[-*+]|\d+[.)]|\[[ xX]?\])\s+/;
   const bulletLines = lines.filter((line) => bulletPattern.test(line));
 
@@ -142,6 +152,14 @@ export function parseDefinitionOfDone(value: unknown): string[] {
   }
   if (lines.length >= 2) return lines.map(stripped).filter(Boolean);
   return [];
+}
+
+// Split an inline "1) … 2) … 3) …" enumeration into its items. Paren-style only
+// (not "1.") so version strings like "v1.2" can never be mistaken for a list.
+function splitInlineEnumeration(text: string): string[] {
+  const matches = [...text.matchAll(/(?:^|\s)\d+\)\s*(.+?)(?=\s+\d+\)\s|$)/gs)];
+  if (matches.length < 2) return [];
+  return matches.map((match) => match[1].trim()).filter(Boolean);
 }
 
 // Forward-compat: surface an executor/pipeline mode badge ONLY when the backend

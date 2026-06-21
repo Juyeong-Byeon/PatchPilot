@@ -92,6 +92,18 @@ describe("parseDefinitionOfDone", () => {
     expect(parseDefinitionOfDone("does a thing\ndoes another")).toEqual(["does a thing", "does another"]);
   });
 
+  it("splits a single line packing inline '1) 2) 3)' criteria", () => {
+    expect(
+      parseDefinitionOfDone(
+        "1) 버튼이 추가된다. 2) 완료 항목만 제거된다. 3) 없으면 비활성화된다. 4) e2e 테스트가 통과한다.",
+      ),
+    ).toEqual(["버튼이 추가된다.", "완료 항목만 제거된다.", "없으면 비활성화된다.", "e2e 테스트가 통과한다."]);
+  });
+
+  it("does not mistake a version string for an inline list", () => {
+    expect(parseDefinitionOfDone("supports v1.2 and v3.4 of the api")).toEqual([]);
+  });
+
   it("keeps a single free-form paragraph as prose (empty checklist)", () => {
     expect(parseDefinitionOfDone("just one sentence describing done")).toEqual([]);
   });
