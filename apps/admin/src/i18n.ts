@@ -12,6 +12,9 @@ export const adminCopy = {
     appTitle: "PatchPilot",
     skipToContent: "본문으로 건너뛰기",
     footerScope: "작업 큐 · 실행 로그 · PR 아티팩트",
+    // Accessible label for the deployed-build stamp in the sidebar footer (e.g.
+    // "v0.1.0 · 1a2b3c4"). Lets operators verify which build is serving traffic.
+    versionLabel: "배포 버전",
     tokenLabel: "관리자 인증키",
     tokenPlaceholder: "인증키를 입력하세요",
     apply: "적용",
@@ -213,6 +216,9 @@ export const adminCopy = {
     appTitle: "PatchPilot",
     skipToContent: "Skip to content",
     footerScope: "Job queue · runtime logs · PR artifacts",
+    // Accessible label for the deployed-build stamp in the sidebar footer (e.g.
+    // "v0.1.0 · 1a2b3c4"). Lets operators verify which build is serving traffic.
+    versionLabel: "Deployed version",
     tokenLabel: "Admin Access Key",
     tokenPlaceholder: "Enter access key",
     apply: "Apply",

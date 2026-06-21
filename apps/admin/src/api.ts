@@ -5,6 +5,7 @@ import {
   parseRecordArray,
   parseRetryResponse,
   parseSettingsView,
+  parseVersionInfo,
 } from "./lib/api-schemas.js";
 
 export type JsonRecord = Record<string, unknown>;
@@ -133,6 +134,19 @@ export interface SettingsView {
 // Sentinel thrown when /api/settings is absent (404) on an older backend. Lets the
 // Settings page hide/disable itself gracefully instead of surfacing a broken screen.
 export const SETTINGS_UNAVAILABLE = "admin_settings_unavailable";
+
+// Shape of GET /api/version (backend `VersionInfo`). `version` is the API package
+// version (e.g. "0.1.0"); `sha` is the build's git commit, or null when the process
+// was started without GIT_SHA (e.g. local dev). Mirrors apps/api/src/routes-version.ts.
+export interface VersionInfo {
+  version: string;
+  sha: string | null;
+}
+
+// Sentinel thrown when /api/version cannot be read (absent / network / non-JSON /
+// malformed). Lets the version badge hide itself silently rather than surfacing a
+// broken element — the running build is informational, never load-bearing.
+export const VERSION_UNAVAILABLE = "admin_version_unavailable";
 
 const TOKEN_STORAGE_KEY = "ADMIN_TOKEN";
 const API_BASE_URL = (import.meta.env.VITE_ADMIN_API_BASE_URL ?? "").replace(/\/$/, "");
@@ -367,6 +381,41 @@ export async function updateSettings(
   }
   const parsed = parseSettingsView(body);
   if (!parsed) throw new Error("admin_api_unavailable");
+  return parsed;
+}
+
+/**
+ * Fetch the running build's version + git SHA. Unlike the other endpoints this one is
+ * public (no admin token, like `/api/health`), so it sends no Authorization header and
+ * works before the operator authenticates. Defensive by design: a 404 (older backend),
+ * network error, non-JSON SPA fallback, or malformed body all throw `VERSION_UNAVAILABLE`
+ * so the version badge hides itself silently — the build stamp is informational and must
+ * never break the shell.
+ */
+export async function getVersion(): Promise<VersionInfo> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/version`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    throw new Error(VERSION_UNAVAILABLE);
+  }
+
+  if (!response.ok) throw new Error(VERSION_UNAVAILABLE);
+
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) throw new Error(VERSION_UNAVAILABLE);
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw new Error(VERSION_UNAVAILABLE);
+  }
+  const parsed = parseVersionInfo(body);
+  if (!parsed) throw new Error(VERSION_UNAVAILABLE);
   return parsed;
 }
 
