@@ -229,6 +229,16 @@ a:hover {
   color: var(--link-hover);
 }
 
+/* Links styled as solid buttons (e.g. the PR review CTA) must not inherit the
+   global content-link blue/underline above. The amber-wash↔amber-ink token pair
+   stays AA in both themes: cream-on-brown in light, dark-on-gold in dark — unlike
+   a flat `text-white`, which reads poorly on the gold dark-mode button. */
+a.cta-solid,
+a.cta-solid:hover {
+  color: var(--color-amber-wash);
+  text-decoration: none;
+}
+
 pre,
 code,
 .font-mono {

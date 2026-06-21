@@ -271,7 +271,7 @@ export function JobDetail({
               </div>
               {job.pr_url ? (
                 <a
-                  className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-amber-ink bg-amber-ink px-3 py-2 text-[13px] font-medium text-white no-underline shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md"
+                  className="cta-solid inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-amber-ink bg-amber-ink px-3 py-2 text-[13px] font-medium shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md"
                   href={job.pr_url}
                   rel="noreferrer"
                   target="_blank"
