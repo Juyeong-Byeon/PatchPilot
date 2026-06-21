@@ -63,6 +63,21 @@ describe("sweepExpiredWorkspaces", () => {
     });
     expect(removed).toEqual([]);
   });
+
+  it("uses the live retention override when one is passed (Settings page)", async () => {
+    const root = await makeRoot();
+    const dir = join(root, "job_x");
+    await mkdir(dir, { recursive: true });
+    // Age 3 days. With the static 7-day window it stays; a live 1-day override removes it.
+    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+    await utimes(dir, threeDaysAgo, threeDaysAgo);
+
+    const kept = await sweepExpiredWorkspaces({ workspaceRoot: root, failedRetentionDays: 7 });
+    expect(kept).toEqual([]);
+
+    const removed = await sweepExpiredWorkspaces({ workspaceRoot: root, failedRetentionDays: 7 }, 1);
+    expect(removed).toEqual([dir]);
+  });
 });
 
 describe("sweepOrphanRunnerContainers", () => {

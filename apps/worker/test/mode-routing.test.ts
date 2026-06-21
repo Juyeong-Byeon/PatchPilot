@@ -73,6 +73,14 @@ describe("resolveExecutorMode", () => {
     expect(resolveExecutorMode("Normal")).toBe("single-pass");
     expect(resolveExecutorMode("Low")).toBe("single-pass");
   });
+
+  it("honors the highPriorityStaged mapping (Settings override)", () => {
+    // Default (true) routes High to staged; false sends High to single-pass.
+    expect(resolveExecutorMode("High", true)).toBe("staged");
+    expect(resolveExecutorMode("High", false)).toBe("single-pass");
+    // Non-High is unaffected by the flag.
+    expect(resolveExecutorMode("Normal", false)).toBe("single-pass");
+  });
 });
 
 describe("resolveGstackArgs", () => {
@@ -187,5 +195,102 @@ describe("processAgentJob mode routing", () => {
 
     expect(seenMode).toBe("staged");
     expect(repos.createRun).toHaveBeenCalledWith(expect.objectContaining({ executorMode: "staged" }));
+  });
+});
+
+describe("processAgentJob effective settings (env ⊕ override)", () => {
+  async function runWithSettings(
+    priority: "Low" | "Normal" | "High",
+    settings: { jobTimeoutSeconds: number; highPriorityStaged: boolean },
+  ) {
+    const job = jobWith(priority);
+    const repos = createRepos(job);
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "ticket-to-pr-settings-"));
+    tempDirs.push(workspaceRoot);
+    let seenMode: string | undefined;
+    let seenTimeout: number | undefined;
+    const executor = vi.fn().mockImplementation(async (input) => {
+      seenMode = input.executorMode;
+      seenTimeout = input.jobTimeoutSeconds;
+      await writeFile(join(input.run.workspacePath, "PR_BODY.md"), "Body");
+      return completedResult;
+    });
+    const publisher = vi.fn().mockImplementation(async (input) => ({
+      repository: "acme/web",
+      targetBranch: "main",
+      workBranch: input.workBranch,
+      baseSha: "base",
+      headSha: "head",
+      pushSha: "0123456789abcdef0123456789abcdef01234567",
+      commitShas: ["abc"],
+      prUrl: "https://github.local/acme/web/pull/mock-job_1",
+      prNumber: 1,
+      prTitle: input.title,
+      prBody: input.body,
+    }));
+
+    await processAgentJob(
+      { jobId: "job_1", ticketSnapshotId: "ts_1" },
+      {
+        repos,
+        executor,
+        publisher,
+        workspaceRoot,
+        policyConfig: { repositoryAllowlist: ["acme/web"], protectedPathDenylist: [] },
+        loadJobSettings: async () => settings,
+        ids: { runId: () => "run_1", artifactId: (k) => `a_${k}`, pullRequestId: () => "pr_1" },
+      },
+    );
+    return { seenMode, seenTimeout };
+  }
+
+  it("threads the effective per-job timeout into the executor", async () => {
+    const { seenTimeout } = await runWithSettings("Normal", { jobTimeoutSeconds: 600, highPriorityStaged: true });
+    expect(seenTimeout).toBe(600);
+  });
+
+  it("routes High to single-pass when highPriorityStaged override is false", async () => {
+    const { seenMode } = await runWithSettings("High", { jobTimeoutSeconds: 3600, highPriorityStaged: false });
+    expect(seenMode).toBe("single-pass");
+  });
+
+  it("falls back to defaults (no executor timeout) when no loader is provided", async () => {
+    const job = jobWith("Normal");
+    const repos = createRepos(job);
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "ticket-to-pr-settings-none-"));
+    tempDirs.push(workspaceRoot);
+    let seenTimeout: number | undefined;
+    const executor = vi.fn().mockImplementation(async (input) => {
+      seenTimeout = input.jobTimeoutSeconds;
+      await writeFile(join(input.run.workspacePath, "PR_BODY.md"), "Body");
+      return completedResult;
+    });
+    const publisher = vi.fn().mockImplementation(async (input) => ({
+      repository: "acme/web",
+      targetBranch: "main",
+      workBranch: input.workBranch,
+      baseSha: "base",
+      headSha: "head",
+      pushSha: "0123456789abcdef0123456789abcdef01234567",
+      commitShas: ["abc"],
+      prUrl: "https://github.local/acme/web/pull/mock-job_1",
+      prNumber: 1,
+      prTitle: input.title,
+      prBody: input.body,
+    }));
+
+    await processAgentJob(
+      { jobId: "job_1", ticketSnapshotId: "ts_1" },
+      {
+        repos,
+        executor,
+        publisher,
+        workspaceRoot,
+        policyConfig: { repositoryAllowlist: ["acme/web"], protectedPathDenylist: [] },
+        ids: { runId: () => "run_1", artifactId: (k) => `a_${k}`, pullRequestId: () => "pr_1" },
+      },
+    );
+    // The default loader returns the registry default (3600), passed to the executor.
+    expect(seenTimeout).toBe(3600);
   });
 });

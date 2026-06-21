@@ -48,6 +48,15 @@ describe("migrate / listMigrationFiles", () => {
     expect(sql).toMatch(/add column if not exists guidance/i);
   });
 
+  it("includes the app_settings migration as an idempotent CREATE TABLE", () => {
+    const files = listMigrationFiles(join(srcDir, "migrations"));
+    const target = files.find((f) => f.fileName.includes("app_settings"));
+    expect(target).toMatchObject({ version: "0004" });
+    const sql = readFileSync(join(srcDir, "migrations", target!.fileName), "utf8");
+    expect(sql).toMatch(/create table if not exists app_settings/i);
+    expect(sql).toMatch(/value jsonb not null/i);
+  });
+
   it("returns [] when the migrations directory is missing", () => {
     expect(listMigrationFiles(join(srcDir, "does-not-exist"))).toEqual([]);
   });
@@ -75,5 +84,9 @@ describe("migrate / idempotent schema baseline", () => {
     expect(schema).toMatch(/pull_requests_repo_number_unique/);
     expect(schema).toMatch(/create table if not exists webhook_events/i);
     expect(schema).toMatch(/create table if not exists schema_migrations/i);
+  });
+
+  it("declares the app_settings override table in the idempotent baseline", () => {
+    expect(schema).toMatch(/create table if not exists app_settings/i);
   });
 });

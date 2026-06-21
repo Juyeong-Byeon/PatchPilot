@@ -94,6 +94,34 @@ export interface JobMetrics extends JsonRecord {
 // "feature not deployed → hide the panel silently" from a transient/auth error.
 export const METRICS_UNAVAILABLE = "admin_metrics_unavailable";
 
+// Shape of GET/PUT /api/settings. The backend resolves env ⊕ override and groups by
+// section, omitting secret fields entirely. Every field is optional so the consumer
+// degrades gracefully if the endpoint predates a field.
+export interface SettingsFieldView {
+  key: string;
+  value: unknown;
+  editable: boolean;
+  kind: "string" | "int" | "bool" | "csv" | "enum";
+  applies: "live" | "restart";
+  source: "override" | "env" | "default";
+  enumValues?: string[];
+  min?: number;
+  max?: number;
+}
+
+export interface SettingsSectionView {
+  key: string;
+  fields: SettingsFieldView[];
+}
+
+export interface SettingsView {
+  sections: SettingsSectionView[];
+}
+
+// Sentinel thrown when /api/settings is absent (404) on an older backend. Lets the
+// Settings page hide/disable itself gracefully instead of surfacing a broken screen.
+export const SETTINGS_UNAVAILABLE = "admin_settings_unavailable";
+
 const TOKEN_STORAGE_KEY = "ADMIN_TOKEN";
 const API_BASE_URL = (import.meta.env.VITE_ADMIN_API_BASE_URL ?? "").replace(/\/$/, "");
 
@@ -187,6 +215,78 @@ export async function fetchMetrics(token = getStoredAdminToken()): Promise<JobMe
     return (await response.json()) as JobMetrics;
   } catch {
     throw new Error(METRICS_UNAVAILABLE);
+  }
+}
+
+/**
+ * Fetch the effective configuration (env ⊕ override), grouped by section. Defensive:
+ * the endpoint is shipped by this track and may not exist on an older backend, so a
+ * 404 (or a non-JSON SPA fallback) throws `SETTINGS_UNAVAILABLE` and the page hides
+ * itself. 401 maps to the shared session-expiry sentinel.
+ */
+export async function fetchSettings(token = getStoredAdminToken()): Promise<SettingsView> {
+  const trimmed = token?.trim();
+  if (!trimmed) throw new Error("admin_access_key_required");
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/settings`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${trimmed}`, Accept: "application/json" },
+    });
+  } catch {
+    throw new Error(SETTINGS_UNAVAILABLE);
+  }
+
+  if (response.status === 401) throw new Error("admin_access_key_invalid");
+  if (response.status === 404) throw new Error(SETTINGS_UNAVAILABLE);
+  if (!response.ok) throw new Error(SETTINGS_UNAVAILABLE);
+
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) throw new Error(SETTINGS_UNAVAILABLE);
+
+  try {
+    return (await response.json()) as SettingsView;
+  } catch {
+    throw new Error(SETTINGS_UNAVAILABLE);
+  }
+}
+
+/**
+ * Persist editable setting overrides and return the new effective config. A 400 from
+ * the backend (non-editable key / invalid value) surfaces its message so the page can
+ * show what went wrong; 401 maps to the shared session-expiry sentinel.
+ */
+export async function updateSettings(
+  updates: Record<string, unknown>,
+  token = getStoredAdminToken(),
+): Promise<SettingsView> {
+  const trimmed = token?.trim();
+  if (!trimmed) throw new Error("admin_access_key_required");
+
+  const response = await fetch(`${API_BASE_URL}/api/settings`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${trimmed}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ updates }),
+  });
+
+  if (response.status === 401) throw new Error("admin_access_key_invalid");
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(`${response.status} ${response.statusText}${message ? `: ${message}` : ""}`);
+  }
+
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) throw new Error("admin_api_unavailable");
+
+  try {
+    return (await response.json()) as SettingsView;
+  } catch {
+    throw new Error("admin_api_unavailable");
   }
 }
 

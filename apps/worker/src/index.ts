@@ -1,6 +1,6 @@
 import { Worker as BullWorker } from "bullmq";
 import { pathToFileURL } from "node:url";
-import { createLarkRecordUpdater } from "@ticket-to-pr/core";
+import { createLarkRecordUpdater, getSettingField, resolveEffectiveValue } from "@ticket-to-pr/core";
 import { createPool, Repositories } from "@ticket-to-pr/db";
 import { AGENT_JOB_QUEUE, buildWorkerReliabilityOptions, type AgentJobPayload } from "@ticket-to-pr/queue";
 import { executeGstack } from "./executor-gstack.js";
@@ -18,11 +18,30 @@ import {
 } from "./workspace-lifecycle.js";
 import {
   processAgentJob,
+  type EffectiveJobSettings,
   type Executor,
   type ExecutorMode,
   type Publisher,
   type WorkerRepositories,
 } from "./worker.js";
+
+/**
+ * Resolve the EFFECTIVE per-job settings (env ⊕ DB override; Settings page) from a
+ * persisted overrides map. Reads the settings registry so the env keys / defaults /
+ * coercion stay in lockstep with the rest of the platform. Used per job and per
+ * sweep so an operator's live override applies without a worker restart.
+ */
+function resolveEffectiveJobSettings(overrides: Record<string, unknown>, env: WorkerEnv): EffectiveJobSettings {
+  const timeoutField = getSettingField("jobTimeoutSeconds");
+  const stagedField = getSettingField("highPriorityStaged");
+  const jobTimeoutSeconds =
+    timeoutField !== undefined
+      ? (resolveEffectiveValue(timeoutField, process.env, overrides) as number)
+      : env.jobTimeoutSeconds;
+  const highPriorityStaged =
+    stagedField !== undefined ? (resolveEffectiveValue(stagedField, process.env, overrides) as boolean) : true;
+  return { jobTimeoutSeconds, highPriorityStaged };
+}
 
 export function createWorker(env: WorkerEnv = readWorkerEnv()): BullWorker<AgentJobPayload> {
   if (!env.databaseUrl) throw new Error("DATABASE_URL is required");
@@ -96,6 +115,10 @@ export function createWorker(env: WorkerEnv = readWorkerEnv()): BullWorker<Agent
         heartbeatIntervalMs: env.runHeartbeatIntervalMs,
         gcWorkspaceOnSuccess: (jobId) =>
           gcSuccessfulWorkspace(jobId, { workspaceRoot: env.workspaceRoot, onError: lifecycleOnError }),
+        // Settings page: resolve the EFFECTIVE per-job timeout + Priority→staged
+        // mapping (env ⊕ DB override) once for THIS job so a live override applies
+        // without a worker restart.
+        loadJobSettings: async () => resolveEffectiveJobSettings((await repos.getAppSettings?.()) ?? {}, env),
       });
     },
     { connection: { url: env.redisUrl }, ...buildWorkerReliabilityOptions() },
@@ -121,17 +144,38 @@ export function createWorker(env: WorkerEnv = readWorkerEnv()): BullWorker<Agent
 export function startWorkspaceLifecycle(
   env: WorkerEnv = readWorkerEnv(),
   getActiveRunIds: () => ReadonlySet<string> = () => new Set<string>(),
+  // Settings page: optional reader for the persisted overrides so the sweep resolves
+  // the EFFECTIVE retention each tick. Omitted by callers without a DB connection,
+  // in which case the static env retention is used (behavior unchanged).
+  getAppSettings?: () => Promise<Record<string, unknown>>,
 ): WorkspaceLifecyclePollerHandle | null {
   if (env.workspaceSweepIntervalMs <= 0) return null;
-  const config: WorkspaceLifecycleConfig & { intervalMs: number; getActiveRunIds: () => ReadonlySet<string> } = {
+  const config: WorkspaceLifecycleConfig & {
+    intervalMs: number;
+    getActiveRunIds: () => ReadonlySet<string>;
+    resolveRetentionDays?: () => Promise<number>;
+  } = {
     workspaceRoot: env.workspaceRoot,
     failedRetentionDays: env.failedWorkspaceRetentionDays,
     intervalMs: env.workspaceSweepIntervalMs,
     getActiveRunIds,
+    resolveRetentionDays: getAppSettings
+      ? async () => resolveEffectiveRetentionDays(await getAppSettings(), env)
+      : undefined,
     onError: (context, error) =>
       console.warn(`workspace lifecycle ${context} failed:`, error instanceof Error ? error.message : error),
   };
   return startWorkspaceLifecyclePoller(config);
+}
+
+/**
+ * Resolve the EFFECTIVE `failedWorkspaceRetentionDays` (env ⊕ DB override) from a
+ * persisted overrides map via the settings registry, falling back to the env value.
+ */
+function resolveEffectiveRetentionDays(overrides: Record<string, unknown>, env: WorkerEnv): number {
+  const field = getSettingField("failedWorkspaceRetentionDays");
+  if (!field) return env.failedWorkspaceRetentionDays;
+  return resolveEffectiveValue(field, process.env, overrides) as number;
 }
 
 /**
@@ -154,9 +198,18 @@ export function startReconcile(repos: Repositories, env: WorkerEnv = readWorkerE
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const env = readWorkerEnv();
   createWorker(env);
+  // L1: periodic workspace retention sweep + orphan runner-container reap. When a DB
+  // is configured, give the sweep a settings reader so the retention window honors a
+  // live override (Settings page); otherwise it uses the static env retention.
   if (env.databaseUrl) {
-    startReconcile(new Repositories(createPool(env.databaseUrl)), env);
+    const lifecycleRepos = new Repositories(createPool(env.databaseUrl));
+    startReconcile(lifecycleRepos, env);
+    startWorkspaceLifecycle(
+      env,
+      () => new Set<string>(),
+      () => lifecycleRepos.getAppSettings(),
+    );
+  } else {
+    startWorkspaceLifecycle(env);
   }
-  // L1: periodic workspace retention sweep + orphan runner-container reap.
-  startWorkspaceLifecycle(env);
 }

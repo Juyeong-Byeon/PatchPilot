@@ -147,6 +147,10 @@ export function resolveGstackArgs(
 }
 
 export async function executeGstack(input: ExecutorInput, options: GstackExecutorOptions): Promise<AgentResult> {
+  // EFFECTIVE timeout for this job: prefer the per-job value resolved from env ⊕ DB
+  // override (Settings page) so a live override applies without a restart; fall back
+  // to the executor's startup-configured timeout.
+  const effectiveTimeoutSeconds = input.jobTimeoutSeconds ?? options.timeoutSeconds;
   const repositoryUrl = toRepositoryUrl(input.job.repository);
   const trustedBaseSha = await resolveRemoteTargetSha(repositoryUrl, input.job.targetBranch, options.githubToken);
   const workspaceMountSource = mapWorkspacePathForDockerMount(
@@ -166,7 +170,7 @@ export async function executeGstack(input: ExecutorInput, options: GstackExecuto
     gstackSkillSourceDir: options.gstackSkillSourceDir,
     job: input.job,
     run: input.run,
-    timeoutSeconds: options.timeoutSeconds,
+    timeoutSeconds: effectiveTimeoutSeconds,
     githubToken: options.githubToken,
   });
 
@@ -179,7 +183,7 @@ export async function executeGstack(input: ExecutorInput, options: GstackExecuto
     // reads the steering alongside the ticket. Undefined when there is none.
     retryGuidance: input.retryGuidance,
   });
-  await runCommand(command, input, ((options.timeoutSeconds ?? 3600) + 30) * 1000, 2000, {
+  await runCommand(command, input, ((effectiveTimeoutSeconds ?? 3600) + 30) * 1000, 2000, {
     signal: input.signal,
     containerName: runnerContainerName(input.run.runId),
   });

@@ -56,9 +56,14 @@ export type ExecutorMode = "single-pass" | "staged";
  * Route a job to an executor mode by ticket `priority`: `High` → `staged`
  * (quality over cost), everything else → `single-pass` (fast default). A safe
  * default keeps an unspecified/unknown priority on the cheap single-pass path.
+ *
+ * `highPriorityStaged` is the live, operator-tunable Priority→staged mapping
+ * (Settings page). When false, High is no longer routed to staged and every
+ * priority takes the fast single-pass path. Defaults to true for back-compat so a
+ * caller that omits it behaves exactly as before.
  */
-export function resolveExecutorMode(priority: Priority): ExecutorMode {
-  return priority === "High" ? "staged" : "single-pass";
+export function resolveExecutorMode(priority: Priority, highPriorityStaged = true): ExecutorMode {
+  return priority === "High" && highPriorityStaged ? "staged" : "single-pass";
 }
 
 export interface AppendExecutorLogInput {
@@ -83,6 +88,13 @@ export interface ExecutorInput {
    * Undefined on first attempts / retries without guidance.
    */
   retryGuidance?: string;
+  /**
+   * EFFECTIVE per-job runner timeout in seconds (env ⊕ DB override; Settings page).
+   * When set, the gstack executor uses it for THIS job so an operator's live override
+   * applies without a worker restart. Undefined falls back to the executor's
+   * startup-configured `options.timeoutSeconds` (back-compat).
+   */
+  jobTimeoutSeconds?: number;
 }
 
 // How often the worker polls for a cancel request while the runner executes.
@@ -187,6 +199,13 @@ export interface WorkerRepositories {
    * heartbeat_at=now()` over the existing pool.
    */
   touchRunHeartbeat?(runId: string): Promise<void>;
+  /**
+   * Read the persisted setting overrides (Settings page). Optional so test doubles
+   * and older repositories without it still satisfy the interface; index.ts uses it
+   * to resolve the EFFECTIVE per-job settings. The worker accesses it only through
+   * the injected `loadJobSettings` callback, never directly.
+   */
+  getAppSettings?(): Promise<Record<string, unknown>>;
 }
 
 export interface ProcessAgentJobOptions {
@@ -221,11 +240,29 @@ export interface ProcessAgentJobOptions {
   gcWorkspaceOnSuccess?: (jobId: string) => Promise<void>;
   /** Run-heartbeat cadence while the runner executes (L1). 0/undefined disables. */
   heartbeatIntervalMs?: number;
+  /**
+   * Resolve the EFFECTIVE per-job settings (env ⊕ DB override; Settings page) once at
+   * the start of THIS job. Injected by index.ts as a read of `repos.getAppSettings()`
+   * merged with env. When omitted (test doubles, mock worker) the worker uses the
+   * startup env defaults, so behavior with no overrides is identical to today.
+   */
+  loadJobSettings?: () => Promise<EffectiveJobSettings>;
   ids?: {
     runId?: () => string;
     artifactId?: (kind: string) => string;
     pullRequestId?: () => string;
   };
+}
+
+/**
+ * EFFECTIVE per-job settings resolved from env ⊕ DB override (Settings page). Read
+ * once at the start of each job so a live override applies without a redeploy.
+ */
+export interface EffectiveJobSettings {
+  /** Runner timeout in seconds for this job. */
+  jobTimeoutSeconds: number;
+  /** Whether Priority=High routes to the staged pipeline. */
+  highPriorityStaged: boolean;
 }
 
 export type FailureCategory = "policy" | "agent" | "publish" | "infra";
@@ -293,10 +330,19 @@ async function runAgentJob(payload: AgentJobPayload, options: ProcessAgentJobOpt
   const workspacePath = join(options.workspaceRoot ?? "/tmp/ticket-to-pr-worker", job.jobId, runId);
   await mkdir(workspacePath, { recursive: true });
 
+  // Settings page: resolve the EFFECTIVE per-job settings (env ⊕ DB override) once
+  // for this job so a live override applies without a worker restart. With no
+  // overrides present this returns the startup env defaults — behavior identical to
+  // today. Best-effort: a failed load falls back to defaults so settings reads never
+  // fail a job.
+  const jobSettings = await loadJobSettings(options);
+
   // Epic D / X3: route to a pipeline by priority (High → staged, else single-pass)
-  // unless an explicit GSTACK_ARGS override is in effect. Recorded on the run so the
-  // admin can read it back, and emitted as an event for the timeline.
-  const executorMode = options.executorModeOverride ?? resolveExecutorMode(job.priority);
+  // unless an explicit GSTACK_ARGS override is in effect. The Priority→staged mapping
+  // honors the live `highPriorityStaged` override. Recorded on the run so the admin
+  // can read it back, and emitted as an event for the timeline.
+  const executorMode =
+    options.executorModeOverride ?? resolveExecutorMode(job.priority, jobSettings.highPriorityStaged);
 
   // X4: operator retry-guidance to steer this attempt. Prefer the explicit payload
   // field (set by the api track on retry); fall back to a `retryGuidance` string in
@@ -480,6 +526,9 @@ async function runAgentJob(payload: AgentJobPayload, options: ProcessAgentJobOpt
         run,
         executorMode,
         retryGuidance,
+        // EFFECTIVE per-job timeout (env ⊕ override); the gstack executor prefers this
+        // over its startup-configured timeout so an override applies live.
+        jobTimeoutSeconds: jobSettings.jobTimeoutSeconds,
         appendLog: (log) => {
           detectStageBanners(log.text);
           return options.repos.appendLog({ jobId: job.jobId, runId: run.runId, ...log });
@@ -757,6 +806,28 @@ async function createPublishInput(
 
 export function createAttemptWorkBranch(jobId: string, attempt: number): string {
   return attempt > 1 ? `ticket-to-pr/${jobId}-attempt-${attempt}` : `ticket-to-pr/${jobId}`;
+}
+
+// Registry-aligned fallbacks used when no settings loader is injected (test doubles,
+// mock worker) or when the loader fails. Mirror env.ts defaults.
+const DEFAULT_JOB_TIMEOUT_SECONDS = 3600;
+const DEFAULT_HIGH_PRIORITY_STAGED = true;
+
+/**
+ * Resolve the EFFECTIVE per-job settings for this job. Calls the injected loader
+ * (index.ts reads getAppSettings() ⊕ env) once; on absence or failure falls back to
+ * the registry-aligned defaults so a settings read never fails the job and the
+ * no-override path is identical to today.
+ */
+async function loadJobSettings(options: ProcessAgentJobOptions): Promise<EffectiveJobSettings> {
+  if (!options.loadJobSettings) {
+    return { jobTimeoutSeconds: DEFAULT_JOB_TIMEOUT_SECONDS, highPriorityStaged: DEFAULT_HIGH_PRIORITY_STAGED };
+  }
+  try {
+    return await options.loadJobSettings();
+  } catch {
+    return { jobTimeoutSeconds: DEFAULT_JOB_TIMEOUT_SECONDS, highPriorityStaged: DEFAULT_HIGH_PRIORITY_STAGED };
+  }
 }
 
 /**

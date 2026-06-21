@@ -874,6 +874,53 @@ export class Repositories {
     };
   }
 
+  /**
+   * Read every persisted setting override as a key→value map. Values are stored as
+   * jsonb so they round-trip with their JSON type (number/boolean/string/array). An
+   * empty map (no overrides) means behavior is identical to env-only — the worker /
+   * api treat a missing key as "fall back to env".
+   */
+  async getAppSettings(): Promise<Record<string, unknown>> {
+    const result = await this.pool.query<{ key: string; value: unknown }>(`select key, value from app_settings`);
+    const settings: Record<string, unknown> = {};
+    for (const row of result.rows) {
+      settings[row.key] = row.value;
+    }
+    return settings;
+  }
+
+  /**
+   * Upsert each provided setting override, stamping updated_by/updated_at. Callers
+   * (the api) must have already validated the keys (EDITABLE_KEYS) and values
+   * (registry) — this method only persists. A single transaction so a multi-key save
+   * is all-or-nothing.
+   */
+  async setAppSettings(updates: Record<string, unknown>, actor: string): Promise<void> {
+    const entries = Object.entries(updates);
+    if (entries.length === 0) return;
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      for (const [key, value] of entries) {
+        await client.query(
+          `insert into app_settings(key, value, updated_by, updated_at)
+           values ($1, $2::jsonb, $3, now())
+           on conflict (key) do update set
+             value = excluded.value,
+             updated_by = excluded.updated_by,
+             updated_at = now()`,
+          [key, JSON.stringify(value), actor],
+        );
+      }
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async getRetryPreflight(jobId: string): Promise<RetryPreflight | null> {
     const result = await this.pool.query<{
       job_id: string;

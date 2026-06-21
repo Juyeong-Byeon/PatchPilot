@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ListChecks, Monitor, Moon, Pencil, ShieldCheck, Sun } from "lucide-react";
+import {
+  ChevronLeft,
+  ListChecks,
+  Monitor,
+  Moon,
+  Pencil,
+  Settings as SettingsIcon,
+  ShieldCheck,
+  Sun,
+} from "lucide-react";
 import adminLogo from "./assets/patchpilot-logo.svg";
 import {
   cancelJob,
@@ -25,6 +34,7 @@ import { cn } from "./lib/utils.js";
 import { isCompletedJob, isFailedJob, isNeedsReviewJob, isRunningPhase, type StatusFilter } from "./lib/status.js";
 import { applyTheme, getInitialTheme, storeTheme, type ThemePreference } from "./lib/theme.js";
 import { MetricsPanel } from "./components/MetricsPanel.js";
+import { SettingsPanel } from "./components/SettingsPanel.js";
 import { adminCopy, getInitialLocale, localeNames, storeLocale, type AdminCopy, type Locale } from "./i18n.js";
 
 const LIST_REFRESH_RUNNING_MS = 2000;
@@ -49,7 +59,7 @@ interface DetailState {
   artifacts: Artifact[];
 }
 
-type AdminRoute = { page: "list" } | { page: "detail"; jobId: string };
+type AdminRoute = { page: "list" } | { page: "detail"; jobId: string } | { page: "settings" };
 
 type StatusState =
   | { kind: "ready" }
@@ -313,12 +323,16 @@ export default function App() {
     navigate({ page: "list" });
   }
 
+  function openSettings() {
+    navigate({ page: "settings" });
+  }
+
   function refreshCurrentDetail() {
     if (!selectedJobId) return;
     void refreshDetail(selectedJobId, token);
   }
 
-  const pageTitle = route.page === "list" ? copy.jobs : copy.jobDetail;
+  const pageTitle = route.page === "settings" ? copy.settings : route.page === "list" ? copy.jobs : copy.jobDetail;
 
   // Onboarding gate: with no saved token (or after a session-expiry 401) render a
   // dedicated, centered access-key screen instead of the sidebar+content grid.
@@ -393,14 +407,18 @@ export default function App() {
           </div>
 
           <nav className="grid gap-1" aria-label={copy.appTitle}>
-            <button
-              className="interactive-card inline-flex h-9 items-center gap-2 rounded-lg border border-electric-blue/20 bg-mist-blue px-3 text-left text-[13px] font-medium text-cobalt-surface shadow-sm shadow-electric-blue/10 transition-colors hover:border-electric-blue/40 hover:bg-sage-wash"
-              type="button"
+            <NavItem
+              label={copy.jobs}
+              Icon={ListChecks}
+              active={route.page === "list" || route.page === "detail"}
               onClick={openJobList}
-            >
-              <ListChecks aria-hidden="true" size={16} strokeWidth={2.2} />
-              {copy.jobs}
-            </button>
+            />
+            <NavItem
+              label={copy.settings}
+              Icon={SettingsIcon}
+              active={route.page === "settings"}
+              onClick={openSettings}
+            />
           </nav>
 
           <div className="mt-auto grid gap-4">
@@ -558,7 +576,15 @@ export default function App() {
         </header>
 
         <main className="mx-auto w-full max-w-[var(--page-max-width)] flex-1 px-4 py-5 md:px-6">
-          {route.page === "list" ? (
+          {route.page === "settings" ? (
+            <SettingsPanel
+              token={token}
+              copy={copy}
+              locale={locale}
+              sessionExpired={sessionExpired}
+              onSessionExpired={handleSessionExpiry}
+            />
+          ) : route.page === "list" ? (
             <div className="grid gap-4">
               <MetricsPanel
                 token={token}
@@ -601,6 +627,7 @@ export default function App() {
 }
 
 function readRoute(): AdminRoute {
+  if (window.location.pathname === "/settings") return { page: "settings" };
   const match = window.location.pathname.match(/^\/jobs\/(.+)$/);
   if (!match) return { page: "list" };
 
@@ -612,7 +639,12 @@ function readRoute(): AdminRoute {
 }
 
 function navigate(route: AdminRoute) {
-  const path = route.page === "detail" ? `/jobs/${encodeURIComponent(route.jobId)}` : "/jobs";
+  const path =
+    route.page === "detail"
+      ? `/jobs/${encodeURIComponent(route.jobId)}`
+      : route.page === "settings"
+        ? "/settings"
+        : "/jobs";
   window.history.pushState(null, "", path);
   window.dispatchEvent(new Event("popstate"));
 }
@@ -683,6 +715,35 @@ function ThemeLocaleToggle({
         ))}
       </div>
     </div>
+  );
+}
+
+function NavItem({
+  label,
+  Icon,
+  active,
+  onClick,
+}: {
+  label: string;
+  Icon: typeof ListChecks;
+  active: boolean;
+  onClick(): void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-current={active ? "page" : undefined}
+      onClick={onClick}
+      className={cn(
+        "interactive-card inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-left text-[13px] font-medium transition-colors",
+        active
+          ? "border-electric-blue/20 bg-mist-blue text-cobalt-surface shadow-sm shadow-electric-blue/10 hover:border-electric-blue/40 hover:bg-sage-wash"
+          : "border-transparent bg-transparent text-charcoal hover:bg-mist-blue hover:text-forest-ink",
+      )}
+    >
+      <Icon aria-hidden="true" size={16} strokeWidth={2.2} />
+      {label}
+    </button>
   );
 }
 

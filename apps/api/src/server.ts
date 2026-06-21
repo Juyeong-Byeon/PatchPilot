@@ -13,11 +13,13 @@ import { handleGitHubPullRequestWebhook, type GitHubWebhookRepositories } from "
 import { handleLarkWebhook, type AgentQueue, type LarkWebhookInput } from "./lark-webhook.js";
 import { registerAdminRoutes, type AdminRepositories } from "./routes-admin.js";
 import { registerHealthRoutes, type HealthProbes } from "./routes-health.js";
+import { registerSettingsRoutes, type SettingsRepositories } from "./routes-settings.js";
 
 export interface ApiServerDependencies {
   repos: Pick<Repositories, "createJobFromTicket" | "appendEvent"> &
     Partial<AdminRepositories> &
-    Partial<GitHubWebhookRepositories>;
+    Partial<GitHubWebhookRepositories> &
+    Partial<SettingsRepositories>;
   queue: AgentQueue;
   adminToken?: string;
   larkWebhookSecret?: string;
@@ -51,6 +53,12 @@ export async function buildServer(deps: ApiServerDependencies): Promise<FastifyI
   await registerHealthRoutes(app, deps.healthProbes);
   if (deps.adminToken && hasAdminRepositories(deps.repos)) {
     await registerAdminRoutes(app, deps.repos, deps.queue, deps.adminToken);
+  }
+  // Settings routes require the admin token like /api/jobs. Registered only when the
+  // repository provides the settings methods so an older backend omits the routes and
+  // the admin degrades to a graceful 404.
+  if (deps.adminToken && hasSettingsRepositories(deps.repos)) {
+    await registerSettingsRoutes(app, deps.repos, deps.adminToken);
   }
   app.post<{ Body: LarkWebhookInput }>("/webhooks/lark", async (request, reply) => {
     // Hardened verifier (L5): prefers signed (HMAC + timestamp + nonce) requests,
@@ -169,6 +177,16 @@ function readRawBody(request: unknown): string {
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   void startServer();
+}
+
+function hasSettingsRepositories(
+  repos: Pick<Repositories, "createJobFromTicket" | "appendEvent"> & Partial<SettingsRepositories>,
+): repos is Pick<Repositories, "createJobFromTicket" | "appendEvent"> & SettingsRepositories {
+  return (
+    typeof repos.getAppSettings === "function" &&
+    typeof repos.setAppSettings === "function" &&
+    typeof repos.appendAuditEvent === "function"
+  );
 }
 
 function hasAdminRepositories(
