@@ -172,8 +172,17 @@ export function parseCancelResponse(value: unknown): { ok: boolean; phase: strin
  */
 export function parseVersionInfo(value: unknown): VersionInfo | null {
   if (!isRecord(value)) return null;
-  const { version, sha } = value;
+  const { version, sha, nodeEnv, executorMode, publisherMode, publicBaseUrl } = value;
   if (typeof version !== "string") return null;
   if (sha !== null && typeof sha !== "string") return null;
-  return { version, sha };
+  if (nodeEnv !== undefined && typeof nodeEnv !== "string") return null;
+  if (executorMode !== undefined && typeof executorMode !== "string") return null;
+  if (publisherMode !== undefined && typeof publisherMode !== "string") return null;
+  if (publicBaseUrl !== undefined && publicBaseUrl !== null && typeof publicBaseUrl !== "string") return null;
+  const parsed: VersionInfo = { version, sha };
+  if (nodeEnv !== undefined) parsed.nodeEnv = nodeEnv;
+  if (executorMode !== undefined) parsed.executorMode = executorMode;
+  if (publisherMode !== undefined) parsed.publisherMode = publisherMode;
+  if (publicBaseUrl !== undefined) parsed.publicBaseUrl = publicBaseUrl;
+  return parsed;
 }

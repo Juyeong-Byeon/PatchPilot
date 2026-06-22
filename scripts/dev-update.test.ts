@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 // @ts-expect-error — plain .mjs script, no type declarations.
-import { buildDevUpdatePlan, devServerCommands, hostDatabaseUrl } from "./dev-update.mjs";
+import {
+  buildDevRefreshPlan,
+  buildDevUpdatePlan,
+  devServerCommands,
+  dirtyTreeMessage,
+  hostDatabaseUrl,
+} from "./dev-update.mjs";
 
 describe("dev-update script", () => {
   it("rewrites the Docker postgres hostname for host-run migrations", () => {
@@ -24,6 +30,22 @@ describe("dev-update script", () => {
     expect(JSON.stringify(plan)).not.toContain("--build");
   });
 
+  it("plans a local refresh workflow that skips git fetch/pull", () => {
+    const plan = buildDevRefreshPlan({ DATABASE_URL: "postgres://u:p@postgres:5432/ticket_to_pr" });
+
+    expect(plan.map((step: { command: string; args: string[] }) => [step.command, step.args])).toEqual([
+      ["npm", ["install"]],
+      ["docker", ["compose", "up", "-d", "--wait", "postgres", "redis"]],
+      ["npm", ["--workspace", "@ticket-to-pr/db", "run", "migrate"]],
+      ["npm", ["run", "build"]],
+    ]);
+    expect(JSON.stringify(plan)).not.toContain("git");
+  });
+
+  it("points dirty worktrees at the no-pull refresh command", () => {
+    expect(dirtyTreeMessage()).toContain("npm run dev:refresh");
+  });
+
   it("points developers at the one-command watch loop", () => {
     expect(devServerCommands({ HOST_API_PORT: "3002" })).toEqual(["npm run dev:watch"]);
   });
@@ -31,6 +53,7 @@ describe("dev-update script", () => {
   it("is registered in package scripts", () => {
     const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
     expect(pkg.scripts["dev:update"]).toBe("node scripts/dev-update.mjs");
+    expect(pkg.scripts["dev:refresh"]).toBe("node scripts/dev-update.mjs --no-pull");
   });
 
   it("documents the development update workflow", () => {

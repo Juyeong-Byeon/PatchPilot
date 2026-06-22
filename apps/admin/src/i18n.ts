@@ -17,6 +17,14 @@ export const adminCopy = {
     // Accessible label for the deployed-build stamp in the sidebar footer (e.g.
     // "v0.1.0 · 1a2b3c4"). Lets operators verify which build is serving traffic.
     versionLabel: "배포 버전",
+    connectionLabel: "연결 정보",
+    connectionFrontend: "프론트",
+    connectionApi: "API",
+    connectionRequest: "요청",
+    connectionRuntime: "런타임",
+    connectionBuild: "빌드",
+    connectionProxy: "프록시",
+    connectionDirect: "직접",
     tokenLabel: "관리자 인증키",
     tokenPlaceholder: "인증키를 입력하세요",
     apply: "적용",
@@ -223,6 +231,14 @@ export const adminCopy = {
     // Accessible label for the deployed-build stamp in the sidebar footer (e.g.
     // "v0.1.0 · 1a2b3c4"). Lets operators verify which build is serving traffic.
     versionLabel: "Deployed version",
+    connectionLabel: "Connection",
+    connectionFrontend: "Frontend",
+    connectionApi: "API",
+    connectionRequest: "Request",
+    connectionRuntime: "Runtime",
+    connectionBuild: "Build",
+    connectionProxy: "Proxy",
+    connectionDirect: "Direct",
     tokenLabel: "Admin Access Key",
     tokenPlaceholder: "Enter access key",
     apply: "Apply",
@@ -513,8 +529,9 @@ export function translateFailureCategory(value: unknown, locale: Locale): string
   return failureCategoryLabels[locale][text] ?? text;
 }
 
-// Display label for an executor/pipeline mode badge. Unknown tokens fall back to
-// the raw value so a future backend mode still renders something legible.
+// Display label for an executor/pipeline mode badge. Missing/legacy run metadata
+// is reported as `unknown`; localize that bucket instead of leaking the raw token.
+// Other future backend mode tokens still fall back to the raw value.
 export function executorModeLabel(
   normalized: "single-pass" | "staged" | "other",
   raw: string,
@@ -526,6 +543,7 @@ export function executorModeLabel(
     case "staged":
       return copy.executorModeStaged;
     default:
+      if (raw.trim().toLowerCase() === "unknown") return copy.unknown;
       return raw;
   }
 }
@@ -558,7 +576,6 @@ const settingsFieldLabels: Record<Locale, Record<string, string>> = {
     repositoryAllowlist: "저장소 허용 목록",
     protectedPathDenylist: "보호 경로 차단 목록",
     jobTimeoutSeconds: "작업 타임아웃(초)",
-    highPriorityStaged: "High 우선순위 → 단계형 파이프라인",
     failedWorkspaceRetentionDays: "실패 워크스페이스 보존(일)",
     reconcileIntervalMs: "정합성 폴링 주기(ms)",
     runHeartbeatIntervalMs: "실행 하트비트 주기(ms)",
@@ -575,7 +592,6 @@ const settingsFieldLabels: Record<Locale, Record<string, string>> = {
     repositoryAllowlist: "Repository allowlist",
     protectedPathDenylist: "Protected path denylist",
     jobTimeoutSeconds: "Job timeout (seconds)",
-    highPriorityStaged: "High priority → staged pipeline",
     failedWorkspaceRetentionDays: "Failed workspace retention (days)",
     reconcileIntervalMs: "Reconcile interval (ms)",
     runHeartbeatIntervalMs: "Run heartbeat interval (ms)",

@@ -118,18 +118,6 @@ export const SETTINGS_FIELDS: readonly SettingField[] = [
     max: 86400,
     default: 3600,
   },
-  {
-    // When true, ticket Priority=High routes to the staged pipeline (the
-    // Priority→staged mapping the worker applies in resolveExecutorMode).
-    key: "highPriorityStaged",
-    section: "execution",
-    editable: true,
-    kind: "bool",
-    envKeys: ["HIGH_PRIORITY_STAGED"],
-    applies: "live",
-    default: true,
-  },
-
   // ── lifecycle ──────────────────────────────────────────────────────────────
   {
     // Editable, applies live: read each sweep tick so retention changes apply

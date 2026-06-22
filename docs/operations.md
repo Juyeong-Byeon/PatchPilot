@@ -18,6 +18,12 @@ The Lark webhook payload must include:
 | `Status`              | single select/text | Must be `Progress` to enqueue work.    |
 | `Agent Run Requested` | checkbox           | Must be `true` to enqueue work.        |
 
+Optional ticket input fields:
+
+| Field             | Type     | Meaning                                                                                                    |
+| ----------------- | -------- | ---------------------------------------------------------------------------------------------------------- |
+| `Staged Pipeline` | checkbox | When `true`, run this ticket through the staged pipeline. `Priority=High` does not imply staged execution. |
+
 `recordId` and `triggerVersion` are required envelope fields. Together they form
 the idempotency key, so replays of the same trigger version do not create a
 second active job.
@@ -126,8 +132,15 @@ npm run dev:update
 - runs database migrations from the host using a `localhost` database URL;
 - runs `npm run build` so workspace `dist/` outputs match the updated source.
 
-It does not rebuild API/worker Docker images. After it finishes, run the app
-from the host checkout with:
+It does not rebuild API/worker Docker images. It refuses to pull over
+uncommitted changes. If your tree is dirty and you only need the non-git refresh
+steps, run:
+
+```bash
+npm run dev:refresh
+```
+
+After either command finishes, run the app from the host checkout with:
 
 ```bash
 npm run dev:watch
@@ -144,11 +157,18 @@ code; the admin image is rebuilt only when the frontend container/dependency
 environment changes.
 
 Use `HOST_API_PORT` from `.env`; `dev:watch` passes that value as the API `PORT`
-and points the Docker-managed frontend proxy at `host.docker.internal:<port>`.
-Open the frontend at `http://localhost:${HOST_ADMIN_PORT:-5173}`. If exposing it
+and points the Docker-managed frontend proxy at `host.docker.internal:<port>`
+through `ADMIN_API_PROXY_TARGET`. Open the frontend at
+`http://localhost:${HOST_ADMIN_PORT:-5173}`. If exposing it
 through Cloudflare Tunnel or Tailnet, point the tunnel at `HOST_ADMIN_PORT` and
 set `ADMIN_ALLOWED_HOSTS` to the stable host or a safe suffix such as
 `.trycloudflare.com`.
+
+The Admin UI displays its local wiring in the top bar: frontend origin, API
+target, proxy/direct request mode, runtime modes, and build. If multiple Vite or
+Docker frontends are open, check that badge first. Leave
+`VITE_ADMIN_API_BASE_URL` blank for local proxy mode; set it only when the
+browser should call a separate API origin directly.
 
 To restart only the Docker-managed frontend, run:
 
@@ -203,7 +223,9 @@ Use real mode only against a disposable test repository in the allowlist.
    ```bash
    GSTACK_INSTALL_COMMAND='npm install -g @openai/codex@0.141.0' \
    GSTACK_COMMAND=node \
-   GSTACK_ARGS=/opt/runner/apps/runner/dist/codex-agent-runner.js \
+   GSTACK_ARGS= \
+   GSTACK_SINGLE_ARGS=/opt/runner/apps/runner/dist/codex-agent-runner.js \
+   GSTACK_STAGED_ARGS=/opt/runner/apps/runner/dist/gstack-staged-runner.js \
    CODEX_AUTH_FILE="$HOME/.codex/auth.json" \
    CODEX_CONFIG_FILE="$HOME/.codex/config.toml" \
    CODEX_SKILLS_DIR="$HOME/.codex/skills" \
@@ -216,15 +238,15 @@ Use real mode only against a disposable test repository in the allowlist.
    container as read-only seed inputs. `GSTACK_SKILL_SOURCE_DIR` should point at
    the gstack checkout root so Codex skill symlinks can resolve helper binaries.
    In `.env` (no shell expansion) use absolute paths, not `$HOME`. To run the
-   staged gstack pipeline (plan → implement → review → verify → document) keep
-   `GSTACK_COMMAND=node` and set
-   `GSTACK_ARGS=/opt/runner/apps/runner/dist/gstack-staged-runner.js` instead of
-   the single-pass `codex-agent-runner.js`. Staged runs cost ~4–5× the tokens
-   (four engineering passes plus a short PR-description pass) and a failing verify
-   stage fails the run. The final document stage authors the PR description and is
-   best-effort (never blocks the PR). A cancel request stops the running runner
-   container mid-execution and records the cancelled phase.
-   Roll back by pointing `GSTACK_ARGS` at `codex-agent-runner.js`.
+   staged gstack pipeline (plan → implement → review → verify → document) for a
+   specific ticket, leave `GSTACK_ARGS` blank, keep `GSTACK_STAGED_ARGS` pointed
+   at `gstack-staged-runner.js`, and set the ticket's `Staged Pipeline` checkbox
+   to `true`. Staged runs cost ~4–5× the tokens (four engineering passes plus a
+   short PR-description pass) and a failing verify stage fails the run. The final
+   document stage authors the PR description and is best-effort (never blocks the
+   PR). A cancel request stops the running runner container mid-execution and
+   records the cancelled phase. `GSTACK_ARGS` is still supported as a global
+   override when you intentionally want every job to use one runner entrypoint.
    Do not use `EXECUTOR_MODE=gstack` until `docker run --rm
 ticket-to-pr-runner:local sh -lc 'command -v codex'` succeeds, or until
    `GSTACK_COMMAND` points at another compatible executable in the image.
@@ -351,8 +373,9 @@ npm run doctor
 ```
 
 `doctor` rejects placeholder secrets and, in real mode, checks the runner
-mounts; it does not call Lark/GitHub, so also confirm the live checks noted per
-secret below.
+mounts. Use `npm run doctor:strict` before real-mode runs when warnings such as
+literal `$HOME`/`~` mount paths should fail the check. It does not call
+Lark/GitHub, so also confirm the live checks noted per secret below.
 
 ### Admin console — `ADMIN_TOKEN`
 

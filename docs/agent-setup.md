@@ -67,6 +67,10 @@ API readiness (http://localhost:3000/api/ready):
   HTTP 200 {"ok":true,"checks":{"database":"ok","redis":"ok"}}
 ```
 
+If `.env` sets `HOST_API_PORT`, use that port in the expected URL. `npm run
+status -- --strict` exits non-zero when the API, admin frontend, worker service,
+or stale-image guard is unhealthy.
+
 You can also probe directly:
 
 ```bash
@@ -84,13 +88,11 @@ curl -fsS http://localhost:3000/api/jobs -H "Authorization: Bearer change-me-adm
 ## 3. Run the code checks
 
 ```bash
-npm run typecheck
-npm test
+npm run verify
 ```
 
-Expected: typecheck prints nothing and exits 0; tests report all files passed
-(one DB-integration test is skipped unless `DATABASE_URL` points at a live
-Postgres — that is normal).
+Expected: format, typecheck, lint, tests, build, and secret scan all pass. The
+mock e2e smoke is separate because it requires an already-running stack.
 
 ## 4. Common operations
 
@@ -100,6 +102,7 @@ npm run down       # stop the stack (data preserved)
 npm run setup      # bring it back up
 npm run reset:db   # destructive: wipe the database volume and re-migrate
 npm run doctor     # re-validate Docker + .env without touching the stack
+npm run doctor:strict # fail on preflight warnings for real-mode readiness
 ```
 
 ## 5. Going beyond mock mode (optional)

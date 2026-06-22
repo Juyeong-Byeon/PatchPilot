@@ -16,7 +16,8 @@ describe("dev-watch script", () => {
     expect(plan).not.toContainEqual(expect.objectContaining({ args: expect.arrayContaining(["--build", "api"]) }));
     expect(plan).not.toContainEqual(expect.objectContaining({ args: expect.arrayContaining(["--build", "worker"]) }));
     expect(plan.at(-1)?.env).toMatchObject({
-      VITE_ADMIN_API_BASE_URL: "http://host.docker.internal:3002",
+      ADMIN_API_PROXY_TARGET: "http://host.docker.internal:3002",
+      VITE_ADMIN_API_BASE_URL: "",
     });
   });
 
@@ -24,7 +25,8 @@ describe("dev-watch script", () => {
     const plan = buildDevWatchSetupPlan({ HOST_API_PORT: "3002", VITE_ADMIN_API_BASE_URL: "" });
 
     expect(plan.at(-1)?.env).toMatchObject({
-      VITE_ADMIN_API_BASE_URL: "http://host.docker.internal:3002",
+      ADMIN_API_PROXY_TARGET: "http://host.docker.internal:3002",
+      VITE_ADMIN_API_BASE_URL: "",
     });
   });
 

@@ -24,7 +24,7 @@ function readVersionBody(res: LightMyRequestResponse): VersionInfo {
   const { version, sha } = body as Record<string, unknown>;
   if (typeof version !== "string") throw new Error("version is not a string");
   if (sha !== null && typeof sha !== "string") throw new Error("sha is neither string nor null");
-  return { version, sha };
+  return body as VersionInfo;
 }
 
 describe("version routes", () => {
@@ -34,6 +34,12 @@ describe("version routes", () => {
     GIT_SHA: process.env.GIT_SHA,
     APP_VERSION: process.env.APP_VERSION,
     npm_package_version: process.env.npm_package_version,
+    NODE_ENV: process.env.NODE_ENV,
+    EXECUTOR_MODE: process.env.EXECUTOR_MODE,
+    WORKER_EXECUTOR_MODE: process.env.WORKER_EXECUTOR_MODE,
+    PUBLISHER_MODE: process.env.PUBLISHER_MODE,
+    WORKER_PUBLISHER_MODE: process.env.WORKER_PUBLISHER_MODE,
+    PUBLIC_BASE_URL: process.env.PUBLIC_BASE_URL,
   };
   function restore(key: keyof typeof snapshot): void {
     const value = snapshot[key];
@@ -97,5 +103,20 @@ describe("version routes", () => {
     const app = await buildVersionApp();
     const res = await app.inject({ method: "GET", url: "/api/version" });
     expect(readVersionBody(res).version).toBe("0.0.0");
+  });
+
+  it("returns non-secret local runtime connection context", async () => {
+    process.env.NODE_ENV = "development";
+    process.env.EXECUTOR_MODE = "gstack";
+    process.env.PUBLISHER_MODE = "gstack";
+    process.env.PUBLIC_BASE_URL = "http://localhost:3000";
+    const app = await buildVersionApp();
+    const res = await app.inject({ method: "GET", url: "/api/version" });
+    expect(readVersionBody(res)).toMatchObject({
+      nodeEnv: "development",
+      executorMode: "gstack",
+      publisherMode: "github",
+      publicBaseUrl: "http://localhost:3000",
+    });
   });
 });

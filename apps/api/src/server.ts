@@ -38,8 +38,12 @@ export interface ApiServerDependencies {
   healthProbes?: HealthProbes;
 }
 
+export function resolveFastifyLoggerOption(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.VITEST === "true" || env.NODE_ENV === "test" ? false : true;
+}
+
 export async function buildServer(deps: ApiServerDependencies): Promise<FastifyInstance> {
-  const app = Fastify({ logger: true });
+  const app = Fastify({ logger: resolveFastifyLoggerOption() });
   installRawJsonBodyParser(app);
   const larkWebhookSecret = deps.larkWebhookSecret?.trim();
   if (!larkWebhookSecret && deps.allowUnauthenticatedLarkWebhook !== true) {

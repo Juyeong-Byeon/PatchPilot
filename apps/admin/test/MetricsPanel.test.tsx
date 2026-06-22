@@ -74,6 +74,21 @@ describe("MetricsPanel", () => {
     expect(screen.getByText("12")).toBeInTheDocument();
   });
 
+  it("localizes unknown executor-mode buckets instead of showing the raw token", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      metricsResponse({
+        totalJobs: 3,
+        executorModeDistribution: { unknown: 3 },
+      }),
+    );
+
+    render(<MetricsPanel {...baseProps} />);
+    await flush();
+
+    expect(screen.getByText(adminCopy.ko.unknown)).toBeInTheDocument();
+    expect(screen.queryByText("unknown")).not.toBeInTheDocument();
+  });
+
   it("hides the panel on a 404 (endpoint not deployed yet)", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(rawResponse(404));
     const { container } = render(<MetricsPanel {...baseProps} />);

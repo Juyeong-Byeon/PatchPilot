@@ -43,7 +43,11 @@ export function hostDevelopmentEnv(env = {}) {
 }
 
 export function adminProxyTarget(env = {}) {
-  return env.VITE_ADMIN_API_BASE_URL || `http://host.docker.internal:${hostDevelopmentEnv(env).PORT}`;
+  return (
+    env.ADMIN_API_PROXY_TARGET ||
+    env.VITE_ADMIN_API_BASE_URL ||
+    `http://host.docker.internal:${hostDevelopmentEnv(env).PORT}`
+  );
 }
 
 export function buildDevWatchSetupPlan(env = {}) {
@@ -54,7 +58,7 @@ export function buildDevWatchSetupPlan(env = {}) {
     {
       command: "docker",
       args: ["compose", "up", "-d", "--build", "admin"],
-      env: { VITE_ADMIN_API_BASE_URL: adminProxyTarget(env) },
+      env: { ADMIN_API_PROXY_TARGET: adminProxyTarget(env), VITE_ADMIN_API_BASE_URL: "" },
     },
   ];
 }
@@ -121,6 +125,7 @@ async function main() {
   console.log("\nStarting watch builds and host-run API/worker dev servers...");
   console.log(`  API port: ${hostEnv.PORT}`);
   console.log(`  Admin frontend: Docker service \`admin\` on http://localhost:${adminPort}`);
+  console.log(`  Admin API wiring: browser /api -> ${adminProxyTarget(env)}`);
   const children = new Set();
   process.once("SIGINT", () => shutdown(children, 0));
   process.once("SIGTERM", () => shutdown(children, 0));

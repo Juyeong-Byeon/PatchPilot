@@ -19,6 +19,9 @@ import {
   fetchJobEvents,
   fetchJobLogs,
   fetchJobs,
+  getAdminApiDisplayUrl,
+  getAdminApiRequestMode,
+  getAdminFrontendOrigin,
   getStoredAdminToken,
   getVersion,
   retryJob,
@@ -46,6 +49,7 @@ import {
 import { applyTheme, getInitialTheme, storeTheme, type ThemePreference } from "./lib/theme.js";
 import { MetricsPanel } from "./components/MetricsPanel.js";
 import { SettingsPanel } from "./components/SettingsPanel.js";
+import { ConnectionBadge } from "./components/ConnectionBadge.js";
 import { VersionBadge } from "./components/VersionBadge.js";
 import { adminCopy, getInitialLocale, storeLocale, type AdminCopy, type Locale } from "./i18n.js";
 import { createQueryClient } from "./lib/query-client.js";
@@ -186,6 +190,9 @@ function AppInner() {
     retry: false,
   });
   const version: VersionInfo | null = versionQuery.data ?? null;
+  const frontendOrigin = useMemo(() => getAdminFrontendOrigin(), []);
+  const apiDisplayUrl = useMemo(() => getAdminApiDisplayUrl(), []);
+  const apiRequestMode = useMemo(() => getAdminApiRequestMode(), []);
 
   const selectedJob = useMemo(
     () => (route.page === "detail" ? (detail.job ?? jobs.find((job) => job.id === route.jobId) ?? null) : null),
@@ -431,6 +438,14 @@ function AppInner() {
             ) : null}
           </div>
         </Card>
+        <ConnectionBadge
+          frontendOrigin={frontendOrigin}
+          apiDisplayUrl={apiDisplayUrl}
+          requestMode={apiRequestMode}
+          version={version}
+          copy={copy}
+          className="mt-3 w-full max-w-[420px]"
+        />
       </div>
     );
   }
@@ -521,67 +536,77 @@ function AppInner() {
       <div className="flex min-w-0 flex-col">
         <header className="admin-topbar border-b border-hairline-gray bg-linen-white/86">
           <section className="mx-auto max-w-[var(--page-max-width)] px-4 py-5 md:px-6">
-            <div className="min-w-0">
-              <div className="flex min-w-0 items-start gap-3">
-                {route.page === "detail" ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    aria-label={copy.backToJobs}
-                    title={copy.backToJobs}
-                    onClick={openJobList}
-                  >
-                    <ChevronLeft data-icon aria-hidden="true" strokeWidth={2.3} />
-                  </Button>
+            <div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+              <div className="min-w-0">
+                <div className="flex min-w-0 items-start gap-3">
+                  {route.page === "detail" ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label={copy.backToJobs}
+                      title={copy.backToJobs}
+                      onClick={openJobList}
+                    >
+                      <ChevronLeft data-icon aria-hidden="true" strokeWidth={2.3} />
+                    </Button>
+                  ) : null}
+                  <div className="min-w-0">
+                    <p className="text-[12px] font-medium leading-4 text-cobalt-surface">{copy.appEyebrow}</p>
+                    <h1 className="mt-1 truncate text-[28px] font-semibold leading-[1.12] text-forest-ink md:text-[34px]">
+                      {pageTitle}
+                    </h1>
+                  </div>
+                </div>
+                {route.page === "list" ? (
+                  <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label={copy.filterJobsLabel}>
+                    <MetricPill
+                      label={copy.totalJobs}
+                      value={jobStats.total}
+                      active={statusFilter === "all"}
+                      onClick={() => setStatusFilter("all")}
+                    />
+                    <MetricPill
+                      label={copy.runningJobs}
+                      value={jobStats.running}
+                      active={statusFilter === "running"}
+                      onClick={() => setStatusFilter("running")}
+                    />
+                    <MetricPill
+                      label={copy.needsInputJobs}
+                      value={jobStats.needsInput}
+                      active={statusFilter === "needsInput"}
+                      onClick={() => setStatusFilter("needsInput")}
+                    />
+                    <MetricPill
+                      label={copy.needsReviewJobs}
+                      value={jobStats.needsReview}
+                      active={statusFilter === "needsReview"}
+                      onClick={() => setStatusFilter("needsReview")}
+                    />
+                    <MetricPill
+                      label={copy.failedJobs}
+                      value={jobStats.failed}
+                      active={statusFilter === "failed"}
+                      onClick={() => setStatusFilter("failed")}
+                    />
+                    <MetricPill
+                      label={copy.completedJobs}
+                      value={jobStats.completed}
+                      active={statusFilter === "completed"}
+                      onClick={() => setStatusFilter("completed")}
+                    />
+                  </div>
                 ) : null}
-                <div className="min-w-0">
-                  <p className="text-[12px] font-medium leading-4 text-cobalt-surface">{copy.appEyebrow}</p>
-                  <h1 className="mt-1 truncate text-[28px] font-semibold leading-[1.12] text-forest-ink md:text-[34px]">
-                    {pageTitle}
-                  </h1>
-                </div>
               </div>
-              {route.page === "list" ? (
-                <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label={copy.filterJobsLabel}>
-                  <MetricPill
-                    label={copy.totalJobs}
-                    value={jobStats.total}
-                    active={statusFilter === "all"}
-                    onClick={() => setStatusFilter("all")}
-                  />
-                  <MetricPill
-                    label={copy.runningJobs}
-                    value={jobStats.running}
-                    active={statusFilter === "running"}
-                    onClick={() => setStatusFilter("running")}
-                  />
-                  <MetricPill
-                    label={copy.needsInputJobs}
-                    value={jobStats.needsInput}
-                    active={statusFilter === "needsInput"}
-                    onClick={() => setStatusFilter("needsInput")}
-                  />
-                  <MetricPill
-                    label={copy.needsReviewJobs}
-                    value={jobStats.needsReview}
-                    active={statusFilter === "needsReview"}
-                    onClick={() => setStatusFilter("needsReview")}
-                  />
-                  <MetricPill
-                    label={copy.failedJobs}
-                    value={jobStats.failed}
-                    active={statusFilter === "failed"}
-                    onClick={() => setStatusFilter("failed")}
-                  />
-                  <MetricPill
-                    label={copy.completedJobs}
-                    value={jobStats.completed}
-                    active={statusFilter === "completed"}
-                    onClick={() => setStatusFilter("completed")}
-                  />
-                </div>
-              ) : null}
+              <ConnectionBadge
+                frontendOrigin={frontendOrigin}
+                apiDisplayUrl={apiDisplayUrl}
+                requestMode={apiRequestMode}
+                version={version}
+                copy={copy}
+                className="w-full xl:w-[360px]"
+              />
             </div>
           </section>
         </header>

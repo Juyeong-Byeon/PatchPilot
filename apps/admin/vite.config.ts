@@ -15,9 +15,10 @@ function parseAllowedHosts(value: string | undefined) {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, rootDir, "");
-  const apiBaseUrl = env.VITE_ADMIN_API_BASE_URL || process.env.VITE_ADMIN_API_BASE_URL;
+  const browserApiBaseUrl = env.VITE_ADMIN_API_BASE_URL || process.env.VITE_ADMIN_API_BASE_URL || "";
+  const explicitProxyTarget = process.env.ADMIN_API_PROXY_TARGET || env.ADMIN_API_PROXY_TARGET;
   const apiPort = process.env.HOST_API_PORT || env.HOST_API_PORT || "3000";
-  const proxyTarget = apiBaseUrl || `http://localhost:${apiPort}`;
+  const proxyTarget = explicitProxyTarget || browserApiBaseUrl || `http://localhost:${apiPort}`;
   const allowedHosts = parseAllowedHosts(
     process.env.ADMIN_ALLOWED_HOSTS ||
       env.ADMIN_ALLOWED_HOSTS ||
@@ -28,6 +29,10 @@ export default defineConfig(({ mode }) => {
   return {
     envDir: rootDir,
     plugins: [react(), tailwindcss()],
+    define: {
+      __PATCHPILOT_ADMIN_API_DISPLAY_URL__: JSON.stringify(proxyTarget),
+      __PATCHPILOT_ADMIN_API_REQUEST_MODE__: JSON.stringify(browserApiBaseUrl ? "direct" : "proxy"),
+    },
     server: {
       ...(allowedHosts?.length ? { allowedHosts } : {}),
       proxy: {

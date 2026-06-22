@@ -41,14 +41,6 @@ function settingsResponse(overrideTimeout?: number) {
               min: 60,
               max: 86400,
             },
-            {
-              key: "highPriorityStaged",
-              value: true,
-              editable: true,
-              kind: "bool",
-              applies: "live",
-              source: "default",
-            },
           ],
         },
       ],
@@ -186,8 +178,10 @@ describe("SettingsPanel", () => {
     expect(timeout.type).toBe("number");
     expect(timeout.value).toBe("1800");
 
-    // Bool field is a checkbox.
-    expect(screen.getByLabelText("highPriorityStaged")).toBeInTheDocument();
+    // The old priority-to-pipeline mapping is intentionally gone; priority alone
+    // must not imply staged execution.
+    expect(screen.queryByLabelText("highPriorityStaged")).not.toBeInTheDocument();
+    expect(screen.queryByText("High 우선순위 → 단계형 파이프라인")).not.toBeInTheDocument();
   });
 
   it("PUTs only changed values and shows success", async () => {

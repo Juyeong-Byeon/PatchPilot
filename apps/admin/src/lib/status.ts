@@ -81,10 +81,10 @@ export function resolvePrimaryStatus(job: { phase?: unknown; outcome?: unknown }
   const outcome = String(job.outcome ?? "");
 
   // A requested-but-not-finalized cancel keeps outcome="Running"; surface the
-  // cancel intent so the badge never reads "Running" after a cancel. Both in-flight
-  // cancel phases (CancelRequested / Cancelling) collapse to one operator-facing
-  // state ("취소 중") — the distinction is internal, not operator-relevant.
-  if (isCancellingPhase(phase)) return "Cancelling";
+  // cancellation outcome so the badge never reads "Running" after a cancel. Both
+  // in-flight cancel phases collapse to "Cancelled" in the operator badge; the
+  // internal distinction remains visible in events/logs if needed.
+  if (isCancellingPhase(phase)) return "Cancelled";
 
   // Parked on a human answer → one dedicated state. Checked before NeedsReview and
   // before the generic outcome handling so a parked job never reads as "Running".

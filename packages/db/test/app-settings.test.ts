@@ -28,12 +28,12 @@ describe.skipIf(!connectionString)("Repositories app settings", () => {
 
   it("upserts overrides with their jsonb type and stamps the actor", async () => {
     await pool.query("delete from app_settings");
-    await repos.setAppSettings({ jobTimeoutSeconds: 600, highPriorityStaged: false }, "admin");
-    expect(await repos.getAppSettings()).toEqual({ jobTimeoutSeconds: 600, highPriorityStaged: false });
+    await repos.setAppSettings({ jobTimeoutSeconds: 600 }, "admin");
+    expect(await repos.getAppSettings()).toEqual({ jobTimeoutSeconds: 600 });
 
     // A second write upserts the same key and records updated_by.
     await repos.setAppSettings({ jobTimeoutSeconds: 900 }, "operator");
-    expect(await repos.getAppSettings()).toEqual({ jobTimeoutSeconds: 900, highPriorityStaged: false });
+    expect(await repos.getAppSettings()).toEqual({ jobTimeoutSeconds: 900 });
     const row = await pool.query<{ updated_by: string }>(
       "select updated_by from app_settings where key = 'jobTimeoutSeconds'",
     );

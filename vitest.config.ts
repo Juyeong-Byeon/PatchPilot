@@ -4,6 +4,11 @@ export default defineConfig({
   test: {
     include: ["packages/**/*.test.ts", "apps/**/*.test.ts", "apps/**/*.test.tsx", "scripts/**/*.test.ts"],
     environment: "node",
+    environmentOptions: {
+      jsdom: {
+        url: "http://localhost:5173",
+      },
+    },
     passWithNoTests: true,
     // Global test setup (e.g. the React Query microtask scheduler — see
     // vitest.setup.ts). Production code does not depend on it.
@@ -15,7 +20,7 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "html"],
       reportsDirectory: "coverage",
-      include: ["packages/*/src/**", "apps/*/src/**"],
+      include: ["packages/*/src/**/*.{ts,tsx}", "apps/*/src/**/*.{ts,tsx}"],
     },
   },
 });

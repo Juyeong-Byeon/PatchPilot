@@ -30,7 +30,7 @@ const completedResult = {
   retryable: false,
 };
 
-function jobWith(priority: "Low" | "Normal" | "High") {
+function jobWith(priority: "Low" | "Normal" | "High", rawFields: Record<string, unknown> = {}) {
   return {
     jobId: "job_1",
     ticketSnapshotId: "ts_1",
@@ -44,7 +44,7 @@ function jobWith(priority: "Low" | "Normal" | "High") {
     priority,
     phase: "Queued" as const,
     outcome: "Queued" as const,
-    rawFields: {},
+    rawFields,
   };
 }
 
@@ -68,18 +68,13 @@ function createRepos(job: ReturnType<typeof jobWith>) {
 }
 
 describe("resolveExecutorMode", () => {
-  it("routes High to staged and everything else to single-pass", () => {
-    expect(resolveExecutorMode("High")).toBe("staged");
-    expect(resolveExecutorMode("Normal")).toBe("single-pass");
-    expect(resolveExecutorMode("Low")).toBe("single-pass");
+  it("keeps priority separate from pipeline selection", () => {
+    expect(resolveExecutorMode(false)).toBe("single-pass");
+    expect(resolveExecutorMode(true)).toBe("staged");
   });
 
-  it("honors the highPriorityStaged mapping (Settings override)", () => {
-    // Default (true) routes High to staged; false sends High to single-pass.
-    expect(resolveExecutorMode("High", true)).toBe("staged");
-    expect(resolveExecutorMode("High", false)).toBe("single-pass");
-    // Non-High is unaffected by the flag.
-    expect(resolveExecutorMode("Normal", false)).toBe("single-pass");
+  it("does not infer staged mode from a High priority ticket", () => {
+    expect(resolveExecutorMode(false)).toBe("single-pass");
   });
 });
 
@@ -98,8 +93,8 @@ describe("resolveGstackArgs", () => {
 });
 
 describe("processAgentJob mode routing", () => {
-  async function run(priority: "Low" | "Normal" | "High") {
-    const job = jobWith(priority);
+  async function run(priority: "Low" | "Normal" | "High", rawFields: Record<string, unknown> = {}) {
+    const job = jobWith(priority, rawFields);
     const repos = createRepos(job);
     const workspaceRoot = await mkdtemp(join(tmpdir(), "ticket-to-pr-mode-"));
     tempDirs.push(workspaceRoot);
@@ -137,14 +132,30 @@ describe("processAgentJob mode routing", () => {
     return { repos, seenMode };
   }
 
-  it("picks staged for High priority and records it on the run + event + executor", async () => {
+  it("picks single-pass for High priority when staged pipeline is not explicitly requested", async () => {
     const { repos, seenMode } = await run("High");
+    expect(seenMode).toBe("single-pass");
+    expect(repos.createRun).toHaveBeenCalledWith(expect.objectContaining({ executorMode: "single-pass" }));
+    expect(repos.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: "worker.executor_mode",
+        metadata: expect.objectContaining({ executorMode: "single-pass", priority: "High" }),
+      }),
+    );
+  });
+
+  it("picks staged only when the ticket explicitly requests the staged pipeline", async () => {
+    const { repos, seenMode } = await run("Normal", { "Staged Pipeline": true });
     expect(seenMode).toBe("staged");
     expect(repos.createRun).toHaveBeenCalledWith(expect.objectContaining({ executorMode: "staged" }));
     expect(repos.appendEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         eventType: "worker.executor_mode",
-        metadata: expect.objectContaining({ executorMode: "staged", priority: "High" }),
+        metadata: expect.objectContaining({
+          executorMode: "staged",
+          priority: "Normal",
+          stagedPipelineRequested: true,
+        }),
       }),
     );
   });
@@ -199,10 +210,7 @@ describe("processAgentJob mode routing", () => {
 });
 
 describe("processAgentJob effective settings (env ⊕ override)", () => {
-  async function runWithSettings(
-    priority: "Low" | "Normal" | "High",
-    settings: { jobTimeoutSeconds: number; highPriorityStaged: boolean },
-  ) {
+  async function runWithSettings(priority: "Low" | "Normal" | "High", settings: { jobTimeoutSeconds: number }) {
     const job = jobWith(priority);
     const repos = createRepos(job);
     const workspaceRoot = await mkdtemp(join(tmpdir(), "ticket-to-pr-settings-"));
@@ -245,12 +253,12 @@ describe("processAgentJob effective settings (env ⊕ override)", () => {
   }
 
   it("threads the effective per-job timeout into the executor", async () => {
-    const { seenTimeout } = await runWithSettings("Normal", { jobTimeoutSeconds: 600, highPriorityStaged: true });
+    const { seenTimeout } = await runWithSettings("Normal", { jobTimeoutSeconds: 600 });
     expect(seenTimeout).toBe(600);
   });
 
-  it("routes High to single-pass when highPriorityStaged override is false", async () => {
-    const { seenMode } = await runWithSettings("High", { jobTimeoutSeconds: 3600, highPriorityStaged: false });
+  it("keeps High priority on single-pass even with live settings loaded", async () => {
+    const { seenMode } = await runWithSettings("High", { jobTimeoutSeconds: 3600 });
     expect(seenMode).toBe("single-pass");
   });
 

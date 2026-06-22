@@ -16,11 +16,12 @@ export interface WorkerEnv {
   gstackCommand?: string | undefined;
   /**
    * Explicit GSTACK_ARGS override. When set, it wins for every job regardless of
-   * priority (back-compat) and forces the recorded executor mode. When unset, the
-   * worker derives args per-job from priority via the staged/single args below.
+   * ticket fields (back-compat) and forces the recorded executor mode. When unset,
+   * the worker derives args per-job from the ticket's explicit staged-pipeline
+   * boolean via the staged/single args below.
    */
   gstackArgs?: string | undefined;
-  /** GSTACK_ARGS used for the staged pipeline (High priority). */
+  /** GSTACK_ARGS used for the staged pipeline. */
   gstackStagedArgs: string;
   /** GSTACK_ARGS used for the single-pass pipeline (default). */
   gstackSingleArgs: string;

@@ -106,7 +106,7 @@ describe("JobList", () => {
     expect(screen.queryByRole("button", { name: /33333333-3333-4333-8333-333333333333/ })).not.toBeInTheDocument();
   });
 
-  it("shows a cancel-in-flight job as cancelling, not running", () => {
+  it("shows a cancel-in-flight job as cancelled, not running", () => {
     render(
       <JobList
         copy={adminCopy.ko}
@@ -137,7 +137,7 @@ describe("JobList", () => {
     const cancellingRow = screen.getByRole("button", { name: /11111111-1111-4111-8111-111111111111/ });
     expect(cancellingRow).not.toHaveAttribute("data-state", "running");
     expect(within(cancellingRow).queryByRole("status", { name: "실행 중" })).not.toBeInTheDocument();
-    expect(within(cancellingRow).getByText("취소 중")).toBeInTheDocument();
+    expect(within(cancellingRow).getByText("취소됨")).toBeInTheDocument();
     expect(within(cancellingRow).queryByText("실행 중")).not.toBeInTheDocument();
 
     const cancelledRow = screen.getByRole("button", { name: /22222222-2222-4222-8222-222222222222/ });

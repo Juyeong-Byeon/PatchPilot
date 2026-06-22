@@ -101,6 +101,20 @@ describe("settings routes", () => {
     await app.close();
   });
 
+  it("PUT rejects the old high-priority-to-staged mapping key with 400", async () => {
+    const repos = makeRepos();
+    const app = await build(repos);
+    const response = await app.inject({
+      method: "PUT",
+      url: "/api/settings",
+      headers: { authorization: "Bearer secret" },
+      payload: { updates: { highPriorityStaged: true } },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(repos.setAppSettings).not.toHaveBeenCalled();
+    await app.close();
+  });
+
   it("PUT persists a valid editable value, audits it, and returns the new effective config", async () => {
     const repos = makeRepos();
     const app = await build(repos);
@@ -108,10 +122,10 @@ describe("settings routes", () => {
       method: "PUT",
       url: "/api/settings",
       headers: { authorization: "Bearer secret" },
-      payload: { updates: { jobTimeoutSeconds: 600, highPriorityStaged: false } },
+      payload: { updates: { jobTimeoutSeconds: 600 } },
     });
     expect(response.statusCode).toBe(200);
-    expect(repos.setAppSettings).toHaveBeenCalledWith({ jobTimeoutSeconds: 600, highPriorityStaged: false }, "admin");
+    expect(repos.setAppSettings).toHaveBeenCalledWith({ jobTimeoutSeconds: 600 }, "admin");
     expect(repos.appendAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({ actor: "admin", action: "settings.updated" }),
     );

@@ -35,6 +35,8 @@ describe("docker-compose worker service", () => {
       CODEX_CONFIG_FILE: "${CODEX_CONFIG_FILE:-}",
       CODEX_SKILLS_DIR: "${CODEX_SKILLS_DIR:-}",
       GSTACK_SKILL_SOURCE_DIR: "${GSTACK_SKILL_SOURCE_DIR:-}",
+      GSTACK_SINGLE_ARGS: "${GSTACK_SINGLE_ARGS:-}",
+      GSTACK_STAGED_ARGS: "${GSTACK_STAGED_ARGS:-}",
     });
   });
 
@@ -56,7 +58,8 @@ describe("docker-compose worker service", () => {
       ]),
     );
     expect(admin?.environment).toMatchObject({
-      VITE_ADMIN_API_BASE_URL: "${VITE_ADMIN_API_BASE_URL:-http://api:3000}",
+      ADMIN_API_PROXY_TARGET: "${ADMIN_API_PROXY_TARGET:-http://api:3000}",
+      VITE_ADMIN_API_BASE_URL: "${VITE_ADMIN_API_BASE_URL:-}",
     });
     expect(admin?.command).toEqual([
       "npm",

@@ -21,7 +21,7 @@
 // Any assertion failure exits non-zero with a readable message.
 //
 // Config (env, with .env.example-matching defaults):
-//   HOST_API_PORT          (3000)
+//   HOST_API_PORT          (3000, or .env value)
 //   ADMIN_TOKEN            (change-me-admin-token)
 //   LARK_WEBHOOK_SECRET    (webhook_secret_xxx)
 //   GITHUB_WEBHOOK_SECRET  (github_webhook_secret_xxx)
@@ -31,11 +31,13 @@
 //   E2E_POLL_TIMEOUT_MS    (120000)
 //   E2E_POLL_INTERVAL_MS   (2000)
 import { createHmac } from "node:crypto";
+import { pathToFileURL, fileURLToPath } from "node:url";
+import { parseEnvFile } from "./preflight.mjs";
 
-const config = readConfig();
+const rootDir = fileURLToPath(new URL("..", import.meta.url));
 
-function readConfig() {
-  const env = process.env;
+export function readConfig({ envFile = parseEnvFile(`${rootDir}.env`), processEnv = process.env } = {}) {
+  const env = { ...envFile, ...processEnv };
   const port = env.HOST_API_PORT ?? "3000";
   const allowlist = (env.REPOSITORY_ALLOWLIST ?? "owner/repo")
     .split(",")
@@ -52,6 +54,33 @@ function readConfig() {
     pollTimeoutMs: positiveInt(env.E2E_POLL_TIMEOUT_MS, 120_000),
     pollIntervalMs: positiveInt(env.E2E_POLL_INTERVAL_MS, 2_000),
   };
+}
+
+export function usageText() {
+  return [
+    "PatchPilot mock e2e smoke.",
+    "",
+    "Usage:",
+    "  npm run e2e:smoke                    # run against the configured stack",
+    "  npm run e2e:smoke -- --print-config  # print effective non-secret config and exit",
+    "  npm run e2e:smoke -- --help          # show this message",
+    "",
+    "Config is loaded from .env first, then process env overrides it.",
+    "Use HOST_API_PORT or E2E_BASE_URL when the API is not on localhost:3000.",
+  ].join("\n");
+}
+
+export function formatConfigForDisplay(config) {
+  return [
+    `baseUrl: ${config.baseUrl}`,
+    `repository: ${config.repository}`,
+    `readyTimeoutMs: ${config.readyTimeoutMs}`,
+    `pollTimeoutMs: ${config.pollTimeoutMs}`,
+    `pollIntervalMs: ${config.pollIntervalMs}`,
+    `adminToken: ${config.adminToken ? "<set>" : "<empty>"}`,
+    `larkWebhookSecret: ${config.larkWebhookSecret ? "<set>" : "<empty>"}`,
+    `githubWebhookSecret: ${config.githubWebhookSecret ? "<set>" : "<empty>"}`,
+  ].join("\n");
 }
 
 function positiveInt(value, fallback) {
@@ -73,7 +102,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // --- Steps ----------------------------------------------------------------
 
-async function waitForReady() {
+async function waitForReady(config) {
   const url = `${config.baseUrl}/api/ready`;
   const deadline = Date.now() + config.readyTimeoutMs;
   log(`Waiting for ${url} (timeout ${config.readyTimeoutMs}ms)...`);
@@ -85,7 +114,14 @@ async function waitForReady() {
         log("API is ready.");
         return;
       }
-      lastDetail = `HTTP ${res.status} ${await safeText(res)}`;
+      const body = await safeText(res);
+      const failure = classifyReadyFailure({
+        body,
+        contentType: res.headers.get("content-type") ?? "",
+        status: res.status,
+      });
+      lastDetail = failure.message;
+      if (!failure.retry) fail(failure.message);
     } catch (error) {
       lastDetail = error instanceof Error ? error.message : String(error);
     }
@@ -94,7 +130,22 @@ async function waitForReady() {
   fail(`API never became ready within ${config.readyTimeoutMs}ms. Last: ${lastDetail}`);
 }
 
-async function postLarkWebhook() {
+export function classifyReadyFailure({ status, contentType = "", body = "" }) {
+  const sample = body.trim().replace(/\s+/g, " ").slice(0, 240);
+  const looksLikeHtml = contentType.includes("text/html") || /^<!doctype html|^<html/i.test(body.trim());
+  if (looksLikeHtml) {
+    return {
+      retry: false,
+      message:
+        `HTTP ${status} from /api/ready looks like the wrong service, not the PatchPilot API. ` +
+        "Check HOST_API_PORT or set E2E_BASE_URL to the API origin. " +
+        `Body: ${sample || "(empty)"}`,
+    };
+  }
+  return { retry: true, message: `HTTP ${status} ${sample}` };
+}
+
+async function postLarkWebhook(config) {
   const url = `${config.baseUrl}/webhooks/lark`;
   // A valid, job-creating ticket: Status=Progress + Agent Run Requested=true,
   // all required Lark fields present (see packages/core/src/lark.ts).
@@ -132,7 +183,7 @@ async function postLarkWebhook() {
   return payload.jobId;
 }
 
-async function fetchJob(jobId) {
+async function fetchJob(config, jobId) {
   const res = await fetch(`${config.baseUrl}/api/jobs`, {
     headers: { authorization: `Bearer ${config.adminToken}` },
   });
@@ -149,12 +200,12 @@ async function fetchJob(jobId) {
   return jobs.find((job) => job?.id === jobId) ?? null;
 }
 
-async function pollForOutcome(jobId, expectedOutcome) {
+async function pollForOutcome(config, jobId, expectedOutcome) {
   const deadline = Date.now() + config.pollTimeoutMs;
   log(`Polling /api/jobs for job ${jobId} -> outcome=${expectedOutcome} (timeout ${config.pollTimeoutMs}ms)...`);
   let lastOutcome = "(job not yet visible)";
   while (Date.now() < deadline) {
-    const job = await fetchJob(jobId);
+    const job = await fetchJob(config, jobId);
     if (job) {
       lastOutcome = `phase=${job.phase} outcome=${job.outcome}`;
       if (job.outcome === expectedOutcome) {
@@ -191,7 +242,7 @@ function assertPullRequest(job) {
   return { prUrl, prNumber };
 }
 
-async function postGitHubMergeWebhook({ prUrl, prNumber }) {
+async function postGitHubMergeWebhook(config, { prUrl, prNumber }) {
   const url = `${config.baseUrl}/webhooks/github`;
   const payload = {
     action: "closed",
@@ -248,25 +299,36 @@ async function safeText(res) {
 // --- Main -----------------------------------------------------------------
 
 async function main() {
+  if (process.argv.includes("--help") || process.argv.includes("-h")) {
+    console.log(usageText());
+    return;
+  }
+  const config = readConfig();
+  if (process.argv.includes("--print-config")) {
+    console.log(formatConfigForDisplay(config));
+    return;
+  }
   log(`Base URL: ${config.baseUrl}`);
-  await waitForReady();
+  await waitForReady(config);
 
-  const jobId = await postLarkWebhook();
+  const jobId = await postLarkWebhook(config);
 
-  const needsReviewJob = await pollForOutcome(jobId, "NeedsReview");
+  const needsReviewJob = await pollForOutcome(config, jobId, "NeedsReview");
   const pr = assertPullRequest(needsReviewJob);
 
-  await postGitHubMergeWebhook(pr);
-  await pollForOutcome(jobId, "Completed");
+  await postGitHubMergeWebhook(config, pr);
+  await pollForOutcome(config, jobId, "Completed");
 
   log("✓ Mock e2e smoke passed: Lark -> NeedsReview -> merge -> Completed.");
 }
 
-main().catch((error) => {
-  if (error instanceof SmokeError) {
-    console.error(`\n[e2e-smoke] FAILED: ${error.message}`);
-  } else {
-    console.error(`\n[e2e-smoke] UNEXPECTED ERROR: ${error instanceof Error ? error.stack : String(error)}`);
-  }
-  process.exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    if (error instanceof SmokeError) {
+      console.error(`\n[e2e-smoke] FAILED: ${error.message}`);
+    } else {
+      console.error(`\n[e2e-smoke] UNEXPECTED ERROR: ${error instanceof Error ? error.stack : String(error)}`);
+    }
+    process.exit(1);
+  });
+}

@@ -5,6 +5,7 @@ import {
   parseRecord,
   parseRecordArray,
   parseRetryResponse,
+  parseVersionInfo,
   parseSettingsView,
 } from "../src/lib/api-schemas.js";
 
@@ -146,5 +147,36 @@ describe("parseRecordArray / parseRecord", () => {
     expect(parseRecord([{ id: "a" }])).toBeNull();
     expect(parseRecord("a")).toBeNull();
     expect(parseRecord(null)).toBeNull();
+  });
+});
+
+describe("parseVersionInfo", () => {
+  it("accepts version info with optional local runtime fields", () => {
+    expect(
+      parseVersionInfo({
+        version: "0.1.0",
+        sha: "abc1234",
+        nodeEnv: "development",
+        executorMode: "mock",
+        publisherMode: "mock",
+        publicBaseUrl: "http://localhost:3000",
+      }),
+    ).toStrictEqual({
+      version: "0.1.0",
+      sha: "abc1234",
+      nodeEnv: "development",
+      executorMode: "mock",
+      publisherMode: "mock",
+      publicBaseUrl: "http://localhost:3000",
+    });
+  });
+
+  it("accepts the older version-only backend shape", () => {
+    expect(parseVersionInfo({ version: "0.1.0", sha: null })).toStrictEqual({ version: "0.1.0", sha: null });
+  });
+
+  it("rejects malformed optional runtime fields", () => {
+    expect(parseVersionInfo({ version: "0.1.0", sha: null, executorMode: 1 })).toBeNull();
+    expect(parseVersionInfo({ version: "0.1.0", sha: null, publicBaseUrl: 3000 })).toBeNull();
   });
 });

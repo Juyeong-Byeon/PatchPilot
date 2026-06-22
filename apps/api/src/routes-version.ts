@@ -9,6 +9,14 @@ export interface VersionInfo {
   /** The git commit the build was cut from, or null when the process was not
    * given one (e.g. local `npm run dev`). Never throws when GIT_SHA is unset. */
   sha: string | null;
+  /** Runtime environment name; useful when several local frontends are open. */
+  nodeEnv: string;
+  /** Effective executor mode visible to the API process: usually mock or gstack. */
+  executorMode: string;
+  /** Effective publisher mode visible to the API process: usually mock or github. */
+  publisherMode: string;
+  /** Public callback/base URL configured for this API, if any. */
+  publicBaseUrl: string | null;
 }
 
 // Fallback when the process is started without any version stamp (e.g. a bare
@@ -29,6 +37,20 @@ function readVersion(env: NodeJS.ProcessEnv = process.env): string {
   return npmVersion !== undefined && npmVersion.trim() !== "" ? npmVersion : FALLBACK_VERSION;
 }
 
+function readNonBlank(value: string | undefined, fallback: string): string {
+  return value !== undefined && value.trim() !== "" ? value.trim() : fallback;
+}
+
+function readNullable(value: string | undefined): string | null {
+  return value !== undefined && value.trim() !== "" ? value.trim() : null;
+}
+
+function readPublisherMode(env: NodeJS.ProcessEnv = process.env): string {
+  const raw = readNonBlank(env.WORKER_PUBLISHER_MODE ?? env.PUBLISHER_MODE, "mock").toLowerCase();
+  // Match worker compatibility: legacy app-wide PUBLISHER_MODE=gstack means GitHub publishing.
+  return raw === "gstack" ? "github" : raw;
+}
+
 export async function registerVersionRoutes(app: FastifyInstance): Promise<void> {
   // Deployment introspection: cheap and dependency-free (like /api/health) so it
   // answers even when Postgres/Redis are down — the whole point is to confirm
@@ -38,6 +60,10 @@ export async function registerVersionRoutes(app: FastifyInstance): Promise<void>
     async (): Promise<VersionInfo> => ({
       version: readVersion(),
       sha: process.env.GIT_SHA ?? null,
+      nodeEnv: readNonBlank(process.env.NODE_ENV, "development"),
+      executorMode: readNonBlank(process.env.WORKER_EXECUTOR_MODE ?? process.env.EXECUTOR_MODE, "mock").toLowerCase(),
+      publisherMode: readPublisherMode(),
+      publicBaseUrl: readNullable(process.env.PUBLIC_BASE_URL),
     }),
   );
 }

@@ -5,6 +5,7 @@
 //
 // Usage:
 //   node scripts/preflight.mjs            # validate against the modes in .env
+//   node scripts/preflight.mjs --strict   # also fail on warnings
 //   node scripts/preflight.mjs --quiet    # only print on failure
 //
 // Exit code 0 = ready, 1 = one or more hard failures.
@@ -129,12 +130,21 @@ export function runPreflightChecks() {
   return { problems, warnings, info };
 }
 
+export function preflightExitCode(result, { strictWarnings = false } = {}) {
+  if (result.problems.length > 0) return 1;
+  if (strictWarnings && result.warnings.length > 0) return 1;
+  return 0;
+}
+
 // CLI entrypoint — only runs when invoked directly, not when imported for parseEnvFile.
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   const quiet = process.argv.includes("--quiet");
+  const strict = process.argv.includes("--strict") || process.argv.includes("--strict-warnings");
   const { problems, warnings, info } = runPreflightChecks();
 
-  if (!quiet || problems.length > 0) {
+  const exitCode = preflightExitCode({ problems, warnings, info }, { strictWarnings: strict });
+
+  if (!quiet || exitCode !== 0) {
     for (const line of info) console.log(`  ✓ ${line}`);
     for (const line of warnings) console.warn(`  ! ${line}`);
     for (const line of problems) console.error(`  ✗ ${line}`);
@@ -142,6 +152,9 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 
   if (problems.length > 0) {
     console.error(`\nPreflight failed with ${problems.length} problem(s). Fix the above and retry.`);
+    process.exit(1);
+  } else if (strict && warnings.length > 0) {
+    console.error(`\nPreflight failed with ${warnings.length} warning(s) under --strict. Fix the above and retry.`);
     process.exit(1);
   } else if (!quiet) {
     console.log("\nPreflight passed.");
