@@ -26,6 +26,8 @@ describe("runGstack", () => {
     await chmod(command, 0o755);
     process.env.GSTACK_COMMAND = command;
     process.env.GSTACK_ARGS = "";
+    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    vi.spyOn(process.stderr, "write").mockImplementation(() => true);
 
     await runGstack(dir, logPath, 10000);
 
