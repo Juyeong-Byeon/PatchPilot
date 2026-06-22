@@ -137,10 +137,16 @@ export const SETTINGS_UNAVAILABLE = "admin_settings_unavailable";
 
 // Shape of GET /api/version (backend `VersionInfo`). `version` is the API package
 // version (e.g. "0.1.0"); `sha` is the build's git commit, or null when the process
-// was started without GIT_SHA (e.g. local dev). Mirrors apps/api/src/routes-version.ts.
+// was started without GIT_SHA (e.g. local dev). Optional runtime fields let the
+// Admin shell show what API/runtime it is connected to without requiring auth.
+// Mirrors apps/api/src/routes-version.ts.
 export interface VersionInfo {
   version: string;
   sha: string | null;
+  nodeEnv?: string;
+  executorMode?: string;
+  publisherMode?: string;
+  publicBaseUrl?: string | null;
 }
 
 // Sentinel thrown when /api/version cannot be read (absent / network / non-JSON /
@@ -150,6 +156,29 @@ export const VERSION_UNAVAILABLE = "admin_version_unavailable";
 
 const TOKEN_STORAGE_KEY = "ADMIN_TOKEN";
 const API_BASE_URL = (import.meta.env.VITE_ADMIN_API_BASE_URL ?? "").replace(/\/$/, "");
+const API_DISPLAY_URL = (
+  typeof __PATCHPILOT_ADMIN_API_DISPLAY_URL__ === "string" ? __PATCHPILOT_ADMIN_API_DISPLAY_URL__ : API_BASE_URL
+).replace(/\/$/, "");
+const API_REQUEST_MODE =
+  typeof __PATCHPILOT_ADMIN_API_REQUEST_MODE__ === "string"
+    ? __PATCHPILOT_ADMIN_API_REQUEST_MODE__
+    : API_BASE_URL
+      ? "direct"
+      : "proxy";
+
+export function getAdminFrontendOrigin(): string {
+  return typeof window === "undefined" ? "" : window.location.origin;
+}
+
+export function getAdminApiDisplayUrl(): string {
+  if (API_DISPLAY_URL) return API_DISPLAY_URL;
+  if (API_BASE_URL) return API_BASE_URL;
+  return getAdminFrontendOrigin();
+}
+
+export function getAdminApiRequestMode(): "direct" | "proxy" {
+  return API_REQUEST_MODE === "direct" ? "direct" : "proxy";
+}
 
 export function getStoredAdminToken(): string {
   try {

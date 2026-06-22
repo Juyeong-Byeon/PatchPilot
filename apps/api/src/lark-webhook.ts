@@ -2,6 +2,7 @@ import {
   createJobId,
   createTicketSnapshotId,
   createWorkBranchName,
+  isInvalidLarkTicketError,
   parseLarkTicket,
   shouldCreateJobFromTicket,
 } from "@ticket-to-pr/core";
@@ -53,8 +54,14 @@ export async function handleLarkWebhook(
   repos: Pick<Repositories, "createJobFromTicket" | "appendEvent">,
   queue: AgentQueue,
   larkUpdater?: LarkStatusUpdater,
-): Promise<{ action: "ignored" | "duplicate" | "enqueued"; jobId?: string }> {
-  const ticket = parseLarkTicket(input.recordId, input.triggerVersion, input.fields);
+): Promise<{ action: "invalid" | "ignored" | "duplicate" | "enqueued"; jobId?: string }> {
+  let ticket;
+  try {
+    ticket = parseLarkTicket(input.recordId, input.triggerVersion, input.fields);
+  } catch (error) {
+    if (isInvalidLarkTicketError(error)) return { action: "invalid" };
+    throw error;
+  }
   if (!shouldCreateJobFromTicket(ticket)) return { action: "ignored" };
 
   const created = await repos.createJobFromTicket(ticket, {

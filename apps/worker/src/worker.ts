@@ -53,17 +53,18 @@ export interface WorkerRunRecord {
 export type ExecutorMode = "single-pass" | "staged";
 
 /**
- * Route a job to an executor mode by ticket `priority`: `High` → `staged`
- * (quality over cost), everything else → `single-pass` (fast default). A safe
- * default keeps an unspecified/unknown priority on the cheap single-pass path.
- *
- * `highPriorityStaged` is the live, operator-tunable Priority→staged mapping
- * (Settings page). When false, High is no longer routed to staged and every
- * priority takes the fast single-pass path. Defaults to true for back-compat so a
- * caller that omits it behaves exactly as before.
+ * Route a job to an executor mode from the ticket's explicit staged-pipeline
+ * request. Priority is intentionally not part of this decision: `High` means
+ * priority only, while staged execution must be opted into separately.
  */
-export function resolveExecutorMode(priority: Priority, highPriorityStaged = true): ExecutorMode {
-  return priority === "High" && highPriorityStaged ? "staged" : "single-pass";
+export function resolveExecutorMode(stagedPipelineRequested = false): ExecutorMode {
+  return stagedPipelineRequested ? "staged" : "single-pass";
+}
+
+const STAGED_PIPELINE_FIELD_NAMES = ["Staged Pipeline", "Use Staged Pipeline", "단계형 파이프라인"] as const;
+
+export function isStagedPipelineRequested(rawFields: Record<string, unknown>): boolean {
+  return STAGED_PIPELINE_FIELD_NAMES.some((fieldName) => rawFields[fieldName] === true);
 }
 
 export interface AppendExecutorLogInput {
@@ -228,10 +229,10 @@ export interface ProcessAgentJobOptions {
   /** Cancel-poll cadence while the runner executes (overridable for tests). */
   cancelPollMs?: number;
   /**
-   * Forces the executor mode regardless of priority (epic D back-compat). Set by
+   * Forces the executor mode regardless of ticket fields (epic D back-compat). Set by
    * index.ts when `GSTACK_ARGS` is explicitly present in env so an operator's
    * explicit pipeline choice still wins. When omitted, mode is derived from the
-   * job's priority via {@link resolveExecutorMode}.
+   * ticket's explicit staged-pipeline boolean via {@link resolveExecutorMode}.
    */
   executorModeOverride?: ExecutorMode | undefined;
   /**
@@ -271,8 +272,6 @@ export interface ProcessAgentJobOptions {
 export interface EffectiveJobSettings {
   /** Runner timeout in seconds for this job. */
   jobTimeoutSeconds: number;
-  /** Whether Priority=High routes to the staged pipeline. */
-  highPriorityStaged: boolean;
 }
 
 export type FailureCategory = "policy" | "agent" | "publish" | "infra";
@@ -350,12 +349,11 @@ async function runAgentJob(payload: AgentJobPayload, options: ProcessAgentJobOpt
   // fail a job.
   const jobSettings = await loadJobSettings(options);
 
-  // Epic D / X3: route to a pipeline by priority (High → staged, else single-pass)
-  // unless an explicit GSTACK_ARGS override is in effect. The Priority→staged mapping
-  // honors the live `highPriorityStaged` override. Recorded on the run so the admin
-  // can read it back, and emitted as an event for the timeline.
-  const executorMode =
-    options.executorModeOverride ?? resolveExecutorMode(job.priority, jobSettings.highPriorityStaged);
+  // Epic D / X3: route to a pipeline only when the ticket explicitly asks for the
+  // staged pipeline. Priority stays orthogonal: High priority affects priority only.
+  // An explicit GSTACK_ARGS override still wins for back-compat.
+  const stagedPipelineRequested = isStagedPipelineRequested(job.rawFields);
+  const executorMode = options.executorModeOverride ?? resolveExecutorMode(stagedPipelineRequested);
 
   // X4: operator retry-guidance to steer this attempt. Prefer the explicit payload
   // field (set by the api track on retry); fall back to a `retryGuidance` string in
@@ -463,6 +461,7 @@ async function runAgentJob(payload: AgentJobPayload, options: ProcessAgentJobOpt
     await appendEvent("Planning", "worker.executor_mode", `Executor mode: ${executorMode} (priority=${job.priority})`, {
       executorMode,
       priority: job.priority,
+      stagedPipelineRequested,
       overridden: options.executorModeOverride !== undefined,
     });
     await appendProgressLog("Planning", "worker", "작업자가 티켓과 저장소 정책을 확인하고 있습니다.");
@@ -878,22 +877,19 @@ export function createAttemptWorkBranch(jobId: string, attempt: number): string 
 // Registry-aligned fallbacks used when no settings loader is injected (test doubles,
 // mock worker) or when the loader fails. Mirror env.ts defaults.
 const DEFAULT_JOB_TIMEOUT_SECONDS = 3600;
-const DEFAULT_HIGH_PRIORITY_STAGED = true;
-
 /**
  * Resolve the EFFECTIVE per-job settings for this job. Calls the injected loader
  * (index.ts reads getAppSettings() ⊕ env) once; on absence or failure falls back to
- * the registry-aligned defaults so a settings read never fails the job and the
- * no-override path is identical to today.
+ * the registry-aligned defaults so a settings read never fails the job.
  */
 async function loadJobSettings(options: ProcessAgentJobOptions): Promise<EffectiveJobSettings> {
   if (!options.loadJobSettings) {
-    return { jobTimeoutSeconds: DEFAULT_JOB_TIMEOUT_SECONDS, highPriorityStaged: DEFAULT_HIGH_PRIORITY_STAGED };
+    return { jobTimeoutSeconds: DEFAULT_JOB_TIMEOUT_SECONDS };
   }
   try {
     return await options.loadJobSettings();
   } catch {
-    return { jobTimeoutSeconds: DEFAULT_JOB_TIMEOUT_SECONDS, highPriorityStaged: DEFAULT_HIGH_PRIORITY_STAGED };
+    return { jobTimeoutSeconds: DEFAULT_JOB_TIMEOUT_SECONDS };
   }
 }
 

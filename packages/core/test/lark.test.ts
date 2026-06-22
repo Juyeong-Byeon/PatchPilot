@@ -19,6 +19,11 @@ describe("parseLarkTicket", () => {
     expect(ticket.targetBranch).toBe("main");
   });
 
+  it("normalizes Lark Important priority to internal High priority", () => {
+    const ticket = parseLarkTicket("rec1", "v1", { ...baseFields, Priority: "Important" });
+    expect(ticket.priority).toBe("High");
+  });
+
   it("rejects missing definition of done", () => {
     expect(() => parseLarkTicket("rec1", "v1", { ...baseFields, "Definition of Done": "" })).toThrow(
       /Definition of Done/,

@@ -28,15 +28,17 @@ npm run setup
 
 This runs, in order: preflight checks → create `.env` from `.env.example` if
 missing → `npm install` → start and wait for Postgres + Redis → run migrations
-with the **host** database URL → build and start the API + worker → wait for the
-API readiness probe. It is idempotent; re-running is safe.
+with the **host** database URL → build and start the API + worker + Docker-managed
+admin frontend → wait for the API readiness probe. It is idempotent; re-running is
+safe.
 
 Expected tail of output:
 
 ```
 ✓ Setup complete.
 
-  Admin console : http://localhost:3000
+  Admin console : http://localhost:5173
+  API base      : http://localhost:3000
   Admin token   : change-me-admin-token
 ```
 
@@ -50,7 +52,7 @@ Use the printed `Admin token` to log into the console.
 | Preflight fails on `PUBLISHER_MODE=github requires ...` | `.env` is in real mode without credentials | Set `EXECUTOR_MODE=mock` and `PUBLISHER_MODE=mock` in `.env`, or provide real `GITHUB_TOKEN` + `REPOSITORY_ALLOWLIST` |
 | Migration error / wedged DB                             | stale/corrupt Postgres volume              | `npm run reset:db`                                                                                                    |
 | API never becomes ready                                 | api container crash-looping                | `npm run logs`, read the error, fix `.env`, re-run setup                                                              |
-| Port already in use (5432/6379/3000)                    | another process/stack bound the port       | stop it, or change `HOST_API_PORT` in `.env` for the API                                                              |
+| Port already in use (5432/6379/3000/5173)               | another process/stack bound the port       | stop it, or change `HOST_API_PORT` / `HOST_ADMIN_PORT` in `.env`                                                      |
 
 ## 2. Verify the stack
 
@@ -64,6 +66,10 @@ Expected: all containers `running`/`healthy` and:
 API readiness (http://localhost:3000/api/ready):
   HTTP 200 {"ok":true,"checks":{"database":"ok","redis":"ok"}}
 ```
+
+If `.env` sets `HOST_API_PORT`, use that port in the expected URL. `npm run
+status -- --strict` exits non-zero when the API, admin frontend, worker service,
+or stale-image guard is unhealthy.
 
 You can also probe directly:
 
@@ -82,22 +88,21 @@ curl -fsS http://localhost:3000/api/jobs -H "Authorization: Bearer change-me-adm
 ## 3. Run the code checks
 
 ```bash
-npm run typecheck
-npm test
+npm run verify
 ```
 
-Expected: typecheck prints nothing and exits 0; tests report all files passed
-(one DB-integration test is skipped unless `DATABASE_URL` points at a live
-Postgres — that is normal).
+Expected: format, typecheck, lint, tests, build, and secret scan all pass. The
+mock e2e smoke is separate because it requires an already-running stack.
 
 ## 4. Common operations
 
 ```bash
-npm run logs       # tail api + worker logs (Ctrl-C to stop)
+npm run logs       # tail api + worker + admin logs (Ctrl-C to stop)
 npm run down       # stop the stack (data preserved)
 npm run setup      # bring it back up
 npm run reset:db   # destructive: wipe the database volume and re-migrate
 npm run doctor     # re-validate Docker + .env without touching the stack
+npm run doctor:strict # fail on preflight warnings for real-mode readiness
 ```
 
 ## 5. Going beyond mock mode (optional)
@@ -116,4 +121,4 @@ The setup is successful when:
 1. `npm run status` shows the API `200` with `database: ok` and `redis: ok`.
 2. `curl` of `/api/jobs` with the admin token returns a JSON array.
 3. `npm run typecheck` and `npm test` both pass.
-4. The admin console loads at `http://localhost:3000` and accepts the admin token.
+4. The admin console loads at `http://localhost:5173` and accepts the admin token.

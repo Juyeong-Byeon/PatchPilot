@@ -12,7 +12,8 @@
 //   5. Run database migrations using the HOST database URL (the @postgres
 //      hostname only resolves inside containers; from the host shell it must be
 //      @localhost — this is the #1 manual-setup footgun, handled automatically)
-//   6. Build + start the API and worker, waiting for the API readiness probe
+//   6. Build + start the API, worker, and Docker-managed admin frontend, waiting
+//      for the API readiness probe
 //   7. Print the console URL and admin token
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync } from "node:fs";
@@ -78,12 +79,13 @@ async function main() {
     env: { ...process.env, DATABASE_URL: hostDatabaseUrl(env) },
   });
 
-  heading("Build and start API + worker");
-  run("docker", ["compose", "up", "-d", "--build", "--wait", "api", "worker"]);
+  heading("Build and start API + worker + admin frontend");
+  run("docker", ["compose", "up", "-d", "--build", "--wait", "api", "worker", "admin"]);
 
   heading("Verify readiness");
-  const port = env.HOST_API_PORT ?? process.env.HOST_API_PORT ?? "3000";
-  const ready = await waitForReady(`http://localhost:${port}/api/ready`);
+  const apiPort = env.HOST_API_PORT ?? process.env.HOST_API_PORT ?? "3000";
+  const adminPort = env.HOST_ADMIN_PORT ?? process.env.HOST_ADMIN_PORT ?? "5173";
+  const ready = await waitForReady(`http://localhost:${apiPort}/api/ready`);
   if (!ready) {
     console.error("    API did not become ready. Check logs with: npm run logs");
     process.exit(1);
@@ -91,12 +93,14 @@ async function main() {
   console.log("    API is ready.");
 
   console.log("\n[32m✓ Setup complete.[0m");
-  console.log(`\n  Admin console : http://localhost:${port}`);
+  console.log(`\n  Admin console : http://localhost:${adminPort}`);
+  console.log(`  API base      : http://localhost:${apiPort}`);
   console.log(`  Admin token   : ${env.ADMIN_TOKEN ?? "(see .env ADMIN_TOKEN)"}`);
   console.log("\n  Useful commands:");
-  console.log("    npm run logs       # tail api + worker logs");
+  console.log("    npm run logs       # tail api + worker + admin logs");
   console.log("    npm run status     # show container + readiness state");
   console.log("    npm run down       # stop the stack");
+  console.log("    npm run docker:frontend # rebuild/restart only the admin frontend");
   console.log("    npm run reset:db   # wipe the database volume and re-migrate");
 }
 

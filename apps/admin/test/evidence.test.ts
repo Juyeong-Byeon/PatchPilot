@@ -135,9 +135,9 @@ describe("resolvePrimaryStatus (state SSoT)", () => {
     expect(resolvePrimaryStatus({ phase: "Completed", outcome: "NeedsReview" })).toBe("NeedsReview");
   });
 
-  it("collapses both in-flight cancel phases to Cancelling", () => {
-    expect(resolvePrimaryStatus({ phase: "CancelRequested", outcome: "Running" })).toBe("Cancelling");
-    expect(resolvePrimaryStatus({ phase: "Cancelling", outcome: "Running" })).toBe("Cancelling");
+  it("collapses both in-flight cancel phases to Cancelled for the operator badge", () => {
+    expect(resolvePrimaryStatus({ phase: "CancelRequested", outcome: "Running" })).toBe("Cancelled");
+    expect(resolvePrimaryStatus({ phase: "Cancelling", outcome: "Running" })).toBe("Cancelled");
   });
 
   it("prefers a terminal failure outcome over the phase", () => {

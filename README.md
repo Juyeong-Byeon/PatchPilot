@@ -171,7 +171,7 @@ npm install
 # 3. Create your env file (defaults are mock-mode and run with no real secrets).
 cp .env.example .env
 
-# 4. Bring up the whole stack: preflight -> Postgres/Redis/API/worker ->
+# 4. Bring up the whole stack: preflight -> Postgres/Redis/API/worker/admin ->
 #    migrate -> wait for /api/ready.
 npm run setup
 
@@ -181,12 +181,13 @@ npm run e2e:smoke
 ```
 
 `npm run setup` is idempotent and safe to re-run. On success it prints the admin
-console URL (`http://localhost:3000`) and the `ADMIN_TOKEN` to paste. Open the
+console URL (`http://localhost:5173`) and the `ADMIN_TOKEN` to paste. Open the
 console and enter that token to watch jobs flow through.
 
 `npm run e2e:smoke` drives the full loop against an **already-running** mock stack
 — it does not start or stop containers, so run `npm run setup` (or otherwise bring
-the stack up) first.
+the stack up) first. It loads `.env`; use `npm run e2e:smoke -- --print-config`
+to confirm the effective API URL before running the smoke.
 
 > **For AI coding agents:** see [docs/agent-setup.md](docs/agent-setup.md) for a
 > deterministic, copy-pasteable setup-and-verify runbook with expected output and
@@ -206,7 +207,8 @@ DATABASE_URL=postgres://ticket_to_pr:ticket_to_pr@localhost:5432/ticket_to_pr \
 npm run docker:build-runtime
 docker compose up -d --wait api
 npm run docker:recreate-worker
-docker compose logs -f api worker
+docker compose up -d --build admin
+docker compose logs -f api worker admin
 ```
 
 The checked-in `.env.example` uses Docker service hostnames (`@postgres`) for
@@ -215,14 +217,54 @@ database URL shown above — `npm run setup` does this rewrite automatically.
 
 ### Stack management
 
-| Command            | What it does                                                         |
-| ------------------ | -------------------------------------------------------------------- |
-| `npm run setup`    | One-command bootstrap: preflight → up → migrate → wait for ready     |
-| `npm run doctor`   | Re-run preflight checks (Docker + `.env`) without touching the stack |
-| `npm run status`   | Container status plus the `/api/ready` readiness probe               |
-| `npm run logs`     | Tail `api` and `worker` logs                                         |
-| `npm run down`     | Stop the stack                                                       |
-| `npm run reset:db` | Wipe the Postgres volume and re-migrate (destructive)                |
+| Command                      | What it does                                                           |
+| ---------------------------- | ---------------------------------------------------------------------- |
+| `npm run setup`              | One-command bootstrap: preflight → up → migrate → wait for ready       |
+| `npm run doctor`             | Re-run preflight checks (Docker + `.env`) without touching the stack   |
+| `npm run doctor:strict`      | Treat preflight warnings as failures for real-mode readiness checks    |
+| `npm run status`             | Container status plus API/admin reachability probes                    |
+| `npm run status -- --strict` | Exit non-zero when API/admin/worker/stale-image checks are unhealthy   |
+| `npm run verify`             | Local quality gate: format → typecheck → lint → test → build → secrets |
+| `npm run docker:frontend`    | Rebuild/restart only the Docker-managed admin frontend                 |
+| `npm run logs`               | Tail `api`, `worker`, and `admin` logs                                 |
+| `npm run down`               | Stop the stack                                                         |
+| `npm run reset:db`           | Wipe the Postgres volume and re-migrate (destructive)                  |
+
+### Development update/watch
+
+For active local development, refresh source/dependencies/DB state, then run the
+host API/worker watch loop with the frontend managed by Docker:
+
+```bash
+npm run dev:update
+npm run dev:watch
+```
+
+`dev:update` fetches and fast-forwards first, so it refuses to run on a dirty
+working tree. If you are mid-change and only need to refresh dependencies,
+shared infra, migrations, and build outputs, run:
+
+```bash
+npm run dev:refresh
+```
+
+Point Cloudflare Tunnel or Tailnet sharing at `HOST_ADMIN_PORT` (default `5173`),
+not at a host-run Vite process.
+
+The Admin UI shows a connection badge in the top bar and on the access-key
+screen. Use it when several local frontends are open: it displays the frontend
+origin, the API target, whether requests are proxied or direct, and the API
+runtime/build that answered `/api/version`.
+
+Local development should leave `VITE_ADMIN_API_BASE_URL` blank. In that mode the
+browser calls the current frontend origin (`/api`) and the Vite server proxies to
+`ADMIN_API_PROXY_TARGET`:
+
+- Full Docker setup: `ADMIN_API_PROXY_TARGET=http://api:3000`
+- `npm run dev:watch`: `ADMIN_API_PROXY_TARGET=http://host.docker.internal:<HOST_API_PORT>`
+
+Set `VITE_ADMIN_API_BASE_URL` only for a deployment where the browser must call a
+separate API origin directly.
 
 ### Develop a single app
 
@@ -242,31 +284,109 @@ the selected executor/publisher modes (and rejects placeholder secrets in real
 mode). The defaults are mock-mode, so a fresh copy runs the full local loop with
 no real credentials.
 
-Key variables:
+### Filling `.env`
 
-| Variable                                     | Purpose                                                     |
-| -------------------------------------------- | ----------------------------------------------------------- |
-| `ADMIN_TOKEN`                                | Bearer token for admin API and console                      |
-| `DATABASE_URL` / `REDIS_URL`                 | Postgres and Redis connection strings                       |
-| `LARK_WEBHOOK_SECRET`                        | Shared secret required on inbound Lark webhooks             |
-| `LARK_APP_ID` / `LARK_APP_SECRET`            | Lark app credentials for status write-back                  |
-| `LARK_BASE_APP_TOKEN` / `LARK_BASE_TABLE_ID` | Source Lark Base record location for write-back             |
-| `GITHUB_TOKEN`                               | Token used for git/GitHub operations in real mode           |
-| `GITHUB_WEBHOOK_SECRET`                      | Secret for verifying GitHub `pull_request` webhooks         |
-| `REPOSITORY_ALLOWLIST`                       | Comma-separated `owner/repo` allowlist enforced before runs |
-| `PROTECTED_PATH_DENYLIST`                    | Glob denylist of paths the agent may not change             |
-| `EXECUTOR_MODE` / `PUBLISHER_MODE`           | `mock` for local dev; `gstack` / `github` for real runs     |
-| `RUNNER_IMAGE`                               | Runner image tag the worker launches                        |
+The local mock stack works with the defaults from `.env.example`. Replace secrets
+only when you expose the admin console, receive real Lark webhooks, run the real
+AI executor, or publish real GitHub PRs.
+
+Generate local-only shared secrets with a password manager or:
+
+```bash
+openssl rand -hex 32
+```
+
+#### Runtime and local URLs
+
+| Variable                  | Value format / example                             | How to choose or get it                                                                 | Required when                  |
+| ------------------------- | -------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------ |
+| `NODE_ENV`                | `development`                                      | Use `development` locally. Use `production` only for a deployed stack.                  | Always                         |
+| `PUBLIC_BASE_URL`         | `http://localhost:3000` or a public HTTPS URL      | Local: API origin. Deployed/tunnel: the externally reachable API base URL.              | Webhooks and links             |
+| `HOST_API_PORT`           | `3000`                                             | Pick a free host port for the API. Change it if another service already uses `3000`.    | Local Docker/dev scripts       |
+| `HOST_ADMIN_PORT`         | `5173`                                             | Pick a free host port for the admin Vite server. Change it if another frontend is open. | Local Docker/dev scripts       |
+| `ADMIN_API_PROXY_TARGET`  | blank, `http://api:3000`, or host API URL          | Leave blank in `.env`; Compose and `dev:watch` set the right proxy target.              | Admin local proxy mode         |
+| `VITE_ADMIN_API_BASE_URL` | blank or `https://api.example.com`                 | Leave blank locally. Set only when the browser must call a separate API origin.         | Browser-direct deployments     |
+| `ADMIN_ALLOWED_HOSTS`     | blank, `my-host.tailnet.ts.net,.trycloudflare.com` | Leave blank for localhost. Add Tailnet/tunnel hostnames or suffixes when sharing admin. | Non-localhost admin dev server |
+| `ADMIN_TOKEN`             | random string, e.g. output of `openssl rand`       | Generate it yourself. Enter the same value in the admin UI login screen.                | Admin API and console          |
+
+#### Data stores
+
+| Variable       | Value format / example                                            | How to choose or get it                                                                                                | Required when |
+| -------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------- |
+| `DATABASE_URL` | `postgres://ticket_to_pr:ticket_to_pr@postgres:5432/ticket_to_pr` | Compose default uses service host `postgres`. For host-run commands, scripts rewrite this to `localhost` where needed. | API, worker   |
+| `REDIS_URL`    | `redis://redis:6379`                                              | Compose default uses service host `redis`. For host-run dev, `dev:watch` rewrites this to `redis://localhost:6379`.    | Queue/worker  |
+
+#### Lark webhook and write-back
+
+| Variable                | Value format / example  | How to choose or get it                                                                                                  | Required when               |
+| ----------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------- |
+| `LARK_WEBHOOK_SECRET`   | random string           | Generate it yourself and configure the same secret on the Lark automation/webhook that calls `POST /webhooks/lark`.      | Real Lark webhook ingestion |
+| `LARK_APP_ID`           | `cli_...`               | Copy from the Lark developer app credentials for the app that can update the Base record.                                | Lark status write-back      |
+| `LARK_APP_SECRET`       | secret string           | Copy from the same Lark developer app credentials as `LARK_APP_ID`.                                                      | Lark status write-back      |
+| `LARK_BASE_APP_TOKEN`   | Base app token          | Copy from the Lark Base URL or Base developer/settings panel for the source Base app.                                    | Lark status write-back      |
+| `LARK_BASE_TABLE_ID`    | table id                | Copy from the source Lark Base table URL or table settings/developer panel.                                              | Lark status write-back      |
+| `LARK_STATUS_FIELD`     | `PatchPilot Status`     | Name of the Lark field PatchPilot should update with `Queued`, `Running`, `NeedsReview`, failure states, or `Cancelled`. | Optional; default shown     |
+| `LARK_JOB_ID_FIELD`     | `PatchPilot Job ID`     | Name of the Lark field that stores the durable PatchPilot job id.                                                        | Optional; default shown     |
+| `LARK_PR_URL_FIELD`     | `PR URL`                | Name of the Lark field that stores the GitHub PR URL.                                                                    | Optional; default shown     |
+| `LARK_PR_NUMBER_FIELD`  | `PR Number`             | Name of the Lark field that stores the GitHub PR number.                                                                 | Optional; default shown     |
+| `LARK_FAILURE_FIELD`    | `PatchPilot Failure`    | Name of the Lark field that stores the latest failure summary or needs-input question summary.                           | Optional; default shown     |
+| `LARK_UPDATED_AT_FIELD` | `PatchPilot Updated At` | Name of the Lark field that stores the latest write-back timestamp.                                                      | Optional; default shown     |
+
+The inbound Lark ticket itself must include the required fields listed in
+[docs/operations.md](docs/operations.md#required-lark-fields). To opt a single
+ticket into the staged pipeline, add a checkbox field named `Staged Pipeline`
+and set it to `true`. `Priority=High` is priority only.
+
+#### GitHub publishing and merge webhooks
+
+| Variable                  | Value format / example     | How to choose or get it                                                                                                         | Required when                                   |
+| ------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| `GITHUB_TOKEN`            | `github_pat_...`           | Create a fine-grained GitHub PAT for selected target repos with `Contents: Read and write` and `Pull requests: Read and write`. | `PUBLISHER_MODE=github` or real runner git auth |
+| `GITHUB_WEBHOOK_SECRET`   | random string              | Generate it yourself and set the same value as the GitHub repository webhook secret.                                            | GitHub merge webhook handling                   |
+| `REPOSITORY_ALLOWLIST`    | `owner/repo,owner/another` | List only repositories PatchPilot may touch. Use GitHub `owner/repo` names.                                                     | Real runs and policy gate                       |
+| `PROTECTED_PATH_DENYLIST` | `.env,.env.*,infra/**`     | List comma-separated paths/globs that must block publish if changed. Keep secrets and production infra here.                    | Real runs and policy gate                       |
+
+Add a GitHub repository webhook for `pull_request` events pointing at:
+
+```text
+<PUBLIC_BASE_URL>/webhooks/github
+```
+
+#### Worker runtime and lifecycle
+
+| Variable                          | Value format / example                | How to choose or get it                                                                                            | Required when          |
+| --------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------- |
+| `JOB_WORKSPACE_ROOT`              | `/work/jobs`                          | Directory inside the worker container where job workspaces are created. Keep the Compose default locally.          | Worker                 |
+| `JOB_TIMEOUT_SECONDS`             | `3600`                                | Max runner wall-clock time per job. Increase only for known long-running repos or staged runs.                     | Worker                 |
+| `FAILED_WORKSPACE_RETENTION_DAYS` | `7`                                   | Days to retain failed job workspaces for inspection before cleanup. `0` means cleanup can remove immediately.      | Workspace cleanup      |
+| `EXECUTOR_MODE`                   | `mock` or `gstack`                    | Use `mock` for local smoke. Use `gstack` when the worker should launch the real runner container.                  | Worker                 |
+| `PUBLISHER_MODE`                  | `mock` or `github`                    | Use `mock` for simulated PR metadata. Use `github` for real branch push and PR creation.                           | Worker                 |
+| `RUNNER_IMAGE`                    | `ticket-to-pr-runner:local` or digest | Docker image tag/digest the worker launches for runner containers. Build it with `npm run docker:refresh-runtime`. | `EXECUTOR_MODE=gstack` |
 
 Use `WORKER_EXECUTOR_MODE` and `WORKER_PUBLISHER_MODE` to override the worker's
-modes without changing the app-wide variables.
+modes without changing the app-wide variables. `gstack` is an executor mode, not
+a publisher mode. Use `PUBLISHER_MODE=github` for real PR creation. Older local
+`.env` files with `PUBLISHER_MODE=gstack` are treated as `github` by the worker
+for compatibility, but new configs should use `github` explicitly.
 
-`gstack` is an executor mode, not a publisher mode. Use `PUBLISHER_MODE=github`
-for real PR creation. Older local `.env` files with `PUBLISHER_MODE=gstack` are
-treated as `github` by the worker for compatibility, but new configs should use
-`github` explicitly.
+#### AI runner and Codex mounts
 
-Production-like GitHub publishing requires:
+| Variable                  | Value format / example                                 | How to choose or get it                                                                                      | Required when              |
+| ------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ | -------------------------- |
+| `GSTACK_COMMAND`          | `node`                                                 | Command run inside the runner image. Use `node` for the bundled JS runner entrypoints.                       | `EXECUTOR_MODE=gstack`     |
+| `GSTACK_ARGS`             | blank or one runner entrypoint path                    | Leave blank for per-ticket single/staged selection. Set only to force one entrypoint for every job.          | Optional global override   |
+| `GSTACK_SINGLE_ARGS`      | `/opt/runner/apps/runner/dist/codex-agent-runner.js`   | Runner entrypoint for normal single-pass tickets. Keep the default unless you ship a custom runner.          | Per-ticket routing         |
+| `GSTACK_STAGED_ARGS`      | `/opt/runner/apps/runner/dist/gstack-staged-runner.js` | Runner entrypoint for tickets with `Staged Pipeline=true`. Keep the default unless you ship a custom runner. | Per-ticket routing         |
+| `GSTACK_INSTALL_COMMAND`  | `npm install -g @openai/codex@0.141.0`                 | Docker build command that installs the AI CLI into the runner image. Pin the CLI version you validated.      | Building real runner image |
+| `CODEX_AUTH_FILE`         | absolute path, e.g. `/Users/me/.codex/auth.json`       | Path on the host to your Codex auth file. Use an absolute path; `.env` does not expand `$HOME` or `~`.       | Codex-backed real runner   |
+| `CODEX_CONFIG_FILE`       | absolute path, e.g. `/Users/me/.codex/config.toml`     | Path on the host to your Codex config file. Use an absolute path.                                            | Codex-backed real runner   |
+| `CODEX_SKILLS_DIR`        | absolute path, e.g. `/Users/me/.codex/skills`          | Path on the host to the Codex skills directory to mount read-only into runner containers.                    | Codex-backed real runner   |
+| `GSTACK_SKILL_SOURCE_DIR` | absolute path, e.g. `/Users/me/gstack`                 | Path on the host to the gstack checkout root so skill symlinks/helper scripts resolve inside the runner.     | Codex/gstack skill runner  |
+
+In `.env`, use absolute paths for `CODEX_*` and `GSTACK_SKILL_SOURCE_DIR`; shell
+shortcuts such as `$HOME/...` and `~/...` are not expanded by Docker Compose.
+
+Production-like GitHub publishing requires at minimum:
 
 ```env
 WORKER_EXECUTOR_MODE=gstack
@@ -311,7 +431,9 @@ into the image and pass login/config as read-only runtime mounts:
 ```env
 GSTACK_INSTALL_COMMAND=npm install -g @openai/codex@0.141.0
 GSTACK_COMMAND=node
-GSTACK_ARGS=/opt/runner/apps/runner/dist/codex-agent-runner.js
+GSTACK_ARGS=
+GSTACK_SINGLE_ARGS=/opt/runner/apps/runner/dist/codex-agent-runner.js
+GSTACK_STAGED_ARGS=/opt/runner/apps/runner/dist/gstack-staged-runner.js
 CODEX_AUTH_FILE=/Users/me/.codex/auth.json
 CODEX_CONFIG_FILE=/Users/me/.codex/config.toml
 CODEX_SKILLS_DIR=/Users/me/.codex/skills
@@ -334,12 +456,17 @@ check fails the run.
 
 ### gstack staged pipeline
 
-To run the agent through gstack's staged workflow instead — a separate Codex pass
-per stage — point `GSTACK_ARGS` at the staged runner (keep `GSTACK_COMMAND=node`):
+The worker keeps ticket priority separate from runner selection. `Priority=High`
+only records priority; it does not imply staged execution. To run one ticket
+through gstack's staged workflow — a separate Codex pass per stage — leave
+`GSTACK_ARGS` blank, keep both per-mode entrypoints configured, and set the Lark
+checkbox field `Staged Pipeline` to `true` on that ticket:
 
 ```env
 GSTACK_COMMAND=node
-GSTACK_ARGS=/opt/runner/apps/runner/dist/gstack-staged-runner.js
+GSTACK_ARGS=
+GSTACK_SINGLE_ARGS=/opt/runner/apps/runner/dist/codex-agent-runner.js
+GSTACK_STAGED_ARGS=/opt/runner/apps/runner/dist/gstack-staged-runner.js
 ```
 
 Stages run sequentially and fail fast (the failing stage name is reported):
@@ -356,8 +483,9 @@ Stages run sequentially and fail fast (the failing stage name is reported):
 
 Stage notes are surfaced in the admin console, and live sub-stages render under
 the Implementing phase. A staged run costs roughly 4–5× a single-pass run, so it
-is best reserved for higher-stakes tickets. To roll back, point `GSTACK_ARGS`
-back at `codex-agent-runner.js`.
+is best reserved for higher-stakes tickets. `GSTACK_ARGS` remains a back-compat
+escape hatch: when set, it forces one runner entrypoint for every job and bypasses
+per-ticket pipeline selection.
 
 ### Structured agent failures
 

@@ -12,7 +12,7 @@
 // Exit code 0 = up to date or report printed successfully; 1 = a hard failure
 // (dirty tree under --apply, unresolved origin/main, or a failed shell call).
 import { execFileSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolveBuildStamp } from "./build-stamp.mjs";
 
 const rootDir = fileURLToPath(new URL("..", import.meta.url));
@@ -51,6 +51,24 @@ function short(sha) {
 function fail(message) {
   console.error(`\n\x1b[31mUpdate failed:\x1b[0m ${message}`);
   process.exit(1);
+}
+
+function pluralizeCommit(count) {
+  return count === 1 ? "commit" : "commits";
+}
+
+export function formatDivergenceSummary({ aheadCount, behindCount }) {
+  const lines = [];
+  if (aheadCount > 0) lines.push(`  Ahead by       : ${aheadCount} ${pluralizeCommit(aheadCount)}`);
+  if (behindCount > 0) lines.push(`  Behind by      : ${behindCount} ${pluralizeCommit(behindCount)}`);
+  if (aheadCount > 0 && behindCount > 0) {
+    lines.push("");
+    lines.push("This checkout has diverged from origin/main; a fast-forward update is not applicable.");
+  } else if (behindCount === 0) {
+    lines.push("");
+    lines.push("Not behind origin/main — no incoming commits to apply.");
+  }
+  return lines.join("\n");
 }
 
 async function main() {
@@ -94,24 +112,37 @@ async function main() {
     return;
   }
 
-  // Count how many commits HEAD is behind origin/main.
-  const behindCount = Number(capture("git", ["rev-list", "--count", "HEAD..origin/main"], "Counting incoming commits"));
+  // Count both directions so the report can distinguish ahead-only from diverged.
+  const [aheadRaw, behindRaw] = capture(
+    "git",
+    ["rev-list", "--left-right", "--count", "HEAD...origin/main"],
+    "Counting local/remote commits",
+  ).split(/\s+/);
+  const aheadCount = Number(aheadRaw ?? "0");
+  const behindCount = Number(behindRaw ?? "0");
 
   if (behindCount === 0) {
     // HEAD differs from origin/main but is not behind it (e.g. ahead or diverged).
     // Nothing to fast-forward; surface this rather than silently doing nothing.
-    console.log("\n\x1b[32m✓ Not behind origin/main — no incoming commits to apply.\x1b[0m");
-    console.log("  (HEAD differs from origin/main but is not strictly behind it; a fast-forward is not applicable.)");
+    console.log(`\n${formatDivergenceSummary({ aheadCount, behindCount })}`);
     return;
   }
 
-  const plural = behindCount === 1 ? "commit" : "commits";
-  console.log(`\n  Behind by      : ${behindCount} ${plural}`);
+  console.log(`\n${formatDivergenceSummary({ aheadCount, behindCount })}`);
+  if (aheadCount > 0) {
+    if (apply) {
+      fail(
+        "origin/main has incoming commits, but this checkout also has local commits; refusing non-fast-forward apply.",
+      );
+    }
+    console.log("\nResolve the divergence manually, then re-run the update check.");
+    return;
+  }
   console.log("\nIncoming commits (HEAD..origin/main):");
   run("git", ["log", "--oneline", "HEAD..origin/main"]);
 
   if (!apply) {
-    console.log(`\nThis checkout is ${behindCount} ${plural} behind origin/main.`);
+    console.log(`\nThis checkout is ${behindCount} ${pluralizeCommit(behindCount)} behind origin/main.`);
     console.log("To fast-forward and rebuild/restart the stack, run:");
     console.log("    npm run update -- --apply");
     return;
@@ -153,6 +184,8 @@ async function main() {
   console.log(`\n\x1b[32m✓ Update complete — now at ${short(newHead)}.\x1b[0m`);
 }
 
-main().catch((error) => {
-  fail(error instanceof Error ? error.message : String(error));
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    fail(error instanceof Error ? error.message : String(error));
+  });
+}

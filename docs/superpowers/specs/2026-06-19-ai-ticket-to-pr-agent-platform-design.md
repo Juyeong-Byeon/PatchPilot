@@ -86,6 +86,12 @@ Required ticket fields:
 - `Status`
 - `Agent Run Requested`
 
+Optional ticket input fields:
+
+- `Staged Pipeline` - boolean. When true, the worker uses the staged pipeline for
+  that ticket. `Priority=High` remains priority only and does not imply staged
+  execution.
+
 Optional platform-managed fields:
 
 - `Last Agent Run ID`

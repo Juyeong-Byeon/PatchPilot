@@ -49,6 +49,12 @@ const NEEDS_INPUT_FILE = "needs-input.json";
 // Categories that describe an environment/transport problem the platform can retry
 // as-is. Everything else (agent quality, policy) needs a human to change the input.
 const RETRYABLE_FAILURE_CATEGORIES = new Set(["infra", "infrastructure", "internal", "transient", "timeout"]);
+const EMPTY_COMMIT_NEEDS_INPUT: AgentNeedsInput = {
+  question:
+    "The agent created only an empty commit, but completed runs require at least one changed tracked file. What safe file/content should be changed for this ticket?",
+  details:
+    "Empty commits do not produce a PR-ready diff. Update the ticket with the file and content to change, then rerun the job.",
+};
 
 export interface CodexAgentRunnerInput {
   workspaceRoot: string;
@@ -158,6 +164,8 @@ async function buildCodexPrompt(input: {
     "- Keep secrets out of logs and artifacts.",
     "- Run lightweight verification appropriate for the change.",
     "- Create at least one local git commit on the current branch.",
+    "- Empty commits do not satisfy completion: completed runs must include at least one changed tracked file.",
+    "- If the ticket only asks for a commit but does not specify what file/content to change, write needs-input.json asking which safe file/content to change.",
     "",
     "If you are genuinely BLOCKED on a decision only a human can make — an ambiguous or contradictory requirement,",
     "a missing product/design decision, two equally valid interpretations you cannot choose between — do NOT guess,",
@@ -353,10 +361,6 @@ export async function writeResultArtifacts(input: {
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
-  if (changedFiles.length === 0) {
-    throw new Error("Codex completed without changed files");
-  }
-
   const commits = (await gitStdout(["log", "--format=%H%x00%s", `${input.baseSha}..${headSha}`], input.repoDir))
     .split("\n")
     .map((line) => line.trim())
@@ -365,6 +369,19 @@ export async function writeResultArtifacts(input: {
       const [sha, ...messageParts] = line.split("\0");
       return { sha: sha ?? "", message: messageParts.join("\0") || "Codex implementation" };
     });
+  if (changedFiles.length === 0) {
+    if (commits.length > 0) {
+      console.warn("runner: Codex created only empty commit(s); emitting result.needs_input instead of failing");
+      await writeNeedsInputResult({
+        workspaceRoot: input.workspaceRoot,
+        context: input.context,
+        needsInput: EMPTY_COMMIT_NEEDS_INPUT,
+      });
+      return;
+    }
+    throw new Error("Codex completed without changed files");
+  }
+
   const title = commits[0]?.message ?? "chore: implement ticket with Codex";
   const result = parseAgentResult({
     schemaVersion: "1.0",
@@ -468,9 +485,10 @@ export async function readNeedsInput(outputDir: string): Promise<AgentNeedsInput
 
 /**
  * Emits a schema-valid `result.json` with `status: "needs_input"`: the run made
- * and pushed NOTHING, it carries only the agent's one blocking question (plus
- * optional details folded into the human-readable body). The worker reads this as
- * a clean PARK (not a failure) and asks the operator to answer.
+ * no shippable diff and pushes NOTHING, so the result carries only one blocking
+ * question (plus optional details folded into the human-readable body). The
+ * worker reads this as a clean PARK (not a failure) and asks the operator to
+ * answer.
  */
 export async function writeNeedsInputResult(input: {
   workspaceRoot: string;

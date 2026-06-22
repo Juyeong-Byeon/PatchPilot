@@ -38,8 +38,12 @@ export interface ApiServerDependencies {
   healthProbes?: HealthProbes;
 }
 
+export function resolveFastifyLoggerOption(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.VITEST === "true" || env.NODE_ENV === "test" ? false : true;
+}
+
 export async function buildServer(deps: ApiServerDependencies): Promise<FastifyInstance> {
-  const app = Fastify({ logger: true });
+  const app = Fastify({ logger: resolveFastifyLoggerOption() });
   installRawJsonBodyParser(app);
   const larkWebhookSecret = deps.larkWebhookSecret?.trim();
   if (!larkWebhookSecret && deps.allowUnauthenticatedLarkWebhook !== true) {
@@ -76,6 +80,7 @@ export async function buildServer(deps: ApiServerDependencies): Promise<FastifyI
     const input = parseLarkWebhookInput(request.body);
     if (!input) return reply.code(400).send({ error: "Invalid Lark webhook payload" });
     const result = await handleLarkWebhook(input, deps.repos, deps.queue, deps.larkUpdater);
+    if (result.action === "invalid") return reply.code(400).send({ error: "Invalid Lark webhook payload" });
     const statusCode = result.action === "enqueued" ? 202 : 200;
     return reply.code(statusCode).send(result);
   });

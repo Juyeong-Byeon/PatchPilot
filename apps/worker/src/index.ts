@@ -33,14 +33,11 @@ import {
  */
 function resolveEffectiveJobSettings(overrides: Record<string, unknown>, env: WorkerEnv): EffectiveJobSettings {
   const timeoutField = getSettingField("jobTimeoutSeconds");
-  const stagedField = getSettingField("highPriorityStaged");
   const jobTimeoutSeconds =
     timeoutField !== undefined
       ? (resolveEffectiveValue(timeoutField, process.env, overrides) as number)
       : env.jobTimeoutSeconds;
-  const highPriorityStaged =
-    stagedField !== undefined ? (resolveEffectiveValue(stagedField, process.env, overrides) as boolean) : true;
-  return { jobTimeoutSeconds, highPriorityStaged };
+  return { jobTimeoutSeconds };
 }
 
 export function createWorker(env: WorkerEnv = readWorkerEnv()): BullWorker<AgentJobPayload> {
@@ -82,7 +79,7 @@ export function createWorker(env: WorkerEnv = readWorkerEnv()): BullWorker<Agent
   const larkUpdater = env.larkRecordUpdaterConfig ? createLarkRecordUpdater(env.larkRecordUpdaterConfig) : undefined;
 
   // Back-compat: an explicit GSTACK_ARGS forces one pipeline for every job, so the
-  // recorded executor mode must reflect that override rather than the priority.
+  // recorded executor mode must reflect that override rather than ticket fields.
   const executorModeOverride: ExecutorMode | undefined =
     env.gstackArgs !== undefined ? (env.gstackArgs.includes("staged-runner") ? "staged" : "single-pass") : undefined;
 
@@ -115,9 +112,8 @@ export function createWorker(env: WorkerEnv = readWorkerEnv()): BullWorker<Agent
         heartbeatIntervalMs: env.runHeartbeatIntervalMs,
         gcWorkspaceOnSuccess: (jobId) =>
           gcSuccessfulWorkspace(jobId, { workspaceRoot: env.workspaceRoot, onError: lifecycleOnError }),
-        // Settings page: resolve the EFFECTIVE per-job timeout + Priority→staged
-        // mapping (env ⊕ DB override) once for THIS job so a live override applies
-        // without a worker restart.
+        // Settings page: resolve the EFFECTIVE per-job timeout (env ⊕ DB override)
+        // once for THIS job so a live override applies without a worker restart.
         loadJobSettings: async () => resolveEffectiveJobSettings((await repos.getAppSettings?.()) ?? {}, env),
       });
     },

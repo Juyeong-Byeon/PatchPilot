@@ -12,35 +12,118 @@
 // a `git-sha` label (see scripts/docker-build-runtime.mjs). Here we read that
 // label off the running worker image and compare it to `git rev-parse HEAD`.
 import { execFileSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseEnvFile } from "./preflight.mjs";
 
 const rootDir = fileURLToPath(new URL("..", import.meta.url));
-const strict = process.argv.includes("--strict");
-const env = parseEnvFile(`${rootDir}.env`);
-const port = env.HOST_API_PORT ?? process.env.HOST_API_PORT ?? "3000";
 
-console.log("Containers:");
-try {
-  execFileSync("docker", ["compose", "ps"], { cwd: rootDir, stdio: "inherit" });
-} catch {
-  console.error("  Could not read container state (is Docker running?).");
+export function parseComposePsJsonLines(output) {
+  const trimmed = output.trim();
+  if (!trimmed) return [];
+  try {
+    const parsed = JSON.parse(trimmed);
+    return Array.isArray(parsed) ? parsed : [parsed];
+  } catch {
+    return trimmed
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+  }
 }
 
-console.log(`\nAPI readiness (http://localhost:${port}/api/ready):`);
-try {
-  const res = await fetch(`http://localhost:${port}/api/ready`);
-  const body = await res.json().catch(() => ({}));
-  console.log(`  HTTP ${res.status} ${JSON.stringify(body)}`);
-} catch (error) {
-  console.error(`  Unreachable: ${error instanceof Error ? error.message : error}`);
+export function summarizeWorkerService(rows) {
+  const worker = rows.find((row) => serviceName(row) === "worker");
+  if (!worker) {
+    return {
+      ok: false,
+      severity: "error",
+      message: "worker service is not running or was not created by docker compose.",
+    };
+  }
+  const state = String(worker.State ?? worker.state ?? worker.Status ?? worker.status ?? "").toLowerCase();
+  if (!state.includes("running")) {
+    return {
+      ok: false,
+      severity: "error",
+      message: `worker service is ${state || "unknown"}, expected running.`,
+    };
+  }
+  return { ok: true, severity: "ok", message: "worker service is running." };
 }
 
-const staleImageOk = checkWorkerImageFreshness();
+export function statusExitCode(result, { strict = false } = {}) {
+  if (!strict) return 0;
+  return result.apiOk && result.adminOk && result.workerOk && result.staleImageOk ? 0 : 1;
+}
 
-if (strict && !staleImageOk) {
-  console.error("\nStale-image guard failed (--strict). Rebuild with: npm run docker:refresh-runtime");
-  process.exit(1);
+function serviceName(row) {
+  return String(row.Service ?? row.service ?? row.Name ?? row.name ?? "");
+}
+
+async function probeJson(url) {
+  try {
+    const res = await fetch(url);
+    const body = await res.json().catch(() => ({}));
+    console.log(`  HTTP ${res.status} ${JSON.stringify(body)}`);
+    return res.ok;
+  } catch (error) {
+    console.error(`  Unreachable: ${error instanceof Error ? error.message : error}`);
+    return false;
+  }
+}
+
+async function probeStatus(url) {
+  try {
+    const res = await fetch(url);
+    console.log(`  HTTP ${res.status}`);
+    return res.ok;
+  } catch (error) {
+    console.error(`  Unreachable: ${error instanceof Error ? error.message : error}`);
+    return false;
+  }
+}
+
+function readComposePsRows() {
+  try {
+    const out = execFileSync("docker", ["compose", "ps", "--format", "json"], { cwd: rootDir }).toString("utf8");
+    return parseComposePsJsonLines(out);
+  } catch {
+    return [];
+  }
+}
+
+async function main() {
+  const strict = process.argv.includes("--strict");
+  const env = parseEnvFile(`${rootDir}.env`);
+  const port = env.HOST_API_PORT ?? process.env.HOST_API_PORT ?? "3000";
+  const adminPort = env.HOST_ADMIN_PORT ?? process.env.HOST_ADMIN_PORT ?? "5173";
+
+  console.log("Containers:");
+  try {
+    execFileSync("docker", ["compose", "ps"], { cwd: rootDir, stdio: "inherit" });
+  } catch {
+    console.error("  Could not read container state (is Docker running?).");
+  }
+
+  const rows = readComposePsRows();
+  const workerSummary = summarizeWorkerService(rows);
+  console.log("\nWorker service:");
+  const workerPrefix = workerSummary.ok ? "✓" : "✗";
+  console.log(`  ${workerPrefix} ${workerSummary.message}`);
+
+  console.log(`\nAPI readiness (http://localhost:${port}/api/ready):`);
+  const apiOk = await probeJson(`http://localhost:${port}/api/ready`);
+
+  console.log(`\nAdmin frontend (http://localhost:${adminPort}):`);
+  const adminOk = await probeStatus(`http://localhost:${adminPort}`);
+
+  const staleImageOk = checkWorkerImageFreshness();
+  const exitCode = statusExitCode({ adminOk, apiOk, staleImageOk, workerOk: workerSummary.ok }, { strict });
+  if (exitCode !== 0) {
+    console.error("\nStatus failed (--strict). Check the unhealthy item(s) above.");
+    process.exit(exitCode);
+  }
 }
 
 // Returns true when the running worker image matches HEAD (or when the check is
@@ -162,4 +245,11 @@ function imageGitShaLabel(image) {
 
 function short(sha) {
   return sha.length > 12 ? sha.slice(0, 12) : sha;
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(`\nStatus failed: ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(1);
+  });
 }

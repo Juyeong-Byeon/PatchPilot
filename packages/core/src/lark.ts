@@ -3,10 +3,29 @@ import type { TicketSnapshotInput } from "./types.js";
 
 const prioritySchema = z.enum(["Low", "Normal", "High"]);
 
+export class InvalidLarkTicketError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidLarkTicketError";
+  }
+}
+
+export function isInvalidLarkTicketError(error: unknown): error is InvalidLarkTicketError {
+  return error instanceof InvalidLarkTicketError;
+}
+
+function parsePriority(value: unknown) {
+  const normalized = typeof value === "string" ? value.trim() : value;
+  if (normalized === "Important") return "High";
+  const result = prioritySchema.safeParse(normalized);
+  if (!result.success) throw new InvalidLarkTicketError("Invalid Lark field: Priority");
+  return result.data;
+}
+
 function requiredString(fields: Record<string, unknown>, name: string): string {
   const value = fields[name];
   if (typeof value !== "string" || value.trim().length === 0) {
-    throw new Error(`Missing required Lark field: ${name}`);
+    throw new InvalidLarkTicketError(`Missing required Lark field: ${name}`);
   }
   return value.trim();
 }
@@ -24,7 +43,7 @@ export function parseLarkTicket(
     definitionOfDone: requiredString(fields, "Definition of Done"),
     repository: requiredString(fields, "Repository"),
     targetBranch: requiredString(fields, "Target Branch"),
-    priority: prioritySchema.parse(fields.Priority),
+    priority: parsePriority(fields.Priority),
     status: requiredString(fields, "Status"),
     agentRunRequested: fields["Agent Run Requested"] === true,
     rawFields: fields,

@@ -143,7 +143,7 @@ Runner completed: head=<sha> changed=...                     (gstack/stdout)
 | --- | ------------------------------------------------------------------------------------------------------------- | :----: |
 | X1  | **merge 웹훅 멱등 적재 + NeedsReview reconcile 폴러** (`webhook_events` 활용)                                 |   P0   |
 | X2  | **publish 멱등화**(기존 open PR 재사용) + `(repo,pr_number)` 유니크 + 고아 브랜치 정리                        |   P0   |
-| X3  | **모드 라우팅**: `Priority=High`→staged 자동, Lark "Pipeline" 필드, 콘솔 모드 배지                            |   P0   |
+| X3  | **모드 라우팅**: `Priority`와 staged 실행 분리, Lark `Staged Pipeline` 불린 필드, 콘솔 모드 배지              |   P0   |
 | X4  | **에이전트 조종성**: retry에 operator guidance 입력, `failure.json` 구조적 실패, FailedActionable 재실행 허용 |   P1   |
 | X5  | **`/api/metrics` + 오너 대시보드** (성공률·p50/p95·머지율·재시도율·모드분포)                                  |   P1   |
 | X6  | **BullMQ `defaultJobOptions`·removeOnFail·enqueue jobId dedup + 실행중복 advisory lock**                      |   P1   |
@@ -282,11 +282,11 @@ graph LR
 
 목표: 비개발 운영자가 티켓 단위로 비용/품질(single vs staged)을 self-serve로 제어.
 
-- **개발**: worker가 잡의 `priority`(이미 존재, 현재 미사용)로 executor 선택 — `High→staged`, 그 외 `single`. Lark 티켓에 "Pipeline" 단일선택 필드 → per-ticket 라우팅. 콘솔 Job Detail/리스트에 **사용 모드 배지**.
-- **테스트**: priority/필드 → executor 매핑 단위 테스트. 콘솔 배지 렌더.
+- **개발**: worker가 잡의 `priority`와 executor 선택을 분리. `Priority=High`는 우선순위만 뜻하고, Lark 티켓의 `Staged Pipeline` 불린 필드가 `true`일 때만 staged로 per-ticket 라우팅. 콘솔 Job Detail/리스트에 **사용 모드 배지**.
+- **테스트**: `Staged Pipeline` 불린 필드 → executor 매핑 단위 테스트. 콘솔 배지 렌더.
 - **리뷰**: 기본값 안전성(미지정 시 single), 비용 폭증 방지(High 남발 가드).
 - **PR/머지**: `feat/per-ticket-pipeline-routing`. worker 변경 → 재빌드+e2e.
-- **e2e**: mock 2건(High→staged 경로, Normal→single 경로)이 각 모드로 라우팅되는지.
+- **e2e**: mock 2건(`Staged Pipeline=true`→staged 경로, 미지정→single 경로)이 각 모드로 라우팅되는지.
 
 ### 에픽 E — 라이프사이클 자동화 (N8 + 프로세스) · `[T5 플랫폼/CI]` · _워크플로우_ ← §5와 연동 · **Wave 0 enabler**
 

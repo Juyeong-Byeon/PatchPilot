@@ -22,7 +22,6 @@ describe("settings registry", () => {
     expect([...EDITABLE_KEYS].sort()).toEqual(
       [
         "failedWorkspaceRetentionDays",
-        "highPriorityStaged",
         "jobTimeoutSeconds",
         "reconcileIntervalMs",
         "runHeartbeatIntervalMs",
@@ -38,7 +37,6 @@ describe("settings registry", () => {
 
   it("classifies live vs restart applies", () => {
     expect(field("jobTimeoutSeconds").applies).toBe("live");
-    expect(field("highPriorityStaged").applies).toBe("live");
     expect(field("failedWorkspaceRetentionDays").applies).toBe("live");
     expect(field("reconcileIntervalMs").applies).toBe("restart");
     expect(field("runHeartbeatIntervalMs").applies).toBe("restart");
@@ -58,9 +56,11 @@ describe("parseSettingValue", () => {
   });
 
   it("parses bools from string and boolean", () => {
-    expect(parseSettingValue(field("highPriorityStaged"), "true")).toBe(true);
-    expect(parseSettingValue(field("highPriorityStaged"), false)).toBe(false);
-    expect(() => parseSettingValue(field("highPriorityStaged"), "maybe")).toThrow(SettingValidationError);
+    expect(parseSettingValue({ ...field("jobTimeoutSeconds"), key: "flag", kind: "bool" }, "true")).toBe(true);
+    expect(parseSettingValue({ ...field("jobTimeoutSeconds"), key: "flag", kind: "bool" }, false)).toBe(false);
+    expect(() => parseSettingValue({ ...field("jobTimeoutSeconds"), key: "flag", kind: "bool" }, "maybe")).toThrow(
+      SettingValidationError,
+    );
   });
 
   it("parses csv from string and array", () => {
@@ -124,8 +124,8 @@ describe("resolveEffectiveSettings", () => {
   });
 
   it("resolveEffectiveValue mirrors override > env for a single field", () => {
-    expect(resolveEffectiveValue(field("highPriorityStaged"), { HIGH_PRIORITY_STAGED: "false" }, {})).toBe(false);
-    expect(resolveEffectiveValue(field("highPriorityStaged"), {}, { highPriorityStaged: false })).toBe(false);
-    expect(resolveEffectiveValue(field("highPriorityStaged"), {}, {})).toBe(true);
+    expect(resolveEffectiveValue(field("jobTimeoutSeconds"), { WORKER_JOB_TIMEOUT_SECONDS: "1800" }, {})).toBe(1800);
+    expect(resolveEffectiveValue(field("jobTimeoutSeconds"), {}, { jobTimeoutSeconds: 600 })).toBe(600);
+    expect(resolveEffectiveValue(field("jobTimeoutSeconds"), {}, {})).toBe(3600);
   });
 });
