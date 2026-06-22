@@ -71,6 +71,25 @@ describe("lark webhook route", () => {
     await app.close();
   });
 
+  it("accepts Lark Important priority by normalizing it before enqueue", async () => {
+    const deps = makeDeps();
+    const app = await buildServer({ ...deps, larkWebhookSecret: "secret" });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/webhooks/lark",
+      headers: { "x-lark-webhook-secret": "secret" },
+      payload: { ...webhookBody, fields: { ...webhookBody.fields, Priority: "Important" } },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(deps.repos.createJobFromTicket).toHaveBeenCalledWith(
+      expect.objectContaining({ priority: "High" }),
+      expect.any(Object),
+    );
+    await app.close();
+  });
+
   it("accepts a hardened signed request over the exact raw body (L5)", async () => {
     const deps = makeDeps();
     const app = await buildServer({ ...deps, larkWebhookSecret: "secret" });
@@ -115,6 +134,24 @@ describe("lark webhook route", () => {
     });
 
     expect(response.statusCode).toBe(400);
+    expect(deps.repos.createJobFromTicket).not.toHaveBeenCalled();
+    expect(deps.queue.add).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it("rejects authentic Lark field values that cannot be parsed with 400", async () => {
+    const deps = makeDeps();
+    const app = await buildServer({ ...deps, larkWebhookSecret: "secret" });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/webhooks/lark",
+      headers: { "content-type": "application/json", "x-lark-webhook-secret": "secret" },
+      payload: JSON.stringify({ ...webhookBody, fields: { ...webhookBody.fields, Priority: "Urgent" } }),
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ error: "Invalid Lark webhook payload" });
     expect(deps.repos.createJobFromTicket).not.toHaveBeenCalled();
     expect(deps.queue.add).not.toHaveBeenCalled();
     await app.close();

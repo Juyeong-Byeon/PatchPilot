@@ -106,6 +106,47 @@ Open `http://localhost:3000` for the operations console and enter the
 Compose. Use the `localhost` database URL above for migrations launched from the
 host shell.
 
+## Development Source Update
+
+During active development, use the host-run development update command instead
+of rebuilding Docker app images after every source change:
+
+```bash
+npm run dev:update
+```
+
+`dev:update` does the following:
+
+- fetches `origin` and fast-forwards the current branch;
+- refuses to run when the working tree has uncommitted changes;
+- runs `npm install`;
+- starts only the shared infrastructure containers (`postgres` and `redis`);
+- runs database migrations from the host using a `localhost` database URL;
+- runs `npm run build` so workspace `dist/` outputs match the updated source.
+
+It does not rebuild API/worker Docker images. After it finishes, run the app
+from the host checkout with:
+
+```bash
+npm run dev:watch
+```
+
+`dev:watch` keeps `postgres` and `redis` running in Docker, stops any stale
+containerized `api`/`worker` services, builds once, then starts TypeScript watch
+builds plus host-run API, worker, and admin dev servers. API/worker changes are
+compiled into `dist/`; `node --watch` restarts those services when `dist/`
+changes. Admin changes are handled directly by Vite. In this mode local changes
+are reflected without Docker image rebuilds.
+
+Use `HOST_API_PORT` from `.env`; `dev:watch` passes that value as both the API
+`PORT` and the admin proxy target. Rebuild Docker images only when intentionally
+refreshing containerized runtime code, for example with the operational
+`npm run update -- --apply` flow or a targeted API image refresh:
+
+```bash
+docker compose up -d --build --force-recreate api
+```
+
 ## Health Check
 
 ```bash

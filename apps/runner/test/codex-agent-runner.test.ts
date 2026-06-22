@@ -295,6 +295,81 @@ describe("runCodexAgentRunner needs-input (NeedsInput)", () => {
     return { workspaceRoot, repoDir };
   }
 
+  it("tells Codex that empty commits are not a valid completed run", async () => {
+    const { workspaceRoot, repoDir } = await setup();
+    const fakeCodex = join(workspaceRoot, "fake.mjs");
+    await writeFile(
+      fakeCodex,
+      [
+        "import { writeFileSync, mkdirSync } from 'node:fs';",
+        "import path from 'node:path';",
+        "let prompt = '';",
+        "process.stdin.on('data', (c) => { prompt += c.toString('utf8'); });",
+        "process.stdin.on('end', () => {",
+        "  const outputDir = path.join(process.cwd(), '..', 'output');",
+        "  mkdirSync(outputDir, { recursive: true });",
+        "  writeFileSync(path.join(outputDir, 'prompt.txt'), prompt);",
+        "  writeFileSync(path.join(outputDir, 'needs-input.json'), JSON.stringify({",
+        "    question: 'Prompt captured for assertion.'",
+        "  }));",
+        "});",
+        "",
+      ].join("\n"),
+    );
+
+    await runCodexAgentRunner({
+      workspaceRoot,
+      repoDir,
+      targetBranch: "main",
+      codexCommand: "node",
+      codexArgs: [fakeCodex],
+      codexHome: join(workspaceRoot, "codex-home"),
+    });
+
+    const prompt = await readFile(join(workspaceRoot, "output", "prompt.txt"), "utf8");
+    expect(prompt).toContain("Empty commits do not satisfy completion");
+    expect(prompt).toContain("write needs-input.json asking which safe file/content to change");
+  });
+
+  it("parks with needs_input when Codex creates only an empty commit", async () => {
+    const { workspaceRoot, repoDir } = await setup();
+    const fakeCodex = join(workspaceRoot, "fake.mjs");
+    await writeFile(
+      fakeCodex,
+      [
+        "import { spawnSync } from 'node:child_process';",
+        "process.stdin.resume();",
+        "process.stdin.on('end', () => {",
+        "  const result = spawnSync('git', ['commit', '--allow-empty', '-m', 'test: empty commit'], {",
+        "    cwd: process.cwd(),",
+        "    stdio: 'inherit',",
+        "  });",
+        "  process.exit(result.status ?? 1);",
+        "});",
+        "",
+      ].join("\n"),
+    );
+
+    await runCodexAgentRunner({
+      workspaceRoot,
+      repoDir,
+      targetBranch: "main",
+      codexCommand: "node",
+      codexArgs: [fakeCodex],
+      codexHome: join(workspaceRoot, "codex-home"),
+    });
+
+    const result = parseAgentResult(JSON.parse(await readFile(join(workspaceRoot, "output", "result.json"), "utf8")));
+    expect(result.status).toBe("needs_input");
+    expect(result.question).toMatch(/empty commit/i);
+    expect(result.failure).toBeNull();
+    expect(result.changedFiles).toEqual([]);
+    expect(result.commits).toEqual([]);
+    const prBody = await readFile(join(workspaceRoot, "output", "pr-body.md"), "utf8");
+    expect(prBody).toContain("empty commit");
+    expect(prBody).toContain("changed tracked file");
+  });
+
   it("emits a needs_input result.json from output/needs-input.json and pushes nothing", async () => {
     const { workspaceRoot, repoDir } = await setup();
     const headBefore = (await run("git", ["rev-parse", "HEAD"], repoDir)).stdout.trim();
