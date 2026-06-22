@@ -27,6 +27,12 @@ services:
     build:
       context: .
       dockerfile: docker/api.Dockerfile
+      args:
+        # Stamp the build version + commit into the image so GET /api/version (and
+        # the admin's bottom-left VersionBadge) report what is running. Populated by
+        # scripts/build-stamp.mjs via reset:db / update; empty for a bare build.
+        APP_VERSION: ${APP_VERSION:-}
+        GIT_SHA: ${GIT_SHA:-}
     env_file:
       - path: .env
         required: false

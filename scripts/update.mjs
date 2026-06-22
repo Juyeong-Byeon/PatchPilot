@@ -13,6 +13,7 @@
 // (dirty tree under --apply, unresolved origin/main, or a failed shell call).
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { resolveBuildStamp } from "./build-stamp.mjs";
 
 const rootDir = fileURLToPath(new URL("..", import.meta.url));
 const apply = process.argv.includes("--apply");
@@ -136,8 +137,14 @@ async function main() {
   }
 
   console.log("\nRebuilding and restarting the stack...");
+  // Stamp the new build's version + commit into the images so GET /api/version
+  // (and the admin's bottom-left VersionBadge) reflect what was just deployed.
+  // Resolved after the fast-forward above so it reflects the updated HEAD/tag.
+  const stamp = resolveBuildStamp();
   try {
-    run("docker", ["compose", "up", "-d", "--build"]);
+    run("docker", ["compose", "up", "-d", "--build"], {
+      env: { ...process.env, APP_VERSION: stamp.version, GIT_SHA: stamp.sha },
+    });
   } catch (error) {
     fail(`docker compose up failed: ${error instanceof Error ? error.message : error}`);
   }

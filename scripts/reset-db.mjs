@@ -5,6 +5,7 @@
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { parseEnvFile } from "./preflight.mjs";
+import { resolveBuildStamp } from "./build-stamp.mjs";
 
 const rootDir = fileURLToPath(new URL("..", import.meta.url));
 
@@ -23,5 +24,10 @@ console.log("Resetting local database (this wipes all local job data)...\n");
 run("docker", ["compose", "down", "-v"]);
 run("docker", ["compose", "up", "-d", "--wait", "postgres", "redis"]);
 run("npm", ["--workspace", "@ticket-to-pr/db", "run", "migrate"], { env: { ...process.env, DATABASE_URL: hostDbUrl } });
-run("docker", ["compose", "up", "-d", "--build", "--wait", "api", "worker"]);
+// Stamp the freshly built api image with the version + commit so GET /api/version
+// (and the admin's bottom-left VersionBadge) report exactly what is running.
+const stamp = resolveBuildStamp();
+run("docker", ["compose", "up", "-d", "--build", "--wait", "api", "worker"], {
+  env: { ...process.env, APP_VERSION: stamp.version, GIT_SHA: stamp.sha },
+});
 console.log("\n✓ Database reset and stack restarted.");
