@@ -96,11 +96,13 @@ DATABASE_URL=postgres://ticket_to_pr:ticket_to_pr@localhost:5432/ticket_to_pr np
 npm run docker:build-runtime
 docker compose up -d api
 npm run docker:recreate-worker
-docker compose logs -f api worker
+docker compose up -d --build admin
+docker compose logs -f api worker admin
 ```
 
-Open `http://localhost:3000` for the operations console and enter the
-`ADMIN_TOKEN` value from `.env`.
+Open `http://localhost:5173` for the Docker-managed operations console and enter
+the `ADMIN_TOKEN` value from `.env`. The API remains available on
+`http://localhost:3000` by default.
 
 `.env.example` uses Docker service hostnames for processes running inside
 Compose. Use the `localhost` database URL above for migrations launched from the
@@ -132,15 +134,30 @@ npm run dev:watch
 ```
 
 `dev:watch` keeps `postgres` and `redis` running in Docker, stops any stale
-containerized `api`/`worker` services, builds once, then starts TypeScript watch
-builds plus host-run API, worker, and admin dev servers. API/worker changes are
-compiled into `dist/`; `node --watch` restarts those services when `dist/`
-changes. Admin changes are handled directly by Vite. In this mode local changes
-are reflected without Docker image rebuilds.
+containerized `api`/`worker` services, builds once, then starts a Docker-managed
+frontend (`admin`) plus TypeScript watch builds and host-run API/worker dev
+servers. API/worker changes are compiled into `dist/`; `node --watch` restarts
+those services when `dist/` changes. Admin changes are handled by the Vite
+server inside the `admin` container, using the live checkout bind mount. In this
+mode local changes are reflected without Docker image rebuilds for API/worker
+code; the admin image is rebuilt only when the frontend container/dependency
+environment changes.
 
-Use `HOST_API_PORT` from `.env`; `dev:watch` passes that value as both the API
-`PORT` and the admin proxy target. Rebuild Docker images only when intentionally
-refreshing containerized runtime code, for example with the operational
+Use `HOST_API_PORT` from `.env`; `dev:watch` passes that value as the API `PORT`
+and points the Docker-managed frontend proxy at `host.docker.internal:<port>`.
+Open the frontend at `http://localhost:${HOST_ADMIN_PORT:-5173}`. If exposing it
+through Cloudflare Tunnel or Tailnet, point the tunnel at `HOST_ADMIN_PORT` and
+set `ADMIN_ALLOWED_HOSTS` to the stable host or a safe suffix such as
+`.trycloudflare.com`.
+
+To restart only the Docker-managed frontend, run:
+
+```bash
+npm run docker:frontend
+```
+
+Rebuild API/worker Docker images only when intentionally refreshing
+containerized runtime code, for example with the operational
 `npm run update -- --apply` flow or a targeted API image refresh:
 
 ```bash

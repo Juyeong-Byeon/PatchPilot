@@ -54,6 +54,27 @@ services:
       redis:
         condition: service_healthy
 
+  admin:
+    build:
+      context: .
+      dockerfile: docker/admin.Dockerfile
+    environment:
+      # Full-Docker default: proxy to the Compose API service. dev:watch overrides
+      # this to host.docker.internal:<HOST_API_PORT> because API runs on the host.
+      VITE_ADMIN_API_BASE_URL: ${VITE_ADMIN_API_BASE_URL:-http://api:3000}
+      ADMIN_ALLOWED_HOSTS: ${ADMIN_ALLOWED_HOSTS:-}
+      VITE_ADMIN_ALLOWED_HOSTS: ${VITE_ADMIN_ALLOWED_HOSTS:-}
+      HOST_API_PORT: ${HOST_API_PORT:-3000}
+    ports:
+      - "${HOST_ADMIN_PORT:-5173}:5173"
+    volumes:
+      - ./package.json:/app/package.json:ro
+      - ./package-lock.json:/app/package-lock.json:ro
+      - ./tsconfig.base.json:/app/tsconfig.base.json:ro
+      - ./apps/admin:/app/apps/admin
+      - admin-node-modules:/app/node_modules
+    command: ["npm", "--workspace", "@ticket-to-pr/admin", "run", "dev", "--", "--host", "0.0.0.0"]
+
   worker:
     build:
       context: .
@@ -92,3 +113,4 @@ services:
 
 volumes:
   postgres-data:
+  admin-node-modules:

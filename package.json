@@ -32,7 +32,7 @@
     "status": "node scripts/status.mjs",
     "scan:secrets": "node scripts/scan-secrets.mjs",
     "dev:watch": "node scripts/dev-watch.mjs",
-    "logs": "docker compose logs -f api worker",
+    "logs": "docker compose logs -f api worker admin",
     "down": "docker compose down",
     "reset:db": "node scripts/reset-db.mjs",
     "update": "node scripts/update.mjs",
@@ -45,6 +45,7 @@
     "dev:admin": "npm --workspace @ticket-to-pr/admin run dev",
     "db:migrate": "npm run build --workspace @ticket-to-pr/core && npm --workspace @ticket-to-pr/db run migrate",
     "docker:build-runtime": "node scripts/docker-build-runtime.mjs",
+    "docker:frontend": "docker compose up -d --build admin",
     "docker:recreate-worker": "docker compose up -d --force-recreate worker",
     "docker:refresh-runtime": "npm run docker:build-runtime && npm run docker:recreate-worker"
   },

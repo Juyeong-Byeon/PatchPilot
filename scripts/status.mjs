@@ -19,6 +19,7 @@ const rootDir = fileURLToPath(new URL("..", import.meta.url));
 const strict = process.argv.includes("--strict");
 const env = parseEnvFile(`${rootDir}.env`);
 const port = env.HOST_API_PORT ?? process.env.HOST_API_PORT ?? "3000";
+const adminPort = env.HOST_ADMIN_PORT ?? process.env.HOST_ADMIN_PORT ?? "5173";
 
 console.log("Containers:");
 try {
@@ -32,6 +33,14 @@ try {
   const res = await fetch(`http://localhost:${port}/api/ready`);
   const body = await res.json().catch(() => ({}));
   console.log(`  HTTP ${res.status} ${JSON.stringify(body)}`);
+} catch (error) {
+  console.error(`  Unreachable: ${error instanceof Error ? error.message : error}`);
+}
+
+console.log(`\nAdmin frontend (http://localhost:${adminPort}):`);
+try {
+  const res = await fetch(`http://localhost:${adminPort}`);
+  console.log(`  HTTP ${res.status}`);
 } catch (error) {
   console.error(`  Unreachable: ${error instanceof Error ? error.message : error}`);
 }

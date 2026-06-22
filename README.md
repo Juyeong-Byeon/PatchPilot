@@ -171,7 +171,7 @@ npm install
 # 3. Create your env file (defaults are mock-mode and run with no real secrets).
 cp .env.example .env
 
-# 4. Bring up the whole stack: preflight -> Postgres/Redis/API/worker ->
+# 4. Bring up the whole stack: preflight -> Postgres/Redis/API/worker/admin ->
 #    migrate -> wait for /api/ready.
 npm run setup
 
@@ -181,7 +181,7 @@ npm run e2e:smoke
 ```
 
 `npm run setup` is idempotent and safe to re-run. On success it prints the admin
-console URL (`http://localhost:3000`) and the `ADMIN_TOKEN` to paste. Open the
+console URL (`http://localhost:5173`) and the `ADMIN_TOKEN` to paste. Open the
 console and enter that token to watch jobs flow through.
 
 `npm run e2e:smoke` drives the full loop against an **already-running** mock stack
@@ -206,7 +206,8 @@ DATABASE_URL=postgres://ticket_to_pr:ticket_to_pr@localhost:5432/ticket_to_pr \
 npm run docker:build-runtime
 docker compose up -d --wait api
 npm run docker:recreate-worker
-docker compose logs -f api worker
+docker compose up -d --build admin
+docker compose logs -f api worker admin
 ```
 
 The checked-in `.env.example` uses Docker service hostnames (`@postgres`) for
@@ -215,14 +216,28 @@ database URL shown above — `npm run setup` does this rewrite automatically.
 
 ### Stack management
 
-| Command            | What it does                                                         |
-| ------------------ | -------------------------------------------------------------------- |
-| `npm run setup`    | One-command bootstrap: preflight → up → migrate → wait for ready     |
-| `npm run doctor`   | Re-run preflight checks (Docker + `.env`) without touching the stack |
-| `npm run status`   | Container status plus the `/api/ready` readiness probe               |
-| `npm run logs`     | Tail `api` and `worker` logs                                         |
-| `npm run down`     | Stop the stack                                                       |
-| `npm run reset:db` | Wipe the Postgres volume and re-migrate (destructive)                |
+| Command                   | What it does                                                         |
+| ------------------------- | -------------------------------------------------------------------- |
+| `npm run setup`           | One-command bootstrap: preflight → up → migrate → wait for ready     |
+| `npm run doctor`          | Re-run preflight checks (Docker + `.env`) without touching the stack |
+| `npm run status`          | Container status plus API/admin reachability probes                  |
+| `npm run docker:frontend` | Rebuild/restart only the Docker-managed admin frontend               |
+| `npm run logs`            | Tail `api`, `worker`, and `admin` logs                               |
+| `npm run down`            | Stop the stack                                                       |
+| `npm run reset:db`        | Wipe the Postgres volume and re-migrate (destructive)                |
+
+### Development update/watch
+
+For active local development, refresh source/dependencies/DB state, then run the
+host API/worker watch loop with the frontend managed by Docker:
+
+```bash
+npm run dev:update
+npm run dev:watch
+```
+
+Point Cloudflare Tunnel or Tailnet sharing at `HOST_ADMIN_PORT` (default `5173`),
+not at a host-run Vite process.
 
 ### Develop a single app
 

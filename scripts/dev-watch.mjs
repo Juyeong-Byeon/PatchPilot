@@ -42,11 +42,20 @@ export function hostDevelopmentEnv(env = {}) {
   };
 }
 
-export function buildDevWatchSetupPlan() {
+export function adminProxyTarget(env = {}) {
+  return env.VITE_ADMIN_API_BASE_URL || `http://host.docker.internal:${hostDevelopmentEnv(env).PORT}`;
+}
+
+export function buildDevWatchSetupPlan(env = {}) {
   return [
     { command: "docker", args: ["compose", "up", "-d", "--wait", "postgres", "redis"] },
     { command: "docker", args: ["compose", "stop", "api", "worker"] },
     { command: "npm", args: ["run", "build"] },
+    {
+      command: "docker",
+      args: ["compose", "up", "-d", "--build", "admin"],
+      env: { VITE_ADMIN_API_BASE_URL: adminProxyTarget(env) },
+    },
   ];
 }
 
@@ -70,7 +79,6 @@ export function buildDevWatchProcesses(env = {}) {
     watchBuild("watch:runner", "@ticket-to-pr/runner"),
     { name: "dev:api", command: "npm", args: ["--workspace", "@ticket-to-pr/api", "run", "dev"], env: hostEnv },
     { name: "dev:worker", command: "npm", args: ["--workspace", "@ticket-to-pr/worker", "run", "dev"], env: hostEnv },
-    { name: "dev:admin", command: "npm", args: ["--workspace", "@ticket-to-pr/admin", "run", "dev"], env: hostEnv },
   ];
 }
 
@@ -103,14 +111,16 @@ async function main() {
   const envPath = `${rootDir}.env`;
   const env = existsSync(envPath) ? parseEnvFile(envPath) : {};
   const hostEnv = hostDevelopmentEnv(env);
+  const adminPort = env.HOST_ADMIN_PORT ?? process.env.HOST_ADMIN_PORT ?? "5173";
 
   console.log("PatchPilot dev watch\n====================");
-  for (const action of buildDevWatchSetupPlan()) {
-    run(action.command, action.args);
+  for (const action of buildDevWatchSetupPlan(env)) {
+    run(action.command, action.args, action.env ? { env: { ...process.env, ...action.env } } : undefined);
   }
 
-  console.log("\nStarting watch builds and host-run dev servers...");
-  console.log(`  API/Admin port: ${hostEnv.PORT}`);
+  console.log("\nStarting watch builds and host-run API/worker dev servers...");
+  console.log(`  API port: ${hostEnv.PORT}`);
+  console.log(`  Admin frontend: Docker service \`admin\` on http://localhost:${adminPort}`);
   const children = new Set();
   process.once("SIGINT", () => shutdown(children, 0));
   process.once("SIGTERM", () => shutdown(children, 0));
