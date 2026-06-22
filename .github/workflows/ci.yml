@@ -27,6 +27,32 @@ jobs:
       - name: Scan tracked files for secrets
         run: npm run scan:secrets
 
+  commitlint:
+    name: Commit messages (conventional)
+    runs-on: ubuntu-latest
+    # semantic-release derives the next version from Conventional Commit types
+    # (feat/fix/…), so the commit format must hold or releases compute the wrong
+    # version (or none). Lints every commit in the PR's base..head range; merge
+    # commits are ignored by commitlint's defaults. Skipped on push to main — those
+    # commits were already linted on their PR.
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need the PR's commits (and their parents) to lint the range.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint PR commit messages
+        run: npx commitlint --from "${{ github.event.pull_request.base.sha }}" --to "${{ github.event.pull_request.head.sha }}" --verbose
+
   verify:
     name: Lint, typecheck, test, build
     runs-on: ubuntu-latest
@@ -144,3 +170,37 @@ jobs:
         run: |
           docker run --rm -v "$GITHUB_WORKSPACE:/repo" ghcr.io/gitleaks/gitleaks:latest \
             detect --source=/repo --config=/repo/.gitleaks.toml --redact --no-banner --verbose
+
+  release:
+    name: Release (semantic-release)
+    runs-on: ubuntu-latest
+    # Cut releases only from main, and only after the core gate is green. On PRs
+    # this job is skipped; on push to main it waits for verify/secret-scan/db-migrate
+    # so a broken or secret-leaking commit never produces a tag or GitHub Release.
+    needs: [secret-scan, verify, db-migrate]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write # create the git tag + GitHub Release
+      issues: write # comment on released issues
+      pull-requests: write # comment on released PRs
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history + tags so commit-analyzer sees every commit since the last
+          # release; persist-credentials off so semantic-release pushes the tag with
+          # GITHUB_TOKEN rather than the checkout's stored credentials.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release
