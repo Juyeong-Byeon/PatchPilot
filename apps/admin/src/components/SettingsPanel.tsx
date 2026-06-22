@@ -17,6 +17,7 @@ import { Select } from "./ui/select.js";
 
 interface SettingsPanelProps {
   token: string;
+  tokenDraft: string;
   copy: AdminCopy;
   locale: Locale;
   sessionExpired: boolean;
@@ -28,7 +29,7 @@ interface SettingsPanelProps {
   editingToken: boolean;
   onEditingTokenChange(next: boolean): void;
   onTokenChange(next: string): void;
-  onSaveToken(): void;
+  onSaveToken(nextToken?: string): void;
   onRefresh(): void;
   // Locale control relocated from the sidebar (theme stays on the sidebar).
   onChangeLocale(next: Locale): void;
@@ -53,6 +54,7 @@ type EditState = Record<string, unknown>;
  */
 export function SettingsPanel({
   token,
+  tokenDraft,
   copy,
   locale,
   sessionExpired,
@@ -161,6 +163,7 @@ export function SettingsPanel({
           listError={listError}
           editingToken={editingToken}
           token={token}
+          tokenDraft={tokenDraft}
           sessionExpired={sessionExpired}
           onEditingTokenChange={onEditingTokenChange}
           onTokenChange={onTokenChange}
@@ -267,6 +270,7 @@ function AccountSection({
   listError,
   editingToken,
   token,
+  tokenDraft,
   sessionExpired,
   onEditingTokenChange,
   onTokenChange,
@@ -278,10 +282,11 @@ function AccountSection({
   listError: string;
   editingToken: boolean;
   token: string;
+  tokenDraft: string;
   sessionExpired: boolean;
   onEditingTokenChange(next: boolean): void;
   onTokenChange(next: string): void;
-  onSaveToken(): void;
+  onSaveToken(nextToken?: string): void;
   onRefresh(): void;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -299,7 +304,8 @@ function AccountSection({
             className="grid max-w-[420px] gap-2"
             onSubmit={(event) => {
               event.preventDefault();
-              onSaveToken();
+              const submittedToken = new FormData(event.currentTarget).get("admin-token");
+              onSaveToken(typeof submittedToken === "string" ? submittedToken : token);
             }}
           >
             <label className="sr-only" htmlFor="admin-token">
@@ -307,8 +313,9 @@ function AccountSection({
             </label>
             <Input
               id="admin-token"
+              name="admin-token"
               ref={inputRef}
-              value={token}
+              value={tokenDraft}
               type="password"
               autoComplete="off"
               placeholder={copy.tokenPlaceholder}

@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ListChecks, Monitor, Moon, Settings as SettingsIcon, Sun } from "lucide-react";
+import {
+  ChevronLeft,
+  ListChecks,
+  Monitor,
+  Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Settings as SettingsIcon,
+  Sun,
+} from "lucide-react";
 import adminLogo from "./assets/patchpilot-logo.svg";
 import {
   answerJob,
@@ -104,6 +113,7 @@ function AppInner() {
   const [theme, setTheme] = useState<ThemePreference>(() => getInitialTheme());
   const copy = adminCopy[locale];
   const [token, setToken] = useState(() => getStoredAdminToken());
+  const [tokenDraft, setTokenDraft] = useState(token);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [status, setStatus] = useState<StatusState>(() => (token ? { kind: "ready" } : { kind: "enterToken" }));
   const [listError, setListError] = useState<string>("");
@@ -115,6 +125,7 @@ function AppInner() {
   // The sidebar shows a compact "authenticated" block by default; the token input
   // only appears once the operator opts into editing it.
   const [editingToken, setEditingToken] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const tokenInputRef = useRef<HTMLInputElement | null>(null);
   const selectedJobId = route.page === "detail" ? route.jobId : "";
   // No saved token, or the session expired: gate the whole app behind onboarding
@@ -124,6 +135,7 @@ function AppInner() {
   // Single re-auth boundary: stop polling, surface one state, focus the token form.
   function handleSessionExpiry() {
     setSessionExpired(true);
+    setTokenDraft(token);
     setStatus({ kind: "sessionExpired" });
     setListError(copy.tokenInvalid);
     // Defer focus until after the re-render that re-enables the form.
@@ -266,14 +278,17 @@ function AppInner() {
     return () => window.clearInterval(intervalId);
   }, [selectedJobId]);
 
-  function saveToken() {
-    storeAdminToken(token);
+  function saveToken(nextToken = token) {
+    const normalizedToken = nextToken.trim();
+    setToken(normalizedToken);
+    setTokenDraft(normalizedToken);
+    storeAdminToken(normalizedToken);
     // Re-authentication clears the expiry boundary and resumes polling. Applying a
     // token also leaves the sidebar edit stage / dismisses the onboarding gate.
     setSessionExpired(false);
     setEditingToken(false);
     setListError("");
-    setStatus(token.trim() ? { kind: "ready" } : { kind: "enterToken" });
+    setStatus(normalizedToken ? { kind: "ready" } : { kind: "enterToken" });
     void queryClient.invalidateQueries({ queryKey: ["jobs"] });
   }
 
@@ -348,6 +363,11 @@ function AppInner() {
     navigate({ page: "settings" });
   }
 
+  function changeEditingToken(nextEditingToken: boolean) {
+    setTokenDraft(token);
+    setEditingToken(nextEditingToken);
+  }
+
   function refreshCurrentDetail() {
     if (!selectedJobId) return;
     void queryClient.invalidateQueries({ queryKey: ["detail", selectedJobId] });
@@ -378,20 +398,22 @@ function AppInner() {
               className="grid gap-3"
               onSubmit={(event) => {
                 event.preventDefault();
-                saveToken();
+                const submittedToken = new FormData(event.currentTarget).get("admin-token");
+                saveToken(typeof submittedToken === "string" ? submittedToken : token);
               }}
             >
               <label htmlFor="onboarding-token" className="grid gap-1.5 text-left">
                 <span className="sr-only">{copy.tokenLabel}</span>
                 <Input
                   id="onboarding-token"
+                  name="admin-token"
                   ref={tokenInputRef}
-                  value={token}
+                  value={tokenDraft}
                   type="password"
                   autoComplete="off"
                   placeholder={copy.tokenPlaceholder}
                   aria-invalid={sessionExpired || undefined}
-                  onChange={(event) => setToken(event.target.value)}
+                  onChange={(event) => setTokenDraft(event.target.value)}
                 />
               </label>
               <Button type="submit" className="w-full">
@@ -414,52 +436,84 @@ function AppInner() {
   }
 
   return (
-    <div className="admin-shell grid min-h-screen text-true-black lg:grid-cols-[236px_minmax(0,1fr)]">
+    <div
+      className={cn(
+        "admin-shell grid min-h-screen text-true-black transition-[grid-template-columns] duration-200 lg:grid-cols-[236px_minmax(0,1fr)]",
+        sidebarCollapsed && "lg:grid-cols-[64px_minmax(0,1fr)]",
+      )}
+    >
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:m-2 focus:rounded-lg focus:bg-cobalt-surface focus:px-3 focus:py-2 focus:text-paper"
       >
         {copy.skipToContent}
       </a>
-      <aside className="admin-sidebar border-b border-hairline-gray bg-linen-white/95 lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
-        <div className="flex h-full flex-col gap-5 px-4 py-4">
-          <div className="flex min-w-0 items-center gap-3">
+      <aside
+        className={cn(
+          "admin-sidebar border-b border-hairline-gray bg-linen-white/95 lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r",
+          sidebarCollapsed && "admin-sidebar-collapsed",
+        )}
+      >
+        <div className={cn("flex h-full flex-col gap-5 px-4 py-4", sidebarCollapsed && "lg:items-center lg:px-3")}>
+          <div className={cn("flex min-w-0 items-center gap-3", sidebarCollapsed && "lg:flex-col")}>
             <img
               src={adminLogo}
               alt=""
               aria-hidden="true"
               className="status-glow-active size-9 shrink-0 rounded-xl border border-electric-blue/20 bg-mist-blue object-contain p-1"
             />
-            <div className="min-w-0">
-              <p className="text-[12px] leading-4 text-charcoal">{copy.appEyebrow}</p>
-              <strong className="block truncate text-[17px] font-semibold leading-5 text-forest-ink">
-                {copy.appTitle}
-              </strong>
-            </div>
+            {!sidebarCollapsed ? (
+              <div className="min-w-0">
+                <p className="text-[12px] leading-4 text-charcoal">{copy.appEyebrow}</p>
+                <strong className="block truncate text-[17px] font-semibold leading-5 text-forest-ink">
+                  {copy.appTitle}
+                </strong>
+              </div>
+            ) : null}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={cn("ml-auto", sidebarCollapsed && "lg:ml-0")}
+              aria-label={sidebarCollapsed ? copy.expandSidebar : copy.collapseSidebar}
+              title={sidebarCollapsed ? copy.expandSidebar : copy.collapseSidebar}
+              aria-expanded={!sidebarCollapsed}
+              onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+            >
+              {sidebarCollapsed ? (
+                <PanelLeftOpen data-icon aria-hidden="true" strokeWidth={2.2} />
+              ) : (
+                <PanelLeftClose data-icon aria-hidden="true" strokeWidth={2.2} />
+              )}
+            </Button>
           </div>
 
-          <nav className="grid gap-1" aria-label={copy.appTitle}>
+          <nav className={cn("grid gap-1", sidebarCollapsed && "lg:w-10")} aria-label={copy.appTitle}>
             <NavItem
               label={copy.jobs}
               Icon={ListChecks}
               active={route.page === "list" || route.page === "detail"}
+              collapsed={sidebarCollapsed}
               onClick={openJobList}
             />
             <NavItem
               label={copy.settings}
               Icon={SettingsIcon}
               active={route.page === "settings"}
+              collapsed={sidebarCollapsed}
               onClick={openSettings}
             />
           </nav>
 
-          <div className="mt-auto grid gap-4">
-            <ThemeToggle copy={copy} theme={theme} onChangeTheme={changeTheme} />
-            <footer className="border-t border-hairline-gray pt-4 text-[12px] leading-5 text-charcoal">
-              <p className="m-0 font-medium text-forest-ink">{copy.appTitle}</p>
-              <p className="m-0 mt-1">{copy.footerScope}</p>
-              <VersionBadge version={version} copy={copy} />
-            </footer>
+          <div className={cn("mt-auto grid gap-4", sidebarCollapsed && "lg:w-10")}>
+            <ThemeToggle copy={copy} theme={theme} collapsed={sidebarCollapsed} onChangeTheme={changeTheme} />
+            {!sidebarCollapsed ? (
+              <footer className="border-t border-hairline-gray pt-4 text-[12px] leading-5 text-charcoal">
+                <p className="m-0 font-medium text-forest-ink">{copy.appTitle}</p>
+                <p className="m-0 mt-1">{copy.footerScope}</p>
+                <VersionBadge version={version} copy={copy} />
+              </footer>
+            ) : null}
           </div>
         </div>
       </aside>
@@ -540,6 +594,7 @@ function AppInner() {
           {route.page === "settings" ? (
             <SettingsPanel
               token={token}
+              tokenDraft={tokenDraft}
               copy={copy}
               locale={locale}
               sessionExpired={sessionExpired}
@@ -547,8 +602,8 @@ function AppInner() {
               status={renderStatus(status, copy)}
               listError={!sessionExpired ? listError : ""}
               editingToken={editingToken}
-              onEditingTokenChange={setEditingToken}
-              onTokenChange={setToken}
+              onEditingTokenChange={changeEditingToken}
+              onTokenChange={setTokenDraft}
               onSaveToken={saveToken}
               onRefresh={() => void queryClient.invalidateQueries({ queryKey: ["jobs"] })}
               onChangeLocale={changeLocale}
@@ -644,21 +699,27 @@ function renderStatus(status: StatusState, copy: AdminCopy): string {
 function ThemeToggle({
   copy,
   theme,
+  collapsed,
   onChangeTheme,
 }: {
   copy: AdminCopy;
   theme: ThemePreference;
+  collapsed: boolean;
   onChangeTheme(next: ThemePreference): void;
 }) {
   return (
-    <div className="flex items-center gap-1 rounded-lg bg-mist-blue p-1" role="group" aria-label={copy.themeLabel}>
+    <div
+      className={cn("flex items-center gap-1 rounded-lg bg-mist-blue p-1", collapsed && "lg:flex-col")}
+      role="group"
+      aria-label={copy.themeLabel}
+    >
       {THEME_OPTIONS.map(({ value, Icon, labelKey }) => (
         <Button
           key={value}
           type="button"
           size="sm"
           variant={theme === value ? "default" : "ghost"}
-          className="h-8 flex-1 px-0"
+          className={cn("h-8 flex-1 px-0", collapsed && "lg:w-8 lg:flex-none")}
           aria-pressed={theme === value}
           aria-label={copy[labelKey]}
           title={copy[labelKey]}
@@ -675,11 +736,13 @@ function NavItem({
   label,
   Icon,
   active,
+  collapsed,
   onClick,
 }: {
   label: string;
   Icon: typeof ListChecks;
   active: boolean;
+  collapsed: boolean;
   onClick(): void;
 }) {
   return (
@@ -689,13 +752,14 @@ function NavItem({
       onClick={onClick}
       className={cn(
         "interactive-card inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-left text-[13px] font-medium transition-colors",
+        collapsed && "justify-center px-0 lg:h-10 lg:w-10",
         active
           ? "border-electric-blue/20 bg-mist-blue text-cobalt-surface shadow-sm shadow-electric-blue/10 hover:border-electric-blue/40 hover:bg-sage-wash"
           : "border-transparent bg-transparent text-charcoal hover:bg-mist-blue hover:text-forest-ink",
       )}
     >
       <Icon aria-hidden="true" size={16} strokeWidth={2.2} />
-      {label}
+      <span className={cn(collapsed && "sr-only")}>{label}</span>
     </button>
   );
 }

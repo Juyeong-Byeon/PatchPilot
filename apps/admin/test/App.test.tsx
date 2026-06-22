@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../src/App.js";
 import { adminCopy } from "../src/i18n.js";
@@ -114,6 +114,54 @@ describe("App", () => {
     expect(screen.getByRole("heading", { level: 1, name: "작업" })).toBeInTheDocument();
   });
 
+  it("stores the admin token after the initial onboarding submit", async () => {
+    window.history.pushState(null, "", "/jobs");
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => jsonResponse([]));
+
+    render(<App />);
+
+    const input = screen.getByLabelText("관리자 인증키") as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(input, { target: { value: " fresh-key " } });
+      await Promise.resolve();
+    });
+    expect(input).toHaveValue(" fresh-key ");
+
+    await act(async () => {
+      fireEvent.submit(input.closest("form")!);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(window.localStorage.getItem("ADMIN_TOKEN")).toBe("fresh-key"));
+  });
+
+  it("lets operators collapse and reopen the left sidebar", async () => {
+    window.localStorage.setItem("ADMIN_TOKEN", "access-key");
+    window.history.pushState(null, "", "/jobs");
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => jsonResponse([]));
+
+    render(<App />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const sidebar = document.querySelector(".admin-sidebar");
+    expect(sidebar).not.toBeNull();
+    expect(sidebar).not.toHaveClass("admin-sidebar-collapsed");
+
+    fireEvent.click(screen.getByRole("button", { name: adminCopy.ko.collapseSidebar }));
+
+    expect(sidebar).toHaveClass("admin-sidebar-collapsed");
+    expect(screen.getByRole("button", { name: adminCopy.ko.expandSidebar })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: adminCopy.ko.expandSidebar }));
+
+    expect(sidebar).not.toHaveClass("admin-sidebar-collapsed");
+    expect(screen.getByRole("button", { name: adminCopy.ko.collapseSidebar })).toBeInTheDocument();
+  });
+
   it("polls running job detail including logs every second", async () => {
     vi.useFakeTimers();
     window.localStorage.setItem("ADMIN_TOKEN", "access-key");
@@ -158,6 +206,7 @@ describe("App", () => {
     render(<App />);
 
     await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -166,7 +215,7 @@ describe("App", () => {
     expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/api/jobs/job_1/logs"))).toHaveLength(1);
 
     await act(async () => {
-      vi.advanceTimersByTime(1000);
+      await vi.advanceTimersByTimeAsync(1000);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -201,7 +250,7 @@ describe("App", () => {
     const reviewChip = within(filterGroup).getByRole("button", { name: /리뷰 대기/ });
     expect(reviewChip).toBeInTheDocument();
     // The Needs-Review chip counts the review job; Completed counts only the merged one.
-    expect(reviewChip).toHaveTextContent("1");
+    await waitFor(() => expect(reviewChip).toHaveTextContent("1"));
     const completedChip = within(filterGroup).getByRole("button", { name: /^완료/ });
     expect(completedChip).toHaveTextContent("1");
 
@@ -236,7 +285,7 @@ describe("App", () => {
     const filterGroup = screen.getByRole("group", { name: "작업 필터" });
     const inputChip = within(filterGroup).getByRole("button", { name: /입력 대기/ });
     // Only the parked job counts toward the chip.
-    expect(inputChip).toHaveTextContent("1");
+    await waitFor(() => expect(inputChip).toHaveTextContent("1"));
 
     await act(async () => {
       inputChip.click();
@@ -267,7 +316,7 @@ describe("App", () => {
     });
 
     // NeedsInput (1) + NeedsReview (1) = 2 jobs awaiting an operator → "(2)" prefix.
-    expect(document.title).toMatch(/^\(2\) /);
+    await waitFor(() => expect(document.title).toMatch(/^\(2\) /));
   });
 
   it("surfaces a single session-expired state and stops polling on a 401", async () => {
