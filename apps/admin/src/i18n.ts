@@ -11,6 +11,8 @@ export const adminCopy = {
     appEyebrow: "관리자 콘솔",
     appTitle: "PatchPilot",
     skipToContent: "본문으로 건너뛰기",
+    collapseSidebar: "좌측 패널 접기",
+    expandSidebar: "좌측 패널 펼치기",
     footerScope: "작업 큐 · 실행 로그 · PR 아티팩트",
     // Accessible label for the deployed-build stamp in the sidebar footer (e.g.
     // "v0.1.0 · 1a2b3c4"). Lets operators verify which build is serving traffic.
@@ -215,6 +217,8 @@ export const adminCopy = {
     appEyebrow: "Admin Console",
     appTitle: "PatchPilot",
     skipToContent: "Skip to content",
+    collapseSidebar: "Collapse left panel",
+    expandSidebar: "Expand left panel",
     footerScope: "Job queue · runtime logs · PR artifacts",
     // Accessible label for the deployed-build stamp in the sidebar footer (e.g.
     // "v0.1.0 · 1a2b3c4"). Lets operators verify which build is serving traffic.
