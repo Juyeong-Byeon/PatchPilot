@@ -342,7 +342,7 @@ describe("runCodexAgentRunner needs-input (NeedsInput)", () => {
         "process.stdin.on('end', () => {",
         "  const result = spawnSync('git', ['commit', '--allow-empty', '-m', 'test: empty commit'], {",
         "    cwd: process.cwd(),",
-        "    stdio: 'inherit',",
+        "    stdio: 'ignore',",
         "  });",
         "  process.exit(result.status ?? 1);",
         "});",
