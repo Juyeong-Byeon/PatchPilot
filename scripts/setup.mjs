@@ -16,8 +16,9 @@
 //      for the API readiness probe
 //   7. Print the console URL and admin token
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { createServer } from "node:net";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseEnvFile } from "./preflight.mjs";
 
 const rootDir = fileURLToPath(new URL("..", import.meta.url));
@@ -33,10 +34,81 @@ function run(command, args, options = {}) {
   execFileSync(command, args, { cwd: rootDir, stdio: "inherit", ...options });
 }
 
-function hostDatabaseUrl(env) {
+export function hostDatabaseUrl(env) {
   const url = env.DATABASE_URL ?? "postgres://ticket_to_pr:ticket_to_pr@localhost:5432/ticket_to_pr";
   // Rewrite the in-container service hostname to localhost for host-run migration.
   return url.replace(/@postgres:/, "@localhost:");
+}
+
+export function setEnvValue(source, key, value) {
+  const line = `${key}=${value}`;
+  const pattern = new RegExp(`^${escapeRegExp(key)}=.*$`, "m");
+  if (pattern.test(source)) return source.replace(pattern, line);
+  return `${source.replace(/\s*$/, "")}\n${line}\n`;
+}
+
+export async function planFreshEnvPortUpdates(env, isPortAvailableFn = isPortAvailable) {
+  const updates = {};
+  const apiPort = parsePort(env.HOST_API_PORT, 3000);
+  const adminPort = parsePort(env.HOST_ADMIN_PORT, 5173);
+
+  if (!(await isPortAvailableFn(apiPort))) {
+    const replacement = await firstAvailablePort(apiPort + 1, isPortAvailableFn);
+    updates.HOST_API_PORT = String(replacement);
+    if (!env.PUBLIC_BASE_URL || env.PUBLIC_BASE_URL === `http://localhost:${apiPort}`) {
+      updates.PUBLIC_BASE_URL = `http://localhost:${replacement}`;
+    }
+  }
+
+  if (!(await isPortAvailableFn(adminPort))) {
+    updates.HOST_ADMIN_PORT = String(await firstAvailablePort(adminPort + 1, isPortAvailableFn));
+  }
+
+  return updates;
+}
+
+async function applyFreshEnvPortUpdates(envPath, env) {
+  const updates = await planFreshEnvPortUpdates(env);
+  if (Object.keys(updates).length === 0) return env;
+
+  let source = readFileSync(envPath, "utf8");
+  for (const [key, value] of Object.entries(updates)) {
+    source = setEnvValue(source, key, value);
+  }
+  writeFileSync(envPath, source);
+  for (const [key, value] of Object.entries(updates)) {
+    console.log(`    ${key}=${value} (auto-selected because the default port was busy)`);
+  }
+  return { ...env, ...updates };
+}
+
+function parsePort(value, fallback) {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+async function firstAvailablePort(startPort, isPortAvailableFn, attempts = 50) {
+  for (let port = startPort; port < startPort + attempts; port += 1) {
+    if (await isPortAvailableFn(port)) return port;
+  }
+  throw new Error(`Could not find a free port from ${startPort} to ${startPort + attempts - 1}`);
+}
+
+export function isPortAvailable(port) {
+  return new Promise((resolve) => {
+    const server = createServer();
+    server.once("error", () => resolve(false));
+    server.once("listening", () => server.close(() => resolve(true)));
+    server.listen(port, "0.0.0.0");
+  });
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function isGstackExecutor(env) {
+  return String(env.WORKER_EXECUTOR_MODE ?? env.EXECUTOR_MODE ?? "mock").toLowerCase() === "gstack";
 }
 
 async function waitForReady(url, attempts = 30) {
@@ -60,13 +132,18 @@ async function main() {
 
   heading("Environment file");
   const envPath = `${rootDir}.env`;
+  let createdEnv = false;
   if (existsSync(envPath)) {
     console.log("    .env already exists — leaving it untouched.");
   } else {
     copyFileSync(`${rootDir}.env.example`, envPath);
+    createdEnv = true;
     console.log("    Created .env from .env.example (mock-mode defaults).");
   }
-  const env = parseEnvFile(envPath);
+  let env = parseEnvFile(envPath);
+  if (createdEnv) {
+    env = await applyFreshEnvPortUpdates(envPath, env);
+  }
 
   heading("Install dependencies");
   run("npm", ["install"]);
@@ -75,9 +152,14 @@ async function main() {
   run("docker", ["compose", "up", "-d", "--wait", "postgres", "redis"]);
 
   heading("Run database migrations (host URL)");
-  run("npm", ["--workspace", "@ticket-to-pr/db", "run", "migrate"], {
+  run("npm", ["run", "db:migrate"], {
     env: { ...process.env, DATABASE_URL: hostDatabaseUrl(env) },
   });
+
+  if (isGstackExecutor(env)) {
+    heading("Build runner runtime image");
+    run("npm", ["run", "docker:build-runtime"]);
+  }
 
   heading("Build and start API + worker + admin frontend");
   run("docker", ["compose", "up", "-d", "--build", "--wait", "api", "worker", "admin"]);
@@ -104,8 +186,10 @@ async function main() {
   console.log("    npm run reset:db   # wipe the database volume and re-migrate");
 }
 
-main().catch((error) => {
-  console.error(`\n[31mSetup failed:[0m ${error instanceof Error ? error.message : error}`);
-  console.error("Inspect logs with: npm run logs");
-  process.exit(1);
-});
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  main().catch((error) => {
+    console.error(`\n[31mSetup failed:[0m ${error instanceof Error ? error.message : error}`);
+    console.error("Inspect logs with: npm run logs");
+    process.exit(1);
+  });
+}

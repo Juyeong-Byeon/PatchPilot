@@ -14,6 +14,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const rootDir = fileURLToPath(new URL("..", import.meta.url));
+const VALID_EXECUTOR_MODES = new Set(["mock", "gstack"]);
+const VALID_PUBLISHER_MODES = new Set(["mock", "github"]);
 
 export function parseEnvFile(path) {
   const env = {};
@@ -31,6 +33,19 @@ export function parseEnvFile(path) {
 function isPlaceholder(value) {
   if (!value) return true;
   return /change-me|xxx|owner\/repo|^secret_|^cli_|^base_app_token|^table_|github_pat_xxx/i.test(value);
+}
+
+export function hasRealRepositoryAllowlist(value) {
+  return parseCsv(value).some((repository) => !isPlaceholder(repository) && /^[^/\s]+\/[^/\s]+$/.test(repository));
+}
+
+function parseCsv(value) {
+  return value
+    ? value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean)
+    : [];
 }
 
 // Real (gstack) runs mount Codex/gstack seed inputs into each runner container. .env is read
@@ -66,6 +81,29 @@ export function checkRunnerMounts(env, { existsSync: exists = existsSync } = {})
   return { problems, warnings };
 }
 
+export function resolvePreflightModes(env) {
+  const problems = [];
+  const executorMode = String(env.WORKER_EXECUTOR_MODE ?? env.EXECUTOR_MODE ?? "mock").toLowerCase();
+  const rawPublisherMode = String(env.WORKER_PUBLISHER_MODE ?? env.PUBLISHER_MODE ?? "mock").toLowerCase();
+  const publisherMode = rawPublisherMode === "gstack" ? "github" : rawPublisherMode;
+
+  if (!VALID_EXECUTOR_MODES.has(executorMode)) {
+    const hint =
+      executorMode === "staged"
+        ? "Use EXECUTOR_MODE=gstack; staged is selected per ticket via the staged runner path, not as the worker mode."
+        : "Use EXECUTOR_MODE=mock for local smoke runs or EXECUTOR_MODE=gstack for the real runner.";
+    problems.push(`Invalid EXECUTOR_MODE="${executorMode}". ${hint}`);
+  }
+
+  if (!VALID_PUBLISHER_MODES.has(publisherMode)) {
+    problems.push(
+      'Invalid PUBLISHER_MODE="' + rawPublisherMode + '". Use PUBLISHER_MODE=mock or PUBLISHER_MODE=github.',
+    );
+  }
+
+  return { executorMode, publisherMode, problems };
+}
+
 // Runs all preflight checks. Returns { problems, warnings, info } so callers can
 // decide how to report; the CLI entrypoint below prints and sets the exit code.
 export function runPreflightChecks() {
@@ -77,6 +115,14 @@ export function runPreflightChecks() {
   const ok = (message) => info.push(message);
 
   // Toolchain
+  const nodeMajor = Number.parseInt(process.versions.node.split(".", 1)[0] ?? "0", 10);
+  if (nodeMajor >= 24) {
+    ok(`Node.js ${process.version} satisfies .nvmrc`);
+  } else {
+    fail(
+      `Node.js 24+ is required by .nvmrc, but this shell is running ${process.version}. Run \`nvm use\`, or install Homebrew node@24 and run \`PATH=/opt/homebrew/opt/node@24/bin:$PATH npm run setup\`.`,
+    );
+  }
   try {
     execFileSync("docker", ["info"], { stdio: "ignore" });
     ok("Docker daemon is running");
@@ -106,14 +152,15 @@ export function runPreflightChecks() {
     warn("ADMIN_TOKEN is still the default. Fine for local dev; change it before exposing the console.");
   }
 
-  const executorMode = (env.WORKER_EXECUTOR_MODE ?? env.EXECUTOR_MODE ?? "mock").toLowerCase();
-  const publisherMode = (env.WORKER_PUBLISHER_MODE ?? env.PUBLISHER_MODE ?? "mock").toLowerCase();
+  const modeCheck = resolvePreflightModes(env);
+  const { executorMode, publisherMode } = modeCheck;
+  for (const message of modeCheck.problems) fail(message);
   ok(`Executor mode: ${executorMode}, Publisher mode: ${publisherMode}`);
 
   // Real GitHub publishing requires real credentials and an allowlist.
   if (publisherMode === "github") {
     if (isPlaceholder(env.GITHUB_TOKEN)) fail("PUBLISHER_MODE=github requires a real GITHUB_TOKEN.");
-    if (isPlaceholder(env.REPOSITORY_ALLOWLIST))
+    if (!hasRealRepositoryAllowlist(env.REPOSITORY_ALLOWLIST))
       fail("PUBLISHER_MODE=github requires REPOSITORY_ALLOWLIST set to a real owner/repo.");
   }
   // Real-mode runner mounts: only meaningful for the gstack executor. Validates that the

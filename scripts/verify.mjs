@@ -9,8 +9,8 @@ export function buildVerifyPlan() {
     { title: "Check formatting", command: "npm", args: ["run", "format:check"] },
     { title: "Typecheck workspaces", command: "npm", args: ["run", "typecheck"] },
     { title: "Lint", command: "npm", args: ["run", "lint"] },
-    { title: "Run tests", command: "npm", args: ["test"] },
     { title: "Build", command: "npm", args: ["run", "build"] },
+    { title: "Run tests", command: "npm", args: ["test"] },
     { title: "Scan secrets", command: "npm", args: ["run", "scan:secrets"] },
   ];
 }

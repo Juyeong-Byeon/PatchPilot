@@ -312,10 +312,10 @@ describe("JobDetail", () => {
       />,
     );
 
-    // Brand-free heading (sub-track card), with the implement stage relabelled to
-    // avoid clashing with the platform "구현" phase chip. Stage labels also appear
-    // nested under the Implementing node in the step graph, so they render twice.
-    expect(screen.getByText("에이전트 단계")).toBeInTheDocument();
+    // Compact sub-track lives under the platform "구현" node; no separate card
+    // heading, and the implement stage is relabelled to avoid clashing with the
+    // platform phase chip.
+    expect(screen.getByRole("list", { name: adminCopy.ko.agentStages })).toBeInTheDocument();
     expect(screen.getAllByText("코드 작성").length).toBeGreaterThan(0);
     expect(screen.getAllByText("검증").length).toBeGreaterThan(0);
   });
@@ -339,7 +339,7 @@ describe("JobDetail", () => {
     expect(screen.getAllByText("PR 설명").length).toBeGreaterThan(0);
   });
 
-  it("reveals the pipeline stage notes only when the Implementing step is selected", () => {
+  it("toggles the pipeline stage notes from the Implementing execution span", () => {
     const props = {
       ...baseProps,
       job: { id: "job_1", phase: "Completed", outcome: "NeedsReview", repository: "acme/web" },
@@ -347,12 +347,24 @@ describe("JobDetail", () => {
     };
     render(<JobDetail {...props} />);
 
-    // Completed job opens with no step selected → the stage-notes panel is hidden.
-    expect(screen.queryByText(adminCopy.ko.stageNotes)).not.toBeInTheDocument();
+    const diagnostics = screen.getByText(adminCopy.ko.runDiagnostics).closest("section");
+    expect(diagnostics).toBeInTheDocument();
 
-    // Selecting the Implementing node in the step graph reveals it.
-    fireEvent.click(screen.getByRole("button", { name: /구현/ }));
-    expect(screen.getByText(adminCopy.ko.stageNotes)).toBeInTheDocument();
+    const flow = within(diagnostics as HTMLElement).getByRole("region", { name: adminCopy.ko.traceFlow });
+    const implementingRow = within(flow).getByText("구현").closest("tr");
+    expect(implementingRow).toBeInTheDocument();
+
+    // The panel is collapsed until the Implementing row's note toggle is opened.
+    expect(within(flow).queryByRole("region", { name: adminCopy.ko.stageNotes })).not.toBeInTheDocument();
+    fireEvent.click(within(flow).getByRole("button", { name: adminCopy.ko.stageNotes }));
+
+    const notes = within(diagnostics as HTMLElement).getByRole("region", { name: adminCopy.ko.stageNotes });
+
+    expect(notes).toBeInTheDocument();
+    expect(implementingRow).toHaveAttribute("aria-selected", "true");
+    expect(
+      (implementingRow as HTMLElement).compareDocumentPosition(notes) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("hides the agent sub-stage track for non-staged runs that emit no stage events", () => {
@@ -373,7 +385,7 @@ describe("JobDetail", () => {
       />,
     );
 
-    expect(screen.queryByText("에이전트 단계")).not.toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: adminCopy.ko.agentStages })).not.toBeInTheDocument();
   });
 
   it("renders a single primary status badge for a Completed+NeedsReview job", () => {

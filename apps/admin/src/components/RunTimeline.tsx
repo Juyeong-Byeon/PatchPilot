@@ -1,4 +1,5 @@
-import { useMemo, type KeyboardEvent } from "react";
+import { Fragment, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import type { RunEvent } from "../api.js";
 import { translateState, type AdminCopy, type Locale } from "../i18n.js";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
@@ -12,6 +13,7 @@ interface RunTimelineProps {
   variant?: "card" | "embedded";
   currentPhase?: string | undefined;
   nowMs?: number;
+  implementingDetails?: ReactNode;
 }
 
 export interface SpanSelection {
@@ -37,7 +39,9 @@ export function RunTimeline({
   variant = "card",
   currentPhase,
   nowMs,
+  implementingDetails,
 }: RunTimelineProps) {
+  const [implementingDetailsOpen, setImplementingDetailsOpen] = useState(false);
   const orderedEvents = useMemo(
     () =>
       [...events].sort((left, right) => {
@@ -53,6 +57,7 @@ export function RunTimeline({
     [currentPhase, effectiveNowMs, orderedEvents],
   );
   const totalRunDuration = Math.max(1, totalDuration(spans));
+  const reserveDetailsToggleSpace = Boolean(implementingDetails);
 
   const content = (
     <section aria-label={copy.traceFlow} className={variant === "embedded" ? "" : "px-4 py-3"}>
@@ -85,8 +90,12 @@ export function RunTimeline({
               <th scope="col" className="w-[112px] px-3 py-2">
                 {copy.traceColumnService}
               </th>
-              <th scope="col" className="w-[340px] px-3 py-2 text-right">
-                {copy.traceColumnDuration}
+              <th scope="col" className="w-[340px] px-3 py-2">
+                <div className="flex items-center justify-end gap-3">
+                  <span className="min-w-[180px] flex-1" aria-hidden="true" />
+                  <span className="w-14 shrink-0 text-right">{copy.traceColumnDuration}</span>
+                  {reserveDetailsToggleSpace ? <span className="size-6 shrink-0" aria-hidden="true" /> : null}
+                </div>
               </th>
             </tr>
           </thead>
@@ -96,51 +105,89 @@ export function RunTimeline({
                 selectedSpan?.phase === span.phase &&
                 (!selectedSpan.source || span.sources.includes(selectedSpan.source));
               const source = span.sources.join(", ") || copy.sourceSystem;
+              const isImplementing = span.phase === "Implementing";
+              const showDetailsToggle = isImplementing && Boolean(implementingDetails);
+              const detailsOpen = showDetailsToggle && implementingDetailsOpen;
+              const detailsId = `trace-flow-${span.phase.toLowerCase()}-details`;
 
               return (
-                <tr
-                  aria-selected={selected}
-                  className={`interactive-row cursor-pointer border-b border-hairline-gray outline-none last:border-b-0 hover:bg-mist-blue focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-electric-blue/25 ${selected ? "bg-mist-blue ring-1 ring-inset ring-electric-blue" : ""}`}
-                  data-phase={span.phase}
-                  data-status={span.status}
-                  key={span.phase}
-                  onClick={() => onSelectSpan?.({ phase: span.phase, source: span.sources[0] })}
-                  onKeyDown={(event) => selectWithKeyboard(event, span, onSelectSpan)}
-                  tabIndex={0}
-                >
-                  <td className="px-3 py-2 font-mono text-[12px] text-charcoal">{index}</td>
-                  <td className="min-w-0 px-3 py-2">
-                    <span className="block truncate font-medium text-true-black">
-                      {translateState(span.phase, locale)}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2">
-                    <span
-                      className={`inline-flex rounded-full px-2 py-0.5 text-[12px] leading-4 shadow-sm ${statusClassName(span.status)}`}
-                    >
-                      {statusLabel(span.status, copy)}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2">
-                    <span className="block truncate text-forest-ink" title={source}>
-                      {source}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center justify-end gap-3">
-                      <div className="h-2 min-w-[180px] flex-1 overflow-hidden rounded-full bg-linen shadow-inner">
-                        <div
-                          className={`duration-bar h-full rounded-full ${durationBarClassName(span.status)}`}
-                          data-duration-bar
-                          style={{ width: `${durationWidth(span.durationMs, totalRunDuration)}%` }}
-                        />
-                      </div>
-                      <span className="w-14 shrink-0 text-right font-mono text-[12px] text-charcoal">
-                        {formatDuration(span.durationMs)}
+                <Fragment key={span.phase}>
+                  <tr
+                    aria-selected={selected}
+                    className={`interactive-row cursor-pointer border-b border-hairline-gray outline-none hover:bg-mist-blue focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-electric-blue/25 ${selected ? "bg-mist-blue ring-1 ring-inset ring-electric-blue" : ""}`}
+                    data-phase={span.phase}
+                    data-status={span.status}
+                    onClick={() => onSelectSpan?.({ phase: span.phase, source: span.sources[0] })}
+                    onKeyDown={(event) => selectWithKeyboard(event, span, onSelectSpan)}
+                    tabIndex={0}
+                  >
+                    <td className="px-3 py-2 font-mono text-[12px] text-charcoal">{index}</td>
+                    <td className="min-w-0 px-3 py-2">
+                      <span className="block truncate font-medium text-true-black">
+                        {translateState(span.phase, locale)}
                       </span>
-                    </div>
-                  </td>
-                </tr>
+                    </td>
+                    <td className="px-3 py-2">
+                      <span
+                        className={`inline-flex rounded-full px-2 py-0.5 text-[12px] leading-4 shadow-sm ${statusClassName(span.status)}`}
+                      >
+                        {statusLabel(span.status, copy)}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2">
+                      <span className="block truncate text-forest-ink" title={source}>
+                        {source}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center justify-end gap-3">
+                        <div className="h-2 min-w-[180px] flex-1 overflow-hidden rounded-full bg-linen shadow-inner">
+                          <div
+                            className={`duration-bar h-full rounded-full ${durationBarClassName(span.status)}`}
+                            data-duration-bar
+                            style={{ width: `${durationWidth(span.durationMs, totalRunDuration)}%` }}
+                          />
+                        </div>
+                        <span className="w-14 shrink-0 text-right font-mono text-[12px] text-charcoal">
+                          {formatDuration(span.durationMs)}
+                        </span>
+                        {reserveDetailsToggleSpace ? (
+                          showDetailsToggle ? (
+                            <button
+                              type="button"
+                              className="inline-flex size-6 shrink-0 items-center justify-center text-cobalt-surface transition-colors duration-150 hover:text-electric-blue focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-electric-blue/25"
+                              aria-label={copy.stageNotes}
+                              aria-expanded={detailsOpen}
+                              aria-controls={detailsId}
+                              title={copy.stageNotes}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                onSelectSpan?.({ phase: span.phase, source: span.sources[0] });
+                                setImplementingDetailsOpen((open) => !open);
+                              }}
+                              onKeyDown={(event) => event.stopPropagation()}
+                            >
+                              {detailsOpen ? (
+                                <ChevronDown aria-hidden="true" size={14} strokeWidth={2.4} />
+                              ) : (
+                                <ChevronRight aria-hidden="true" size={14} strokeWidth={2.4} />
+                              )}
+                            </button>
+                          ) : (
+                            <span className="size-6 shrink-0" aria-hidden="true" />
+                          )
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                  {detailsOpen ? (
+                    <tr className="border-b border-hairline-gray bg-mist-blue/35">
+                      <td className="px-3 py-3" colSpan={5}>
+                        <div id={detailsId}>{implementingDetails}</div>
+                      </td>
+                    </tr>
+                  ) : null}
+                </Fragment>
               );
             })}
           </tbody>

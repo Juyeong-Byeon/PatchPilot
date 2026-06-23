@@ -256,7 +256,7 @@ describe("RunStepGraph", () => {
     expect(container.querySelector("[data-step-graph-item]")).toHaveClass("min-h-[132px]");
   });
 
-  it("nests the gstack sub-stages under the Implementing node when provided", () => {
+  it("renders a compact vertical gstack stage list when provided", () => {
     const { container } = render(
       <RunStepGraph
         copy={adminCopy.ko}
@@ -282,14 +282,13 @@ describe("RunStepGraph", () => {
       />,
     );
 
-    const graph = screen.getByRole("list", { name: "처리 단계 그래프" });
-    const subTrack = within(graph).getByRole("list", { name: adminCopy.ko.agentStages });
+    const subTrack = screen.getByRole("list", { name: adminCopy.ko.agentStages });
     // implement is relabelled to avoid clashing with the "구현" phase node.
     expect(within(subTrack).getByText("코드 작성")).toBeInTheDocument();
     expect(within(subTrack).getByText("PR 설명")).toBeInTheDocument();
-    // Completed sub-stage uses the ink dot, the active one the cobalt dot.
+    // Completed sub-stage uses the ink dot, the active one a small spinner.
     expect(container.querySelector(".bg-forest-ink")).toBeInTheDocument();
-    expect(container.querySelector(".bg-cobalt-surface")).toBeInTheDocument();
+    expect(within(subTrack).getByText("코드 작성").closest("li")?.querySelector(".animate-spin")).toBeInTheDocument();
   });
 
   it("marks intermediate standard phases complete when the run is completed", () => {

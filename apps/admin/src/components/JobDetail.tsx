@@ -38,7 +38,6 @@ import { LogViewer } from "./LogViewer.js";
 import { RunStepGraph } from "./RunStepGraph.js";
 import { RunTimeline, type SpanSelection } from "./RunTimeline.js";
 import { StageNotesPanel, isStageNoteArtifact } from "./StageNotesPanel.js";
-import { StagePipeline } from "./StagePipeline.js";
 import { Badge } from "./ui/badge.js";
 import { Button } from "./ui/button.js";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
@@ -359,11 +358,6 @@ export function JobDetail({
         stageStates={stageStates}
         onSelectStep={setSelectedSpan}
       />
-      {stageStates ? <StagePipeline stages={stageStates} nowMs={nowMs} copy={copy} /> : null}
-      {/* Stage notes belong to the Implementing phase — show them only when that step is selected. */}
-      {selectedSpan?.phase === "Implementing" && stageNotes.length > 0 ? (
-        <StageNotesPanel notes={stageNotes} copy={copy} />
-      ) : null}
       <Card>
         <CardHeader>
           <CardTitle>{copy.runDiagnostics}</CardTitle>
@@ -390,6 +384,9 @@ export function JobDetail({
             selectedSpan={selectedSpan}
             onSelectSpan={setSelectedSpan}
             variant="embedded"
+            implementingDetails={
+              stageNotes.length > 0 ? <StageNotesPanel notes={stageNotes} copy={copy} variant="inline" /> : null
+            }
           />
           <LogViewer
             logs={diagnosticLogs}

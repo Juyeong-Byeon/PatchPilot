@@ -17,7 +17,15 @@ const STAGE_META: Record<string, StageMeta> = {
 };
 const STAGE_ORDER = Object.keys(STAGE_META);
 
-export function StageNotesPanel({ notes, copy }: { notes: Artifact[]; copy: AdminCopy }) {
+export function StageNotesPanel({
+  notes,
+  copy,
+  variant = "card",
+}: {
+  notes: Artifact[];
+  copy: AdminCopy;
+  variant?: "card" | "inline";
+}) {
   const ordered = notes
     .filter((note) => note.kind && STAGE_META[note.kind])
     .sort((a, b) => STAGE_ORDER.indexOf(String(a.kind)) - STAGE_ORDER.indexOf(String(b.kind)));
@@ -26,14 +34,22 @@ export function StageNotesPanel({ notes, copy }: { notes: Artifact[]; copy: Admi
 
   return (
     <section
-      className="surface-card-soft rounded-xl border border-hairline-gray bg-linen-white"
+      className={
+        variant === "inline"
+          ? "rounded-lg border border-electric-blue/20 bg-linen-white"
+          : "surface-card-soft rounded-xl border border-hairline-gray bg-linen-white"
+      }
       aria-label={copy.stageNotes}
     >
-      <div className="border-b border-hairline-gray p-4">
+      <div
+        className={
+          variant === "inline" ? "border-b border-hairline-gray px-3 py-2" : "border-b border-hairline-gray p-4"
+        }
+      >
         <strong className="text-[14px] font-semibold text-forest-ink">{copy.stageNotes}</strong>
         <p className="mt-0.5 text-[12px] leading-4 text-charcoal">{copy.stageNotesHint}</p>
       </div>
-      <div className="grid gap-2 p-3">
+      <div className={variant === "inline" ? "grid gap-2 p-2" : "grid gap-2 p-3"}>
         {ordered.map((note, index) => (
           <StageNote key={String(note.id ?? note.kind ?? index)} note={note} copy={copy} />
         ))}

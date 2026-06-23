@@ -9,8 +9,8 @@ describe("verify script", () => {
       ["npm", ["run", "format:check"]],
       ["npm", ["run", "typecheck"]],
       ["npm", ["run", "lint"]],
-      ["npm", ["test"]],
       ["npm", ["run", "build"]],
+      ["npm", ["test"]],
       ["npm", ["run", "scan:secrets"]],
     ]);
   });
