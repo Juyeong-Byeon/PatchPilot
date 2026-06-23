@@ -10,8 +10,8 @@
 //
 // Exit code 0 = ready, 1 = one or more hard failures.
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { isAbsolute, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const rootDir = fileURLToPath(new URL("..", import.meta.url));
@@ -50,11 +50,15 @@ function parseCsv(value) {
     : [];
 }
 
+function usesUnexpandedHome(value) {
+  return /^~|\$HOME|\$\{HOME\}/.test(value);
+}
+
 // Real (gstack) runs mount Codex/gstack seed inputs into each runner container. .env is read
 // WITHOUT shell expansion, so a `$HOME/...` (or `~/...`) value is taken literally and the mount
 // silently resolves to nothing. Validate each mount so the failure surfaces here, not mid-run as
 // an opaque "auth.json not found" inside the container. Returns { problems, warnings } messages.
-export function checkRunnerMounts(env, { existsSync: exists = existsSync } = {}) {
+export function checkRunnerMounts(env, { existsSync: exists = existsSync, readdirSync: readDir = readdirSync } = {}) {
   const problems = [];
   const warnings = [];
   const mounts = [
@@ -66,15 +70,35 @@ export function checkRunnerMounts(env, { existsSync: exists = existsSync } = {})
   for (const { key, kind, hint } of mounts) {
     const value = env[key];
     if (!value) {
-      problems.push(`EXECUTOR_MODE=gstack requires ${key} — ${hint}.`);
+      const message = `EXECUTOR_MODE=gstack requires ${key} — ${hint}.`;
+      if (key === "CODEX_SKILLS_DIR") warnings.push(`${message} Run \`npm run setup\` to sync bundled skills.`);
+      else problems.push(message);
       continue;
     }
-    if (/^~|\$HOME|\$\{HOME\}/.test(value)) {
+    if (usesUnexpandedHome(value)) {
       warnings.push(`${key}="${value}" uses $HOME/~ which is NOT expanded in .env — use an absolute path (${hint}).`);
       continue;
     }
+    if (!isAbsolute(value)) {
+      warnings.push(`${key}="${value}" is relative; .env runner mounts should use an absolute path (${hint}).`);
+      continue;
+    }
     if (!exists(value)) {
-      problems.push(`${key}="${value}" does not exist on this host — point it at a real ${kind} (${hint}).`);
+      const message = `${key}="${value}" does not exist on this host — point it at a real ${kind} (${hint}).`;
+      if (key === "CODEX_SKILLS_DIR") warnings.push(`${message} Run \`npm run setup\` to create and sync it.`);
+      else problems.push(message);
+    }
+  }
+  const skillsDir = env.CODEX_SKILLS_DIR;
+  if (skillsDir && !usesUnexpandedHome(skillsDir) && isAbsolute(skillsDir) && exists(skillsDir)) {
+    try {
+      if (readDir(skillsDir).length === 0) {
+        warnings.push(
+          `CODEX_SKILLS_DIR="${skillsDir}" is empty; run \`npm run setup\` to install PatchPilot bundled skills before staged runs.`,
+        );
+      }
+    } catch {
+      // The existence check above already reported unusable paths where possible.
     }
   }
   const missingSkills = missingRequiredGstackSkills(env, { existsSync: exists });
@@ -91,7 +115,7 @@ export function checkRunnerMounts(env, { existsSync: exists = existsSync } = {})
 
 export function missingRequiredGstackSkills(env, { existsSync: exists = existsSync } = {}) {
   const root = env.CODEX_SKILLS_DIR;
-  if (!root || /^~|\$HOME|\$\{HOME\}/.test(root) || !exists(root)) return [];
+  if (!root || usesUnexpandedHome(root) || !isAbsolute(root) || !exists(root)) return [];
   return requiredGstackSkills.filter((skill) => !exists(join(root, skill, "SKILL.md")));
 }
 

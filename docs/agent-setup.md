@@ -172,6 +172,10 @@ skills (`patchpilot-ticket-runner`, `gstack-autoplan`, `gstack-review`) into
 rerun `npm run setup`; `npm run doctor:strict` fails when these staged-runner
 skills are missing.
 
+If you change the bundled runner skill files themselves, rerun `npm run setup`
+or recreate the runner container so the runtime mount/copy sees the new files;
+rebuilding the runner image is not normally required.
+
 The repository allowlist is an exact `owner/repo` string match. If policy fails
 with `Repository is not allowlisted`, add the exact repository string to
 `REPOSITORY_ALLOWLIST`, recreate API/worker, then retry the failed job from the

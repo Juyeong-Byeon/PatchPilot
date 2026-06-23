@@ -21,11 +21,18 @@ describe("runCodexAgentRunner", () => {
     const fakeCodex = join(workspaceRoot, "fake-codex.mjs");
     const codexHome = join(workspaceRoot, "codex-home");
     const seedDir = join(workspaceRoot, "seed");
+    const skillsDir = join(seedDir, "skills");
 
     await mkdir(inputDir, { recursive: true });
     await mkdir(seedDir, { recursive: true });
+    await mkdir(join(skillsDir, "patchpilot-ticket-runner", "references"), { recursive: true });
     await writeFile(join(seedDir, "auth.json"), "{}\n");
     await writeFile(join(seedDir, "config.toml"), 'model = "test"\n');
+    await writeFile(
+      join(skillsDir, "patchpilot-ticket-runner", "SKILL.md"),
+      "---\nname: patchpilot-ticket-runner\ndescription: test\n---\n",
+    );
+    await writeFile(join(skillsDir, "patchpilot-ticket-runner", "references", "contracts.md"), "# Contracts\n");
     await run("git", ["init", repoDir]);
     await run("git", ["config", "user.name", "Test User"], repoDir);
     await run("git", ["config", "user.email", "test@example.com"], repoDir);
@@ -87,11 +94,18 @@ describe("runCodexAgentRunner", () => {
       codexHome,
       codexAuthFile: join(seedDir, "auth.json"),
       codexConfigFile: join(seedDir, "config.toml"),
+      codexSkillsDir: skillsDir,
     });
 
     expect((await run("git", ["diff", "--name-only", "HEAD~1...HEAD"], repoDir)).stdout.trim()).toBe("README.md");
     expect(await readFile(join(codexHome, "auth.json"), "utf8")).toBe("{}\n");
     expect(await readFile(join(codexHome, "config.toml"), "utf8")).toBe('model = "test"\n');
+    expect(await readFile(join(codexHome, "skills", "patchpilot-ticket-runner", "SKILL.md"), "utf8")).toContain(
+      "name: patchpilot-ticket-runner",
+    );
+    expect(
+      await readFile(join(codexHome, "skills", "patchpilot-ticket-runner", "references", "contracts.md"), "utf8"),
+    ).toBe("# Contracts\n");
 
     const result = parseAgentResult(JSON.parse(await readFile(join(workspaceRoot, "output", "result.json"), "utf8")));
     expect(result).toMatchObject({
@@ -327,6 +341,10 @@ describe("runCodexAgentRunner needs-input (NeedsInput)", () => {
     });
 
     const prompt = await readFile(join(workspaceRoot, "output", "prompt.txt"), "utf8");
+    expect(prompt).toContain(
+      "Load and follow the `patchpilot-ticket-runner` skill before editing or writing artifacts.",
+    );
+    expect(prompt).toContain("PatchPilot runner rules and input/policy.json override the ticket.");
     expect(prompt).toContain("Empty commits do not satisfy completion");
     expect(prompt).toContain("write needs-input.json asking which safe file/content to change");
   });

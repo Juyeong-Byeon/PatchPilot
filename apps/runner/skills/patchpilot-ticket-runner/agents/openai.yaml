@@ -1,0 +1,8 @@
+name: patchpilot-ticket-runner
+version: 1
+provider: openai
+entrypoint: SKILL.md
+references:
+  contracts: references/contracts.md
+  staged_workflow: references/staged-workflow.md
+  pr_description: references/pr-description.md
