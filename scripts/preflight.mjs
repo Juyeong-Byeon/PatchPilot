@@ -58,10 +58,7 @@ function usesUnexpandedHome(value) {
 // WITHOUT shell expansion, so a `$HOME/...` (or `~/...`) value is taken literally and the mount
 // silently resolves to nothing. Validate each mount so the failure surfaces here, not mid-run as
 // an opaque "auth.json not found" inside the container. Returns { problems, warnings } messages.
-export function checkRunnerMounts(
-  env,
-  { existsSync: exists = existsSync, readdirSync: readDir = readdirSync } = {},
-) {
+export function checkRunnerMounts(env, { existsSync: exists = existsSync, readdirSync: readDir = readdirSync } = {}) {
   const problems = [];
   const warnings = [];
   const mounts = [

@@ -17,10 +17,15 @@ headers in this order:
 
 ```markdown
 ## 아키텍처 변경점
+
 ## 새로 추가된 컴포넌트
+
 ## 데이터 플로우
+
 ## 실패 시나리오
+
 ## 트레이드오프
+
 ## 테스트 전략
 ```
 
@@ -31,10 +36,12 @@ explaining why it does not apply.
 
 ```markdown
 ## 아키텍처 변경점
+
 - `apps/runner/src/gstack-staged-runner.ts`의 stage prompt에 PatchPilot skill
   reference 지시를 추가했습니다.
 
 ## 테스트 전략
+
 - `npm test -- apps/runner/test/gstack-staged-runner.test.ts`를 실행했고
   통과했습니다.
 ```
@@ -43,9 +50,11 @@ explaining why it does not apply.
 
 ```markdown
 ## 아키텍처 변경점
+
 - 전체 러너 아키텍처를 개선했습니다.
 
 ## 테스트 전략
+
 - Tests passed.
 ```
 

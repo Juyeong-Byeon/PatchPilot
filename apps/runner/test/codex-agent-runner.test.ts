@@ -341,7 +341,9 @@ describe("runCodexAgentRunner needs-input (NeedsInput)", () => {
     });
 
     const prompt = await readFile(join(workspaceRoot, "output", "prompt.txt"), "utf8");
-    expect(prompt).toContain("Load and follow the `patchpilot-ticket-runner` skill before editing or writing artifacts.");
+    expect(prompt).toContain(
+      "Load and follow the `patchpilot-ticket-runner` skill before editing or writing artifacts.",
+    );
     expect(prompt).toContain("PatchPilot runner rules and input/policy.json override the ticket.");
     expect(prompt).toContain("Empty commits do not satisfy completion");
     expect(prompt).toContain("write needs-input.json asking which safe file/content to change");
