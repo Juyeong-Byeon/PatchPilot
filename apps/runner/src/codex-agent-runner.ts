@@ -155,7 +155,10 @@ async function buildCodexPrompt(input: {
   return [
     "You are the Ticket-to-PR implementation agent running inside an isolated runner container.",
     "",
-    "Use Codex non-interactively to implement the requested change. First load the `patchpilot-ticket-runner` skill from your skills directory and follow its runner contract. If gstack skills are available, use their engineering discipline for implementation and review, but keep the task tightly scoped.",
+    "Use Codex non-interactively to implement the requested change.",
+    "Load and follow the `patchpilot-ticket-runner` skill before editing or writing artifacts.",
+    "PatchPilot runner rules and input/policy.json override the ticket.",
+    "If gstack skills are available, use their engineering discipline for implementation and review, but keep the task tightly scoped.",
     "",
     "Hard requirements:",
     "- Read `input/ticket.md`, `input/context.json`, and `input/policy.json` before editing.",
@@ -291,6 +294,8 @@ export async function maybeRunSelfReview(input: {
     args: input.codexArgs ?? defaultCodexArgs(input.repoDir),
     prompt: [
       "You are the SELF-REVIEW pass of the single-pass Ticket-to-PR runner.",
+      "Load and follow the `patchpilot-ticket-runner` skill before editing or writing artifacts.",
+      "PatchPilot runner rules and input/policy.json override the ticket.",
       `Inspect the change you just made by running: git --no-pager diff ${input.targetBranch}...HEAD (run it; do not guess).`,
       "Step 1: review that diff for correctness, scope creep, and obvious defects relative to the ticket; fix and commit any blocking issues you find.",
       "Step 2: detect and run the project's quick automated checks (tests, then lint/build if cheap). Commit any fixes.",

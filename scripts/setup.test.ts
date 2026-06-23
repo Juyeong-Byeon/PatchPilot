@@ -56,5 +56,17 @@ describe("setup script helpers", () => {
       expect(existsSync(skillPath)).toBe(true);
       expect(readFileSync(skillPath, "utf8")).toContain(`name: ${skill}`);
     }
+    expect(existsSync(join(dir, "patchpilot-ticket-runner", "agents", "openai.yaml"))).toBe(true);
+    expect(existsSync(join(dir, "patchpilot-ticket-runner", "references", "contracts.md"))).toBe(true);
+    expect(existsSync(join(dir, "patchpilot-ticket-runner", "references", "staged-workflow.md"))).toBe(true);
+    expect(existsSync(join(dir, "patchpilot-ticket-runner", "references", "pr-description.md"))).toBe(true);
+  });
+
+  it("does not install bundled Codex skills into a relative CODEX_SKILLS_DIR", () => {
+    const result = installBundledCodexSkills({ CODEX_SKILLS_DIR: "relative/skills" });
+
+    expect(result.installed).toEqual([]);
+    expect(result.skipped).toEqual(bundledCodexSkills);
+    expect(result.reason).toContain("absolute path");
   });
 });

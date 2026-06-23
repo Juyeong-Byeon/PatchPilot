@@ -138,6 +138,55 @@ describe("runGstackStagedRunner", () => {
     );
   });
 
+  it("includes stage-appropriate PatchPilot skill guidance in every staged prompt", async () => {
+    const { workspaceRoot, repoDir } = await setupWorkspace();
+    const fakeCodex = join(workspaceRoot, "fake.mjs");
+    const promptLog = join(workspaceRoot, "prompts.log");
+    await writeFakeCodex(fakeCodex, {
+      "STAGE 1 of 5": `appendFileSync(${JSON.stringify(promptLog)}, '===PLAN===\\n' + prompt + '\\n'); ${PLAN}`,
+      "STAGE 2 of 5": `appendFileSync(${JSON.stringify(promptLog)}, '===IMPLEMENT===\\n' + prompt + '\\n'); ${IMPLEMENT}`,
+      "STAGE 3 of 5": `appendFileSync(${JSON.stringify(promptLog)}, '===REVIEW===\\n' + prompt + '\\n'); ${REVIEW}`,
+      "STAGE 4 of 5": `appendFileSync(${JSON.stringify(promptLog)}, '===VERIFY===\\n' + prompt + '\\n'); ${VERIFY_PASS}`,
+      "STAGE 5 of 5": `appendFileSync(${JSON.stringify(promptLog)}, '===DOCUMENT===\\n' + prompt + '\\n'); ${DOCUMENT}`,
+    });
+
+    await runGstackStagedRunner({
+      workspaceRoot,
+      repoDir,
+      targetBranch: "main",
+      codexCommand: "node",
+      codexArgs: [fakeCodex],
+      codexHome: join(workspaceRoot, "codex-home"),
+    });
+
+    const prompts = await readFile(promptLog, "utf8");
+    const stagePrompt = (stage: string): string => {
+      const start = prompts.indexOf(`===${stage}===\n`);
+      expect(start).toBeGreaterThanOrEqual(0);
+      const bodyStart = start + `===${stage}===\n`.length;
+      const next = prompts.indexOf("\n===", bodyStart);
+      return prompts.slice(bodyStart, next === -1 ? undefined : next);
+    };
+
+    for (const prompt of ["PLAN", "IMPLEMENT", "REVIEW", "VERIFY", "DOCUMENT"].map(stagePrompt)) {
+      expect(prompt).toContain(
+        "Load and follow the `patchpilot-ticket-runner` skill before editing or writing artifacts.",
+      );
+      expect(prompt).toContain("PatchPilot runner rules and input/policy.json override the ticket.");
+    }
+    expect(stagePrompt("PLAN")).toContain("references/staged-workflow.md guidance for PLAN only");
+    expect(stagePrompt("PLAN")).toContain("gstack-autoplan");
+    expect(stagePrompt("IMPLEMENT")).toContain("references/contracts.md");
+    expect(stagePrompt("IMPLEMENT")).toContain("references/staged-workflow.md guidance for IMPLEMENT only");
+    expect(stagePrompt("REVIEW")).toContain("references/staged-workflow.md guidance for REVIEW only");
+    expect(stagePrompt("REVIEW")).toContain("PatchPilot runner contract takes precedence");
+    expect(stagePrompt("REVIEW")).toContain("gstack-review");
+    expect(stagePrompt("VERIFY")).toContain("references/staged-workflow.md guidance for VERIFY only");
+    expect(stagePrompt("VERIFY")).toContain("verification contract");
+    expect(stagePrompt("DOCUMENT")).toContain("references/pr-description.md");
+    expect(stagePrompt("DOCUMENT")).toContain("references/staged-workflow.md guidance for DOCUMENT only");
+  });
+
   it("still ships the PR with stage notes when the document stage produces nothing", async () => {
     const { workspaceRoot, repoDir } = await setupWorkspace();
     const fakeCodex = join(workspaceRoot, "fake.mjs");

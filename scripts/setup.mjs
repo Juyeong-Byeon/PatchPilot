@@ -18,7 +18,7 @@
 import { execFileSync } from "node:child_process";
 import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseEnvFile } from "./preflight.mjs";
 
@@ -116,7 +116,7 @@ function isGstackExecutor(env) {
 export function installBundledCodexSkills(env, options = {}) {
   const destinationRoot = env.CODEX_SKILLS_DIR;
   if (!destinationRoot) return { installed: [], skipped: bundledCodexSkills, reason: "missing CODEX_SKILLS_DIR" };
-  if (/^~|\$HOME|\$\{HOME\}/.test(destinationRoot)) {
+  if (/^~|\$HOME|\$\{HOME\}/.test(destinationRoot) || !isAbsolute(destinationRoot)) {
     return { installed: [], skipped: bundledCodexSkills, reason: "CODEX_SKILLS_DIR must be an absolute path" };
   }
 
