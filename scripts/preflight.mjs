@@ -12,9 +12,9 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
+import { consumeEnvFileArgs, displayEnvFile, resolveEnvFilePath } from "./env-file.mjs";
 
-const rootDir = fileURLToPath(new URL("..", import.meta.url));
 const VALID_EXECUTOR_MODES = new Set(["mock", "gstack"]);
 const VALID_PUBLISHER_MODES = new Set(["mock", "github"]);
 export const requiredGstackSkills = ["patchpilot-ticket-runner", "gstack-autoplan", "gstack-review"];
@@ -144,7 +144,7 @@ export function resolvePreflightModes(env) {
 
 // Runs all preflight checks. Returns { problems, warnings, info } so callers can
 // decide how to report; the CLI entrypoint below prints and sets the exit code.
-export function runPreflightChecks() {
+export function runPreflightChecks(options = {}) {
   const problems = [];
   const warnings = [];
   const info = [];
@@ -175,12 +175,13 @@ export function runPreflightChecks() {
   }
 
   // Environment
-  const envPath = `${rootDir}.env`;
+  const envPath = resolveEnvFilePath(options.envFile);
   if (!existsSync(envPath)) {
-    warn(".env not found — setup will copy it from .env.example (mock-mode defaults).");
+    warn(`${displayEnvFile(envPath)} not found — setup will copy it from .env.example (mock-mode defaults).`);
     return { problems, warnings, info };
   }
   const env = { ...parseEnvFile(envPath), ...process.env };
+  ok(`Environment file: ${displayEnvFile(envPath)}`);
 
   // Required for the API/worker to boot at all, in any mode.
   for (const key of ["ADMIN_TOKEN", "DATABASE_URL", "REDIS_URL", "LARK_WEBHOOK_SECRET"]) {
@@ -223,9 +224,10 @@ export function preflightExitCode(result, { strictWarnings = false } = {}) {
 
 // CLI entrypoint — only runs when invoked directly, not when imported for parseEnvFile.
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
-  const quiet = process.argv.includes("--quiet");
-  const strict = process.argv.includes("--strict") || process.argv.includes("--strict-warnings");
-  const { problems, warnings, info } = runPreflightChecks();
+  const parsedArgs = consumeEnvFileArgs(process.argv.slice(2));
+  const quiet = parsedArgs.rest.includes("--quiet");
+  const strict = parsedArgs.rest.includes("--strict") || parsedArgs.rest.includes("--strict-warnings");
+  const { problems, warnings, info } = runPreflightChecks({ envFile: parsedArgs.envFile });
 
   const exitCode = preflightExitCode({ problems, warnings, info }, { strictWarnings: strict });
 

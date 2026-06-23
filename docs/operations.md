@@ -415,6 +415,17 @@ Lark/GitHub, so also confirm the live checks noted per secret below.
 3. After rotating, merge a PR on a disposable repository and confirm the webhook
    marks the job `Completed`, per the Real Executor Smoke steps.
 
+When running multiple GitHub accounts locally, rotate the token in that
+account's env file and operate only that Compose project:
+
+```bash
+npm run stack -- --env .env.github-a refresh-runtime
+npm run stack -- --env .env.github-a status
+```
+
+Do not reuse `GITHUB_WEBHOOK_SECRET` across env files. Each GitHub webhook should
+point at the matching env file's `PUBLIC_BASE_URL`.
+
 ### Post-rotation hygiene
 
 - Scrub the exposed value from any logs or chat history.

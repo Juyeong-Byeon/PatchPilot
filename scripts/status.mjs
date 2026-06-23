@@ -13,6 +13,13 @@
 // label off the running worker image and compare it to `git rev-parse HEAD`.
 import { execFileSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import {
+  composeBaseArgs,
+  composeProcessEnv,
+  consumeEnvFileArgs,
+  displayEnvFile,
+  resolveEnvFilePath,
+} from "./env-file.mjs";
 import { parseEnvFile } from "./preflight.mjs";
 
 const rootDir = fileURLToPath(new URL("..", import.meta.url));
@@ -84,9 +91,11 @@ async function probeStatus(url) {
   }
 }
 
-function readComposePsRows() {
+function readComposePsRows(composeArgs = ["compose"], env = process.env) {
   try {
-    const out = execFileSync("docker", ["compose", "ps", "--format", "json"], { cwd: rootDir }).toString("utf8");
+    const out = execFileSync("docker", [...composeArgs, "ps", "--format", "json"], { cwd: rootDir, env }).toString(
+      "utf8",
+    );
     return parseComposePsJsonLines(out);
   } catch {
     return [];
@@ -94,19 +103,24 @@ function readComposePsRows() {
 }
 
 async function main() {
-  const strict = process.argv.includes("--strict");
-  const env = parseEnvFile(`${rootDir}.env`);
+  const parsedArgs = consumeEnvFileArgs(process.argv.slice(2));
+  const strict = parsedArgs.rest.includes("--strict");
+  const envPath = resolveEnvFilePath(parsedArgs.envFile);
+  const env = parseEnvFile(envPath);
+  const composeArgs = composeBaseArgs(envPath, env);
+  const childEnv = composeProcessEnv(envPath, env);
   const port = env.HOST_API_PORT ?? process.env.HOST_API_PORT ?? "3000";
   const adminPort = env.HOST_ADMIN_PORT ?? process.env.HOST_ADMIN_PORT ?? "5173";
 
+  console.log(`Environment file: ${displayEnvFile(envPath)}`);
   console.log("Containers:");
   try {
-    execFileSync("docker", ["compose", "ps"], { cwd: rootDir, stdio: "inherit" });
+    execFileSync("docker", [...composeArgs, "ps"], { cwd: rootDir, stdio: "inherit", env: childEnv });
   } catch {
     console.error("  Could not read container state (is Docker running?).");
   }
 
-  const rows = readComposePsRows();
+  const rows = readComposePsRows(composeArgs, childEnv);
   const workerSummary = summarizeWorkerService(rows);
   console.log("\nWorker service:");
   const workerPrefix = workerSummary.ok ? "✓" : "✗";
@@ -118,7 +132,7 @@ async function main() {
   console.log(`\nAdmin frontend (http://localhost:${adminPort}):`);
   const adminOk = await probeStatus(`http://localhost:${adminPort}`);
 
-  const staleImageOk = checkWorkerImageFreshness();
+  const staleImageOk = checkWorkerImageFreshness(composeArgs, childEnv);
   const exitCode = statusExitCode({ adminOk, apiOk, staleImageOk, workerOk: workerSummary.ok }, { strict });
   if (exitCode !== 0) {
     console.error("\nStatus failed (--strict). Check the unhealthy item(s) above.");
@@ -129,7 +143,7 @@ async function main() {
 // Returns true when the running worker image matches HEAD (or when the check is
 // inconclusive in non-strict mode and we only warn). Returns false on a
 // confirmed mismatch or an unknown/missing label that --strict should reject.
-function checkWorkerImageFreshness() {
+function checkWorkerImageFreshness(composeArgs = ["compose"], env = process.env) {
   console.log("\nStale-image guard (worker image git-sha vs HEAD):");
 
   const head = gitHead();
@@ -138,7 +152,7 @@ function checkWorkerImageFreshness() {
     return true; // not a confirmed staleness; don't fail strict on a non-git checkout
   }
 
-  const image = workerImageRef();
+  const image = workerImageRef(composeArgs, env);
   if (!image) {
     console.warn("  ! Worker container/image not found (is the stack up?). Skipping stale-image check.");
     return true;
@@ -184,31 +198,34 @@ function gitHead() {
 // Resolve the image reference backing the worker service. Prefer the running
 // container's image (what is actually executing); fall back to the configured
 // compose image so the guard still works for a freshly built-but-not-started image.
-function workerImageRef() {
-  const containerImage = runningWorkerContainerImage();
+function workerImageRef(composeArgs = ["compose"], env = process.env) {
+  const containerImage = runningWorkerContainerImage(composeArgs, env);
   if (containerImage) return containerImage;
-  return composeWorkerImage();
+  return composeWorkerImage(composeArgs, env);
 }
 
-function runningWorkerContainerImage() {
+function runningWorkerContainerImage(composeArgs = ["compose"], env = process.env) {
   try {
-    const id = execFileSync("docker", ["compose", "ps", "-q", "worker"], { cwd: rootDir })
+    const id = execFileSync("docker", [...composeArgs, "ps", "-q", "worker"], { cwd: rootDir, env })
       .toString("utf8")
       .trim()
       .split("\n")[0]
       ?.trim();
     if (!id) return "";
-    return execFileSync("docker", ["inspect", "--format", "{{.Image}}", id], { cwd: rootDir }).toString("utf8").trim();
+    return execFileSync("docker", ["inspect", "--format", "{{.Image}}", id], { cwd: rootDir, env })
+      .toString("utf8")
+      .trim();
   } catch {
     return "";
   }
 }
 
-function composeWorkerImage() {
+function composeWorkerImage(composeArgs = ["compose"], env = process.env) {
   try {
     // `docker compose images` prints the image associated with each service.
-    const out = execFileSync("docker", ["compose", "images", "worker", "--format", "json"], {
+    const out = execFileSync("docker", [...composeArgs, "images", "worker", "--format", "json"], {
       cwd: rootDir,
+      env,
     })
       .toString("utf8")
       .trim();

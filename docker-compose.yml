@@ -34,7 +34,7 @@ services:
         APP_VERSION: ${APP_VERSION:-}
         GIT_SHA: ${GIT_SHA:-}
     env_file:
-      - path: .env
+      - path: ${PATCHPILOT_ENV_FILE:-.env}
         required: false
     ports:
       - "${HOST_API_PORT:-3000}:3000"
@@ -85,7 +85,7 @@ services:
       context: .
       dockerfile: docker/worker.Dockerfile
     env_file:
-      - path: .env
+      - path: ${PATCHPILOT_ENV_FILE:-.env}
         required: false
     environment:
       WORKER_WORKSPACE_ROOT: /work/jobs

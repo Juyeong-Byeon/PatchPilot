@@ -28,6 +28,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "setup": "node scripts/setup.mjs",
+    "stack": "node scripts/stack.mjs",
     "preflight": "node scripts/preflight.mjs",
     "doctor": "node scripts/preflight.mjs",
     "doctor:strict": "node scripts/preflight.mjs --strict",

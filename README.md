@@ -352,6 +352,56 @@ Add a GitHub repository webhook for `pull_request` events pointing at:
 <PUBLIC_BASE_URL>/webhooks/github
 ```
 
+#### Multiple GitHub accounts or PATs
+
+PatchPilot's default `.env` uses one `GITHUB_TOKEN`. To run separate GitHub
+accounts side by side, create one env file per account and give each instance a
+different API/admin port, public URL, token, and repository allowlist:
+
+```bash
+cp .env.example .env.github-a
+cp .env.example .env.github-b
+```
+
+Example account A values:
+
+```env
+HOST_API_PORT=3001
+HOST_ADMIN_PORT=5173
+PUBLIC_BASE_URL=https://account-a.example
+GITHUB_TOKEN=github_pat_account_a
+GITHUB_WEBHOOK_SECRET=account_a_webhook_secret
+REPOSITORY_ALLOWLIST=owner-a/repo-a
+```
+
+Example account B values:
+
+```env
+HOST_API_PORT=3011
+HOST_ADMIN_PORT=5183
+PUBLIC_BASE_URL=https://account-b.example
+GITHUB_TOKEN=github_pat_account_b
+GITHUB_WEBHOOK_SECRET=account_b_webhook_secret
+REPOSITORY_ALLOWLIST=owner-b/repo-b
+```
+
+Use the stack helper so Docker Compose reads the same env file for interpolation
+and for the API/worker containers:
+
+```bash
+npm run stack -- --env .env.github-a setup
+npm run stack -- --env .env.github-b setup
+npm run stack -- --env .env.github-a status
+npm run stack -- --env .env.github-a logs
+npm run stack -- --env .env.github-a down
+```
+
+For non-default env file names, the helper derives a Compose project name such
+as `patchpilot-github-a`; set `COMPOSE_PROJECT_NAME` inside the env file only
+when you need an explicit name. Each instance needs its own tunnel pointed at
+that env file's `HOST_API_PORT`, and each GitHub repo webhook must use the
+matching `PUBLIC_BASE_URL` and `GITHUB_WEBHOOK_SECRET`.
+
 #### Worker runtime and lifecycle
 
 | Variable                          | Value format / example                | How to choose or get it                                                                                            | Required when          |

@@ -12,8 +12,13 @@
 // Usage: node scripts/docker-build-runtime.mjs   (via `npm run docker:build-runtime`)
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { composeBaseArgs, composeProcessEnv, consumeEnvFileArgs, resolveEnvFilePath } from "./env-file.mjs";
+import { parseEnvFile } from "./preflight.mjs";
 
 const rootDir = fileURLToPath(new URL("..", import.meta.url));
+const parsedArgs = consumeEnvFileArgs(process.argv.slice(2));
+const envPath = resolveEnvFilePath(parsedArgs.envFile);
+const envFile = parseEnvFile(envPath);
 
 function gitHead() {
   try {
@@ -35,7 +40,7 @@ if (gitSha) {
 execFileSync(
   "docker",
   [
-    "compose",
+    ...composeBaseArgs(envPath, envFile),
     "-f",
     "docker-compose.yml",
     "-f",
@@ -49,6 +54,6 @@ execFileSync(
   {
     cwd: rootDir,
     stdio: "inherit",
-    env: { ...process.env, GIT_SHA: gitSha },
+    env: { ...composeProcessEnv(envPath, envFile), GIT_SHA: gitSha },
   },
 );

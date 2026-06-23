@@ -136,6 +136,42 @@ npm run doctor     # re-validate Docker + .env without touching the stack
 npm run doctor:strict # fail on preflight warnings for real-mode readiness
 ```
 
+## 4a. Multiple local instances
+
+Use one env file per GitHub account/PAT. The env files must not share host
+ports, public tunnel URLs, or webhook secrets:
+
+```bash
+cp .env.example .env.github-a
+cp .env.example .env.github-b
+```
+
+Set account-specific values in each file:
+
+```dotenv
+HOST_API_PORT=3001
+HOST_ADMIN_PORT=5173
+PUBLIC_BASE_URL=https://account-a.example
+GITHUB_TOKEN=github_pat_account_a
+GITHUB_WEBHOOK_SECRET=account_a_webhook_secret
+REPOSITORY_ALLOWLIST=owner-a/repo-a
+```
+
+Then manage each instance with the stack helper:
+
+```bash
+npm run stack -- --env .env.github-a setup
+npm run stack -- --env .env.github-b setup
+npm run stack -- --env .env.github-a status
+npm run stack -- --env .env.github-a logs
+npm run stack -- --env .env.github-a down
+```
+
+For `.env.github-a`, the helper uses Compose project
+`patchpilot-github-a` unless `COMPOSE_PROJECT_NAME` is set in the env file. Run
+one tunnel per instance, pointed at that file's `HOST_API_PORT`, and configure
+that account's Lark/GitHub webhooks to call its `PUBLIC_BASE_URL`.
+
 ## 5. Going beyond mock mode (optional)
 
 Real GitHub PR publishing and a real agent runner require credentials and a

@@ -20,6 +20,13 @@ import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writ
 import { createServer } from "node:net";
 import { isAbsolute, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import {
+  composeBaseArgs,
+  composeProcessEnv,
+  consumeEnvFileArgs,
+  displayEnvFile,
+  resolveEnvFilePath,
+} from "./env-file.mjs";
 import { parseEnvFile } from "./preflight.mjs";
 
 const rootDir = fileURLToPath(new URL("..", import.meta.url));
@@ -34,6 +41,10 @@ function heading(title) {
 function run(command, args, options = {}) {
   console.log(`    $ ${command} ${args.join(" ")}`);
   execFileSync(command, args, { cwd: rootDir, stdio: "inherit", ...options });
+}
+
+function runCompose(envPath, env, args) {
+  run("docker", [...composeBaseArgs(envPath, env), ...args], { env: composeProcessEnv(envPath, env) });
 }
 
 export function hostDatabaseUrl(env) {
@@ -151,20 +162,22 @@ async function waitForReady(url, attempts = 30) {
 }
 
 async function main() {
+  const parsedArgs = consumeEnvFileArgs(process.argv.slice(2));
+  const envPath = resolveEnvFilePath(parsedArgs.envFile);
   console.log("PatchPilot local setup\n======================");
+  console.log(`Environment file: ${displayEnvFile(envPath)}`);
 
   heading("Preflight checks");
-  run("node", ["scripts/preflight.mjs"]);
+  run("node", ["scripts/preflight.mjs", "--env", displayEnvFile(envPath)]);
 
   heading("Environment file");
-  const envPath = `${rootDir}.env`;
   let createdEnv = false;
   if (existsSync(envPath)) {
-    console.log("    .env already exists — leaving it untouched.");
+    console.log(`    ${displayEnvFile(envPath)} already exists — leaving it untouched.`);
   } else {
     copyFileSync(`${rootDir}.env.example`, envPath);
     createdEnv = true;
-    console.log("    Created .env from .env.example (mock-mode defaults).");
+    console.log(`    Created ${displayEnvFile(envPath)} from .env.example (mock-mode defaults).`);
   }
   let env = parseEnvFile(envPath);
   if (createdEnv) {
@@ -185,7 +198,7 @@ async function main() {
   run("npm", ["install"]);
 
   heading("Start Postgres and Redis");
-  run("docker", ["compose", "up", "-d", "--wait", "postgres", "redis"]);
+  runCompose(envPath, env, ["up", "-d", "--wait", "postgres", "redis"]);
 
   heading("Run database migrations (host URL)");
   run("npm", ["run", "db:migrate"], {
@@ -194,11 +207,11 @@ async function main() {
 
   if (isGstackExecutor(env)) {
     heading("Build runner runtime image");
-    run("npm", ["run", "docker:build-runtime"]);
+    run("npm", ["run", "docker:build-runtime"], { env: composeProcessEnv(envPath, env) });
   }
 
   heading("Build and start API + worker + admin frontend");
-  run("docker", ["compose", "up", "-d", "--build", "--wait", "api", "worker", "admin"]);
+  runCompose(envPath, env, ["up", "-d", "--build", "--wait", "api", "worker", "admin"]);
 
   heading("Verify readiness");
   const apiPort = env.HOST_API_PORT ?? process.env.HOST_API_PORT ?? "3000";
@@ -218,6 +231,7 @@ async function main() {
   console.log("    npm run logs       # tail api + worker + admin logs");
   console.log("    npm run status     # show container + readiness state");
   console.log("    npm run down       # stop the stack");
+  console.log(`    npm run stack -- --env ${displayEnvFile(envPath)} status`);
   console.log("    npm run docker:frontend # rebuild/restart only the admin frontend");
   console.log("    npm run reset:db   # wipe the database volume and re-migrate");
 }

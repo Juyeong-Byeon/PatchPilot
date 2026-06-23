@@ -9,6 +9,7 @@ interface ComposeFile {
       build?: { dockerfile?: string };
       command?: string[];
       environment?: Record<string, string>;
+      env_file?: Array<{ path?: string; required?: boolean }>;
       ports?: string[];
       volumes?: string[];
     }
@@ -38,6 +39,15 @@ describe("docker-compose worker service", () => {
       GSTACK_SINGLE_ARGS: "${GSTACK_SINGLE_ARGS:-}",
       GSTACK_STAGED_ARGS: "${GSTACK_STAGED_ARGS:-}",
     });
+  });
+
+  it("lets API and worker env files be selected per stack instance", async () => {
+    const compose = parse(
+      await readFile(new URL("../../../docker-compose.yml", import.meta.url), "utf8"),
+    ) as ComposeFile;
+
+    expect(compose.services?.api?.env_file?.[0]).toMatchObject({ path: "${PATCHPILOT_ENV_FILE:-.env}" });
+    expect(compose.services?.worker?.env_file?.[0]).toMatchObject({ path: "${PATCHPILOT_ENV_FILE:-.env}" });
   });
 
   it("runs the admin frontend as a Docker-managed Vite service", async () => {
