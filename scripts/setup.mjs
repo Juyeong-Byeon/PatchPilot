@@ -16,12 +16,14 @@
 //      for the API readiness probe
 //   7. Print the console URL and admin token
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
+import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseEnvFile } from "./preflight.mjs";
 
 const rootDir = fileURLToPath(new URL("..", import.meta.url));
+export const bundledCodexSkills = ["patchpilot-ticket-runner", "gstack-autoplan", "gstack-review"];
 let step = 0;
 
 function heading(title) {
@@ -111,6 +113,30 @@ function isGstackExecutor(env) {
   return String(env.WORKER_EXECUTOR_MODE ?? env.EXECUTOR_MODE ?? "mock").toLowerCase() === "gstack";
 }
 
+export function installBundledCodexSkills(env, options = {}) {
+  const destinationRoot = env.CODEX_SKILLS_DIR;
+  if (!destinationRoot) return { installed: [], skipped: bundledCodexSkills, reason: "missing CODEX_SKILLS_DIR" };
+  if (/^~|\$HOME|\$\{HOME\}/.test(destinationRoot)) {
+    return { installed: [], skipped: bundledCodexSkills, reason: "CODEX_SKILLS_DIR must be an absolute path" };
+  }
+
+  const sourceRoot = options.sourceRoot ?? join(rootDir, "apps", "runner", "skills");
+  const skills = options.skills ?? bundledCodexSkills;
+  mkdirSync(destinationRoot, { recursive: true });
+
+  const installed = [];
+  for (const skill of skills) {
+    const source = join(sourceRoot, skill);
+    if (!existsSync(join(source, "SKILL.md"))) throw new Error(`Bundled Codex skill is missing: ${source}`);
+    const destination = join(destinationRoot, skill);
+    rmSync(destination, { recursive: true, force: true });
+    cpSync(source, destination, { recursive: true });
+    installed.push(skill);
+  }
+
+  return { installed, skipped: [], reason: "" };
+}
+
 async function waitForReady(url, attempts = 30) {
   for (let i = 0; i < attempts; i += 1) {
     try {
@@ -143,6 +169,16 @@ async function main() {
   let env = parseEnvFile(envPath);
   if (createdEnv) {
     env = await applyFreshEnvPortUpdates(envPath, env);
+  }
+
+  if (isGstackExecutor(env)) {
+    heading("Install bundled Codex skills");
+    const result = installBundledCodexSkills(env);
+    if (result.installed.length > 0) {
+      console.log(`    Synced ${result.installed.join(", ")} into ${env.CODEX_SKILLS_DIR}`);
+    } else {
+      console.warn(`    Skipped bundled skill install: ${result.reason}`);
+    }
   }
 
   heading("Install dependencies");

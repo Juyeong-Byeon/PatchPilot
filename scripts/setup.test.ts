@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 // @ts-expect-error — plain .mjs script, no type declarations.
-import { hostDatabaseUrl, planFreshEnvPortUpdates, setEnvValue } from "./setup.mjs";
+import {
+  bundledCodexSkills,
+  hostDatabaseUrl,
+  installBundledCodexSkills,
+  planFreshEnvPortUpdates,
+  setEnvValue,
+} from "./setup.mjs";
 
 describe("setup script helpers", () => {
   it("rewrites the Compose database hostname for host-run migrations", () => {
@@ -35,5 +44,17 @@ describe("setup script helpers", () => {
       HOST_API_PORT: "3001",
       HOST_ADMIN_PORT: "5174",
     });
+  });
+
+  it("installs bundled Codex skills into CODEX_SKILLS_DIR", () => {
+    const dir = mkdtempSync(join(tmpdir(), "patchpilot-skills-"));
+    const result = installBundledCodexSkills({ CODEX_SKILLS_DIR: dir });
+
+    expect(result.installed).toEqual(bundledCodexSkills);
+    for (const skill of bundledCodexSkills) {
+      const skillPath = join(dir, skill, "SKILL.md");
+      expect(existsSync(skillPath)).toBe(true);
+      expect(readFileSync(skillPath, "utf8")).toContain(`name: ${skill}`);
+    }
   });
 });

@@ -1,17 +1,25 @@
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 // The doctor/preflight script lives in scripts/ (plain .mjs). It is plumbed into the same
 // vitest run via this thin TS wrapper so the real-mode mount validation (L7) is gated in CI.
-import { checkRunnerMounts, preflightExitCode } from "../../../scripts/preflight.mjs";
+import { checkRunnerMounts, preflightExitCode, requiredGstackSkills } from "../../../scripts/preflight.mjs";
 
 const PRESENT = fileURLToPath(import.meta.url); // a path that definitely exists
+const skillsDir = mkdtempSync(join(tmpdir(), "patchpilot-preflight-skills-"));
+for (const skill of requiredGstackSkills) {
+  const dir = join(skillsDir, skill);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "SKILL.md"), `---\nname: ${skill}\ndescription: test\n---\n`);
+}
 
 describe("checkRunnerMounts (L7 doctor real-mode preflight)", () => {
   const fullEnv = {
     CODEX_AUTH_FILE: PRESENT,
     CODEX_CONFIG_FILE: PRESENT,
-    CODEX_SKILLS_DIR: PRESENT,
+    CODEX_SKILLS_DIR: skillsDir,
     GSTACK_SKILL_SOURCE_DIR: PRESENT,
     GSTACK_COMMAND: "node",
   };

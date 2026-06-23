@@ -166,6 +166,12 @@ test -d "$HOME/.codex/skills"
 mkdir -p "$HOME/gstack"  # or set GSTACK_SKILL_SOURCE_DIR to an existing checkout
 ```
 
+When `EXECUTOR_MODE=gstack`, `npm run setup` syncs PatchPilot's bundled runner
+skills (`patchpilot-ticket-runner`, `gstack-autoplan`, `gstack-review`) into
+`CODEX_SKILLS_DIR`. If you change `CODEX_SKILLS_DIR` or set up a new machine,
+rerun `npm run setup`; `npm run doctor:strict` fails when these staged-runner
+skills are missing.
+
 The repository allowlist is an exact `owner/repo` string match. If policy fails
 with `Repository is not allowlisted`, add the exact repository string to
 `REPOSITORY_ALLOWLIST`, recreate API/worker, then retry the failed job from the

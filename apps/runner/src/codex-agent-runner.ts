@@ -155,7 +155,7 @@ async function buildCodexPrompt(input: {
   return [
     "You are the Ticket-to-PR implementation agent running inside an isolated runner container.",
     "",
-    "Use Codex non-interactively to implement the requested change. If gstack skills are available, use their engineering discipline for implementation and review, but keep the task tightly scoped.",
+    "Use Codex non-interactively to implement the requested change. First load the `patchpilot-ticket-runner` skill from your skills directory and follow its runner contract. If gstack skills are available, use their engineering discipline for implementation and review, but keep the task tightly scoped.",
     "",
     "Hard requirements:",
     "- Read `input/ticket.md`, `input/context.json`, and `input/policy.json` before editing.",

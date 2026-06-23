@@ -443,6 +443,10 @@ GSTACK_SKILL_SOURCE_DIR=/Users/me/gstack
 `CODEX_AUTH_FILE` and `CODEX_CONFIG_FILE` are mounted read-only and copied into a
 temporary `CODEX_HOME` inside the container; they must not be baked into the
 image. `GSTACK_SKILL_SOURCE_DIR` should point at the gstack checkout root.
+`npm run setup` syncs PatchPilot's bundled runner skills
+(`patchpilot-ticket-runner`, `gstack-autoplan`, `gstack-review`) into
+`CODEX_SKILLS_DIR` for gstack mode, and `npm run doctor:strict` catches missing
+stage skills before the next staged run.
 
 > In `.env`, set `CODEX_*` and `GSTACK_SKILL_SOURCE_DIR` to **absolute paths**.
 > Unlike shell command examples, `.env` values are not shell-expanded, so

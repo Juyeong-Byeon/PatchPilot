@@ -11,11 +11,13 @@
 // Exit code 0 = ready, 1 = one or more hard failures.
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const rootDir = fileURLToPath(new URL("..", import.meta.url));
 const VALID_EXECUTOR_MODES = new Set(["mock", "gstack"]);
 const VALID_PUBLISHER_MODES = new Set(["mock", "github"]);
+export const requiredGstackSkills = ["patchpilot-ticket-runner", "gstack-autoplan", "gstack-review"];
 
 export function parseEnvFile(path) {
   const env = {};
@@ -75,10 +77,22 @@ export function checkRunnerMounts(env, { existsSync: exists = existsSync } = {})
       problems.push(`${key}="${value}" does not exist on this host — point it at a real ${kind} (${hint}).`);
     }
   }
+  const missingSkills = missingRequiredGstackSkills(env, { existsSync: exists });
+  if (missingSkills.length > 0) {
+    warnings.push(
+      `CODEX_SKILLS_DIR is missing PatchPilot bundled skills (${missingSkills.join(", ")}). Run \`npm run setup\` to install them before staged runs.`,
+    );
+  }
   if (!env.GSTACK_COMMAND) {
     warnings.push("EXECUTOR_MODE=gstack but GSTACK_COMMAND is empty — the runner image must define the agent command.");
   }
   return { problems, warnings };
+}
+
+export function missingRequiredGstackSkills(env, { existsSync: exists = existsSync } = {}) {
+  const root = env.CODEX_SKILLS_DIR;
+  if (!root || /^~|\$HOME|\$\{HOME\}/.test(root) || !exists(root)) return [];
+  return requiredGstackSkills.filter((skill) => !exists(join(root, skill, "SKILL.md")));
 }
 
 export function resolvePreflightModes(env) {

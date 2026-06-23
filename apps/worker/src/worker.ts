@@ -530,6 +530,10 @@ async function runAgentJob(payload: AgentJobPayload, options: ProcessAgentJobOpt
           .catch(() => undefined);
       }
     };
+    const stageLogPoller = startStageBannerLogPoller(
+      join(getWorkspacePaths(run.workspacePath).logsDir, "gstack.log"),
+      detectStageBanners,
+    );
 
     let rawResult: AgentResult;
     try {
@@ -550,6 +554,7 @@ async function runAgentJob(payload: AgentJobPayload, options: ProcessAgentJobOpt
     } catch (error) {
       clearInterval(cancelPoll);
       stopHeartbeat();
+      await stageLogPoller.stop();
       await stageEventChain;
       if (abortController.signal.aborted) {
         // Cancelled mid-run: record where it stopped and tidy up (the runner container is killed).
@@ -564,6 +569,7 @@ async function runAgentJob(payload: AgentJobPayload, options: ProcessAgentJobOpt
     }
     clearInterval(cancelPoll);
     stopHeartbeat();
+    await stageLogPoller.stop();
     detectStageBanners("\n");
     await stageEventChain;
 
@@ -722,6 +728,39 @@ async function runAgentJob(payload: AgentJobPayload, options: ProcessAgentJobOpt
     await appendEvent("Failed", "worker.error", message);
     return { status: "failed", runId: run.runId };
   }
+}
+
+function startStageBannerLogPoller(
+  logPath: string,
+  detectStageBanners: (text: string | undefined) => void,
+  intervalMs = 1000,
+): { stop(): Promise<void> } {
+  let offset = 0;
+  let reading = false;
+
+  const readNewContent = async () => {
+    if (reading) return;
+    reading = true;
+    try {
+      const content = await readFile(logPath, "utf8").catch(() => "");
+      if (content.length < offset) offset = 0;
+      const next = content.slice(offset);
+      offset = content.length;
+      if (next) detectStageBanners(next);
+    } finally {
+      reading = false;
+    }
+  };
+
+  const timer = setInterval(() => void readNewContent(), intervalMs);
+  if (typeof timer.unref === "function") timer.unref();
+
+  return {
+    async stop() {
+      clearInterval(timer);
+      await readNewContent();
+    },
+  };
 }
 
 async function syncLarkStatus(

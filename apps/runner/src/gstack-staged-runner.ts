@@ -110,7 +110,7 @@ async function runGstackStagedPipeline(input: GstackStagedRunnerInput): Promise<
     "plan",
     [
       "You are STAGE 1 of 5 (PLAN) in the Ticket-to-PR gstack pipeline, running non-interactively in an isolated runner container.",
-      "Step 1 (required, do this first): load the `gstack-autoplan` skill from your skills directory and run its preamble exactly as written.",
+      "Step 1 (required, do this first): load the `patchpilot-ticket-runner` skill and then load the `gstack-autoplan` skill from your skills directory; run their preambles exactly as written.",
       `Step 2: read the ticket below plus ${paths.contextJson} and ${paths.policyJson}.`,
       "Step 3: produce a concise, actionable implementation plan for ONLY this ticket.",
       `Step 4: WRITE the plan to the absolute path ${path.join(paths.outputDir, "plan.md")} (outside the repo; do not commit it).`,
@@ -129,6 +129,7 @@ async function runGstackStagedPipeline(input: GstackStagedRunnerInput): Promise<
     "implement",
     [
       "You are STAGE 2 of 5 (IMPLEMENT) in the Ticket-to-PR gstack pipeline.",
+      "Step 1 (required, do this first): load the `patchpilot-ticket-runner` skill from your skills directory and follow its implementation contract.",
       "Implement ONLY the ticket request in this repository, following the plan with minimal, focused changes.",
       "Apply gstack engineering discipline: small steps, verify as you go. Create at least one local git commit on the current branch.",
       "",
@@ -158,7 +159,7 @@ async function runGstackStagedPipeline(input: GstackStagedRunnerInput): Promise<
     "review",
     [
       "You are STAGE 3 of 5 (REVIEW) in the Ticket-to-PR gstack pipeline.",
-      "Step 1 (required, do this first): load the `gstack-review` skill from your skills directory and run its preamble exactly as written.",
+      "Step 1 (required, do this first): load the `patchpilot-ticket-runner` skill and then load the `gstack-review` skill from your skills directory; run their preambles exactly as written.",
       // L9: the platform already checked out the trusted base; review against that exact SHA.
       // Do NOT `git fetch` the remote — this container has no GitHub credentials, and a failed
       // fetch silently leaves a STALE base ref that makes the review compare against the wrong tree.
@@ -177,6 +178,7 @@ async function runGstackStagedPipeline(input: GstackStagedRunnerInput): Promise<
     "verify",
     [
       "You are STAGE 4 of 5 (VERIFY) in the Ticket-to-PR gstack pipeline.",
+      "Step 1 (required, do this first): load the `patchpilot-ticket-runner` skill from your skills directory and follow its verification contract.",
       "Detect and run the project's automated checks relevant to the change (tests, then lint/build if present). Commit any fixes you make.",
       `WRITE a machine-readable result to the absolute path ${path.join(paths.outputDir, "qa.json")} as JSON: {"passed": <true|false>, "command": "<the main check you ran>", "summary": "<short result>"}.`,
       `ALSO write a human-readable summary to ${path.join(paths.outputDir, "qa.md")}.`,
@@ -212,6 +214,7 @@ async function runGstackStagedPipeline(input: GstackStagedRunnerInput): Promise<
       "document",
       [
         "You are STAGE 5 of 5 (DOCUMENT) in the Ticket-to-PR gstack pipeline.",
+        "Step 1 (required, do this first): load the `patchpilot-ticket-runner` skill from your skills directory and follow its PR-description contract.",
         // L9: diff against the platform-trusted base SHA, never a fetched (and possibly stale) remote ref.
         `Inspect the full change by running: git --no-pager diff ${baseSha}...HEAD (run it; do not guess the diff, and do NOT fetch the remote — ${baseSha} is the trusted base of ${input.targetBranch}).`,
         `Read these stage notes if present for extra context: ${path.join(paths.outputDir, "plan.md")}, ${path.join(paths.outputDir, "review.md")}, ${path.join(paths.outputDir, "qa.md")}.`,
