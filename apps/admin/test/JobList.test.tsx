@@ -2,11 +2,268 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { JobRecord } from "../src/api.js";
 import { JobList } from "../src/components/JobList.js";
 import { adminCopy } from "../src/i18n.js";
+import type { StatusFilter } from "../src/lib/status.js";
+
+const UPDATED_AT = "2026-06-20T00:25:00.000Z";
+
+const alphaJobId = "job_alpha_11111111-1111-4111-8111-111111111111";
+const betaJobId = "job_beta_22222222-2222-4222-8222-222222222222";
+const gammaJobId = "job_gamma_33333333-3333-4333-8333-333333333333";
+
+interface RenderJobListOptions {
+  jobs?: JobRecord[];
+  selectedJobId?: string;
+  isLoading?: boolean;
+  statusFilter?: StatusFilter;
+  onOpenJob?: (jobId: string) => void;
+}
+
+function buildJob(overrides: Partial<JobRecord> & Pick<JobRecord, "id">): JobRecord {
+  return {
+    repository: "acme/web",
+    phase: "Implementing",
+    outcome: "Running",
+    updated_at: UPDATED_AT,
+    ...overrides,
+  };
+}
+
+function sampleJobs(): JobRecord[] {
+  return [
+    buildJob({
+      id: alphaJobId,
+      repository: "Alpha/Todo-API",
+      target_branch: "main",
+    }),
+    buildJob({
+      id: betaJobId,
+      repository: "Beta/mobile",
+      target_branch: "release/ios",
+      phase: "Completed",
+      outcome: "Completed",
+    }),
+    buildJob({
+      id: gammaJobId,
+      repository: "Gamma/docs",
+      target_branch: "feature/docs",
+      phase: "Failed",
+      outcome: "FailedInternal",
+    }),
+  ];
+}
+
+function jobListElement({
+  jobs = sampleJobs(),
+  selectedJobId = "",
+  isLoading = false,
+  statusFilter = "all",
+  onOpenJob = vi.fn(),
+}: RenderJobListOptions = {}) {
+  return (
+    <JobList
+      copy={adminCopy.en}
+      isLoading={isLoading}
+      jobs={jobs}
+      locale="en"
+      selectedJobId={selectedJobId}
+      statusFilter={statusFilter}
+      onOpenJob={onOpenJob}
+    />
+  );
+}
+
+function renderJobList(options: RenderJobListOptions = {}) {
+  const onOpenJob = options.onOpenJob ?? vi.fn();
+  return {
+    onOpenJob,
+    ...render(jobListElement({ ...options, onOpenJob })),
+  };
+}
+
+function filterJobs(query: string) {
+  fireEvent.change(screen.getByLabelText(adminCopy.en.filterJobsLabel), { target: { value: query } });
+}
+
+function getJobRow(uuid: string) {
+  return screen.getByRole("button", { name: new RegExp(uuid) });
+}
+
+function queryJobRow(uuid: string) {
+  return screen.queryByRole("button", { name: new RegExp(uuid) });
+}
 
 describe("JobList", () => {
   afterEach(() => cleanup());
+
+  it("renders the empty-state message when there are no jobs and the list is not loading", () => {
+    renderJobList({ jobs: [], isLoading: false });
+
+    expect(screen.getByRole("list")).toHaveAttribute("aria-busy", "false");
+    expect(screen.getByText(adminCopy.en.noJobMatches)).toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("filters visible jobs by repository name", () => {
+    renderJobList();
+
+    filterJobs("Alpha/Todo-API");
+
+    expect(getJobRow("11111111-1111-4111-8111-111111111111")).toBeInTheDocument();
+    expect(queryJobRow("22222222-2222-4222-8222-222222222222")).not.toBeInTheDocument();
+    expect(queryJobRow("33333333-3333-4333-8333-333333333333")).not.toBeInTheDocument();
+  });
+
+  it("filters visible jobs by job id UUID suffix", () => {
+    renderJobList();
+
+    filterJobs("222222222222");
+
+    expect(queryJobRow("11111111-1111-4111-8111-111111111111")).not.toBeInTheDocument();
+    expect(getJobRow("22222222-2222-4222-8222-222222222222")).toBeInTheDocument();
+    expect(queryJobRow("33333333-3333-4333-8333-333333333333")).not.toBeInTheDocument();
+  });
+
+  it("filters visible jobs by target branch", () => {
+    renderJobList();
+
+    filterJobs("release/ios");
+
+    expect(queryJobRow("11111111-1111-4111-8111-111111111111")).not.toBeInTheDocument();
+    expect(getJobRow("22222222-2222-4222-8222-222222222222")).toBeInTheDocument();
+    expect(queryJobRow("33333333-3333-4333-8333-333333333333")).not.toBeInTheDocument();
+  });
+
+  it("trims and applies search case-insensitively", () => {
+    renderJobList();
+
+    filterJobs("  alpha/todo-api  ");
+
+    expect(getJobRow("11111111-1111-4111-8111-111111111111")).toBeInTheDocument();
+    expect(queryJobRow("22222222-2222-4222-8222-222222222222")).not.toBeInTheDocument();
+    expect(queryJobRow("33333333-3333-4333-8333-333333333333")).not.toBeInTheDocument();
+  });
+
+  it("shows the empty-state message when search has no matches", () => {
+    renderJobList();
+
+    filterJobs("missing repository");
+
+    expect(screen.getByText(adminCopy.en.noJobMatches)).toBeInTheDocument();
+    expect(queryJobRow("11111111-1111-4111-8111-111111111111")).not.toBeInTheDocument();
+    expect(queryJobRow("22222222-2222-4222-8222-222222222222")).not.toBeInTheDocument();
+    expect(queryJobRow("33333333-3333-4333-8333-333333333333")).not.toBeInTheDocument();
+  });
+
+  it("marks the selected job row with aria-current", () => {
+    renderJobList({ selectedJobId: betaJobId });
+
+    expect(getJobRow("11111111-1111-4111-8111-111111111111")).not.toHaveAttribute("aria-current");
+    expect(getJobRow("22222222-2222-4222-8222-222222222222")).toHaveAttribute("aria-current", "page");
+  });
+
+  it("includes completed NeedsReview jobs only in the needs-review filter", () => {
+    const jobs = [
+      buildJob({
+        id: alphaJobId,
+        phase: "Completed",
+        outcome: "NeedsReview",
+      }),
+      buildJob({
+        id: betaJobId,
+        phase: "Completed",
+        outcome: "Completed",
+      }),
+    ];
+    const onOpenJob = vi.fn();
+    const { rerender } = render(jobListElement({ jobs, statusFilter: "needsReview", onOpenJob }));
+
+    expect(getJobRow("11111111-1111-4111-8111-111111111111")).toBeInTheDocument();
+    expect(queryJobRow("22222222-2222-4222-8222-222222222222")).not.toBeInTheDocument();
+
+    rerender(jobListElement({ jobs, statusFilter: "completed", onOpenJob }));
+
+    expect(queryJobRow("11111111-1111-4111-8111-111111111111")).not.toBeInTheDocument();
+    expect(getJobRow("22222222-2222-4222-8222-222222222222")).toBeInTheDocument();
+  });
+
+  it("includes AwaitingInput jobs only in the needs-input filter", () => {
+    const jobs = [
+      buildJob({
+        id: alphaJobId,
+        phase: "AwaitingInput",
+        outcome: "NeedsInput",
+      }),
+      buildJob({
+        id: betaJobId,
+        phase: "Failed",
+        outcome: "FailedActionable",
+      }),
+      buildJob({
+        id: gammaJobId,
+        phase: "Completed",
+        outcome: "Completed",
+      }),
+    ];
+    const onOpenJob = vi.fn();
+    const { rerender } = render(jobListElement({ jobs, statusFilter: "needsInput", onOpenJob }));
+
+    expect(getJobRow("11111111-1111-4111-8111-111111111111")).toBeInTheDocument();
+    expect(queryJobRow("22222222-2222-4222-8222-222222222222")).not.toBeInTheDocument();
+    expect(queryJobRow("33333333-3333-4333-8333-333333333333")).not.toBeInTheDocument();
+
+    rerender(jobListElement({ jobs, statusFilter: "failed", onOpenJob }));
+
+    expect(queryJobRow("11111111-1111-4111-8111-111111111111")).not.toBeInTheDocument();
+    expect(getJobRow("22222222-2222-4222-8222-222222222222")).toBeInTheDocument();
+    expect(queryJobRow("33333333-3333-4333-8333-333333333333")).not.toBeInTheDocument();
+
+    rerender(jobListElement({ jobs, statusFilter: "completed", onOpenJob }));
+
+    expect(queryJobRow("11111111-1111-4111-8111-111111111111")).not.toBeInTheDocument();
+    expect(queryJobRow("22222222-2222-4222-8222-222222222222")).not.toBeInTheDocument();
+    expect(getJobRow("33333333-3333-4333-8333-333333333333")).toBeInTheDocument();
+  });
+
+  it("includes failed jobs only in the failed filter", () => {
+    const jobs = [
+      buildJob({
+        id: alphaJobId,
+        phase: "Failed",
+        outcome: "FailedInternal",
+      }),
+      buildJob({
+        id: betaJobId,
+        phase: "Implementing",
+        outcome: "Running",
+      }),
+      buildJob({
+        id: gammaJobId,
+        phase: "Completed",
+        outcome: "Completed",
+      }),
+    ];
+
+    renderJobList({ jobs, statusFilter: "failed" });
+
+    expect(getJobRow("11111111-1111-4111-8111-111111111111")).toBeInTheDocument();
+    expect(queryJobRow("22222222-2222-4222-8222-222222222222")).not.toBeInTheDocument();
+    expect(queryJobRow("33333333-3333-4333-8333-333333333333")).not.toBeInTheDocument();
+  });
+
+  it("opens the focused job with Enter and Space", () => {
+    const { onOpenJob } = renderJobList({ jobs: [buildJob({ id: alphaJobId })] });
+    const row = getJobRow("11111111-1111-4111-8111-111111111111");
+
+    fireEvent.keyDown(row, { key: "Enter" });
+    fireEvent.keyDown(row, { key: " " });
+
+    expect(onOpenJob).toHaveBeenNthCalledWith(1, alphaJobId);
+    expect(onOpenJob).toHaveBeenNthCalledWith(2, alphaJobId);
+    expect(onOpenJob).toHaveBeenCalledTimes(2);
+  });
 
   it("marks the list aria-busy while loading the first page", () => {
     render(<JobList copy={adminCopy.ko} isLoading={true} jobs={[]} locale="ko" selectedJobId="" onOpenJob={vi.fn()} />);
