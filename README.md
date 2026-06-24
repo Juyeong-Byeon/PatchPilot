@@ -673,5 +673,3 @@ PatchPilot is source-available under the Business Source License 1.1. See
   license.
 - Each version converts to the Apache License, Version 2.0 four years after it is
   first publicly distributed.
-  </content>
-  </invoke>
