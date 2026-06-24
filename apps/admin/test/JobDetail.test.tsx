@@ -621,6 +621,45 @@ describe("JobDetail", () => {
     );
     expect(screen.getByText(adminCopy.ko.executorModeStaged)).toBeInTheDocument();
   });
+
+  it("marks long repository, branch, and evidence path text as locally breakable", () => {
+    const longRepository = "very-long-organization-name-without-natural-breaks/very-long-repository-name-for-mobile";
+    const targetBranch = "feature/mobile-dashboard-layout-with-extra-long-target-branch-name";
+    const workBranch = "ticket-to-pr/job_1234567890abcdef1234567890abcdef_attempt_2_with_long_suffix";
+    const changedFile =
+      "apps/admin/src/components/deeply/nested/mobile/responsive/diagnostics/LongEvidenceFileNameWithNoBreaks.tsx";
+
+    render(
+      <JobDetail
+        {...baseProps}
+        job={{
+          id: "job_1",
+          phase: "Completed",
+          outcome: "NeedsReview",
+          repository: longRepository,
+          target_branch: targetBranch,
+          work_branch: workBranch,
+        }}
+        artifacts={[
+          {
+            id: "art_result",
+            run_id: "run_1",
+            kind: "agent-result",
+            content: {
+              status: "completed",
+              changedFiles: [changedFile],
+              tests: [],
+            },
+            created_at: "2026-06-20T00:01:05.000Z",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText(longRepository)).toHaveClass("break-words", "[overflow-wrap:anywhere]");
+    expect(screen.getByText(`${targetBranch} · ${workBranch}`)).toHaveClass("break-words", "[overflow-wrap:anywhere]");
+    expect(screen.getByText(changedFile)).toHaveClass("break-all");
+  });
 });
 
 function stageEvent(id: string, index: number, key: string, createdAt: string) {

@@ -465,11 +465,16 @@ function AppInner() {
       </a>
       <aside
         className={cn(
-          "admin-sidebar border-b border-hairline-gray bg-linen-white/95 lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r",
+          "admin-sidebar sticky top-0 z-30 border-b border-hairline-gray bg-linen-white/95 lg:h-screen lg:border-b-0 lg:border-r",
           sidebarCollapsed && "admin-sidebar-collapsed",
         )}
       >
-        <div className={cn("flex h-full flex-col gap-5 px-4 py-4", sidebarCollapsed && "lg:items-center lg:px-3")}>
+        <div
+          className={cn(
+            "flex h-full flex-col gap-3 px-3 py-3 sm:px-4 lg:gap-5 lg:px-4 lg:py-4",
+            sidebarCollapsed && "lg:items-center lg:px-3",
+          )}
+        >
           <div className={cn("flex min-w-0 items-center gap-3", sidebarCollapsed && "lg:flex-col")}>
             <img
               src={adminLogo}
@@ -477,19 +482,17 @@ function AppInner() {
               aria-hidden="true"
               className="status-glow-active size-9 shrink-0 rounded-xl border border-electric-blue/20 bg-mist-blue object-contain p-1"
             />
-            {!sidebarCollapsed ? (
-              <div className="min-w-0">
-                <p className="text-[12px] leading-4 text-charcoal">{copy.appEyebrow}</p>
-                <strong className="block truncate text-[17px] font-semibold leading-5 text-forest-ink">
-                  {copy.appTitle}
-                </strong>
-              </div>
-            ) : null}
+            <div className={cn("min-w-0", sidebarCollapsed && "lg:hidden")}>
+              <p className="text-[12px] leading-4 text-charcoal">{copy.appEyebrow}</p>
+              <strong className="block truncate text-[17px] font-semibold leading-5 text-forest-ink">
+                {copy.appTitle}
+              </strong>
+            </div>
             <Button
               type="button"
               variant="ghost"
               size="icon"
-              className={cn("ml-auto", sidebarCollapsed && "lg:ml-0")}
+              className={cn("ml-auto hidden lg:inline-flex", sidebarCollapsed && "lg:ml-0")}
               aria-label={sidebarCollapsed ? copy.expandSidebar : copy.collapseSidebar}
               title={sidebarCollapsed ? copy.expandSidebar : copy.collapseSidebar}
               aria-expanded={!sidebarCollapsed}
@@ -503,40 +506,53 @@ function AppInner() {
             </Button>
           </div>
 
-          <nav className={cn("grid gap-1", sidebarCollapsed && "lg:w-10")} aria-label={copy.appTitle}>
-            <NavItem
-              label={copy.jobs}
-              Icon={ListChecks}
-              active={route.page === "list" || route.page === "detail"}
-              collapsed={sidebarCollapsed}
-              onClick={openJobList}
-            />
-            <NavItem
-              label={copy.settings}
-              Icon={SettingsIcon}
-              active={route.page === "settings"}
-              collapsed={sidebarCollapsed}
-              onClick={openSettings}
-            />
-          </nav>
+          <div
+            className={cn(
+              "flex min-w-0 items-center gap-2 lg:mt-0 lg:flex-1 lg:flex-col lg:items-stretch lg:gap-5",
+              sidebarCollapsed && "lg:items-center",
+            )}
+          >
+            <nav
+              className={cn(
+                "flex min-w-0 flex-1 gap-2 overflow-x-auto pb-0.5 lg:grid lg:w-auto lg:flex-none lg:gap-1 lg:overflow-visible lg:pb-0",
+                sidebarCollapsed && "lg:w-10",
+              )}
+              aria-label={copy.appTitle}
+            >
+              <NavItem
+                label={copy.jobs}
+                Icon={ListChecks}
+                active={route.page === "list" || route.page === "detail"}
+                collapsed={sidebarCollapsed}
+                onClick={openJobList}
+              />
+              <NavItem
+                label={copy.settings}
+                Icon={SettingsIcon}
+                active={route.page === "settings"}
+                collapsed={sidebarCollapsed}
+                onClick={openSettings}
+              />
+            </nav>
 
-          <div className={cn("mt-auto grid gap-4", sidebarCollapsed && "lg:w-10")}>
-            <ThemeToggle copy={copy} theme={theme} collapsed={sidebarCollapsed} onChangeTheme={changeTheme} />
-            {!sidebarCollapsed ? (
-              <footer className="border-t border-hairline-gray pt-4 text-[12px] leading-5 text-charcoal">
-                <p className="m-0 font-medium text-forest-ink">{copy.appTitle}</p>
-                <p className="m-0 mt-1">{copy.footerScope}</p>
-                <VersionBadge version={version} copy={copy} />
-              </footer>
-            ) : null}
+            <div className={cn("shrink-0 lg:mt-auto lg:grid lg:gap-4", sidebarCollapsed && "lg:w-10")}>
+              <ThemeToggle copy={copy} theme={theme} collapsed={sidebarCollapsed} onChangeTheme={changeTheme} />
+              {!sidebarCollapsed ? (
+                <footer className="hidden border-t border-hairline-gray pt-4 text-[12px] leading-5 text-charcoal lg:block">
+                  <p className="m-0 font-medium text-forest-ink">{copy.appTitle}</p>
+                  <p className="m-0 mt-1">{copy.footerScope}</p>
+                  <VersionBadge version={version} copy={copy} />
+                </footer>
+              ) : null}
+            </div>
           </div>
         </div>
       </aside>
 
       <div className="flex min-w-0 flex-col">
         <header className="admin-topbar border-b border-hairline-gray bg-linen-white/86">
-          <section className="mx-auto max-w-[var(--page-max-width)] px-4 py-5 md:px-6">
-            <div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <section className="mx-auto max-w-[var(--page-max-width)] px-3 py-3 sm:px-4 sm:py-4 md:px-6 md:py-5">
+            <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
               <div className="min-w-0">
                 <div className="flex min-w-0 items-start gap-3">
                   {route.page === "detail" ? (
@@ -553,13 +569,17 @@ function AppInner() {
                   ) : null}
                   <div className="min-w-0">
                     <p className="text-[12px] font-medium leading-4 text-cobalt-surface">{copy.appEyebrow}</p>
-                    <h1 className="mt-1 truncate text-[28px] font-semibold leading-[1.12] text-forest-ink md:text-[34px]">
+                    <h1 className="mt-1 truncate text-[24px] font-semibold leading-[1.12] text-forest-ink md:text-[32px]">
                       {pageTitle}
                     </h1>
                   </div>
                 </div>
                 {route.page === "list" ? (
-                  <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label={copy.filterJobsLabel}>
+                  <div
+                    className="-mx-3 mt-3 flex gap-2 overflow-x-auto px-3 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0"
+                    role="group"
+                    aria-label={copy.filterJobsLabel}
+                  >
                     <MetricPill
                       label={copy.totalJobs}
                       value={jobStats.total}
@@ -605,7 +625,7 @@ function AppInner() {
                 requestMode={apiRequestMode}
                 version={version}
                 copy={copy}
-                className="w-full xl:w-[360px]"
+                className="w-full max-w-full xl:w-[360px]"
               />
             </div>
           </section>
@@ -776,15 +796,15 @@ function NavItem({
       aria-current={active ? "page" : undefined}
       onClick={onClick}
       className={cn(
-        "interactive-card inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-left text-[13px] font-medium transition-colors",
-        collapsed && "justify-center px-0 lg:h-10 lg:w-10",
+        "interactive-card inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full border px-3 text-left text-[13px] font-medium transition-colors lg:w-auto lg:justify-start lg:rounded-lg",
+        collapsed && "lg:h-10 lg:w-10 lg:justify-center lg:px-0",
         active
           ? "border-electric-blue/20 bg-mist-blue text-cobalt-surface shadow-sm shadow-electric-blue/10 hover:border-electric-blue/40 hover:bg-sage-wash"
           : "border-transparent bg-transparent text-charcoal hover:bg-mist-blue hover:text-forest-ink",
       )}
     >
       <Icon aria-hidden="true" size={16} strokeWidth={2.2} />
-      <span className={cn(collapsed && "sr-only")}>{label}</span>
+      <span className={cn(collapsed && "lg:sr-only")}>{label}</span>
     </button>
   );
 }
@@ -806,7 +826,7 @@ function MetricPill({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "interactive-card inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[12px] leading-4 shadow-sm transition-colors",
+        "interactive-card inline-flex shrink-0 items-center gap-2 rounded-full border px-2.5 py-1 text-[12px] leading-4 shadow-sm transition-colors",
         active
           ? "border-cobalt-surface bg-mist-blue text-cobalt-surface shadow-electric-blue/10"
           : "border-hairline-gray bg-linen-white text-charcoal shadow-midnight-ink/5 hover:border-electric-blue/40 hover:bg-mist-blue",

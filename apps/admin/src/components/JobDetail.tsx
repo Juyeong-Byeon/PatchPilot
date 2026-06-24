@@ -193,15 +193,15 @@ export function JobDetail({
                   </Badge>
                 ) : null}
               </div>
-              <h2 className="mt-3 font-sans text-[22px] font-semibold leading-[1.25] text-forest-ink">
+              <h2 className="mt-3 break-words font-sans text-[22px] font-semibold leading-[1.25] text-forest-ink [overflow-wrap:anywhere]">
                 {stringValue(job.repository, copy)}
               </h2>
-              <p className="mt-1 text-[13px] leading-5 text-charcoal">
+              <p className="mt-1 break-words text-[13px] leading-5 text-charcoal [overflow-wrap:anywhere]">
                 {stringValue(job.target_branch ?? job.targetBranch, copy)} ·{" "}
                 {stringValue(job.work_branch ?? job.workBranch, copy)}
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
               {onRefresh ? (
                 <Button
                   type="button"
@@ -298,7 +298,7 @@ export function JobDetail({
               </div>
               {job.pr_url ? (
                 <a
-                  className="cta-solid inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-amber-ink bg-amber-ink px-3 py-2 text-[13px] font-medium shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md"
+                  className="cta-solid inline-flex w-full shrink-0 items-center justify-center gap-1.5 rounded-lg border border-amber-ink bg-amber-ink px-3 py-2 text-center text-[13px] font-medium shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md sm:w-auto"
                   href={job.pr_url}
                   rel="noreferrer"
                   target="_blank"
@@ -463,8 +463,8 @@ function NeedsInputPanel({
             className="w-full resize-y rounded-lg border border-hairline-gray bg-linen-white px-3 py-2 text-[13px] leading-5 text-true-black shadow-sm outline-none focus:border-info-ink focus:ring-2 focus:ring-info-border disabled:opacity-60"
           />
         </label>
-        <div className="flex justify-end">
-          <Button type="submit" disabled={!canSubmit} className="gap-1.5">
+        <div className="flex justify-stretch sm:justify-end">
+          <Button type="submit" disabled={!canSubmit} className="w-full gap-1.5 sm:w-auto">
             <MessageCircleQuestion data-icon aria-hidden="true" strokeWidth={2.2} />
             {submitting ? copy.needsInputSubmitting : copy.needsInputSubmit}
           </Button>
@@ -664,13 +664,13 @@ function EvidenceCard({
                             title={`${copy.evidenceOpenChangedFile} · ${file}`}
                           >
                             <FileDiff aria-hidden="true" size={13} strokeWidth={2.2} className="shrink-0" />
-                            <span className="truncate">{file}</span>
+                            <span className="min-w-0 break-all">{file}</span>
                             <ExternalLink aria-hidden="true" size={12} strokeWidth={2.2} className="shrink-0" />
                           </a>
                         ) : (
                           <span className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-hairline-gray bg-linen-white px-3 py-1.5 font-mono text-[12px] leading-5 text-true-black">
                             <FileDiff aria-hidden="true" size={13} strokeWidth={2.2} className="shrink-0" />
-                            <span className="truncate">{file}</span>
+                            <span className="min-w-0 break-all">{file}</span>
                           </span>
                         )}
                       </li>
@@ -836,7 +836,7 @@ function ArtifactPanel({
   const content = (
     <>
       <div className="flex items-center justify-between gap-3 border-b border-hairline-gray p-4">
-        <div>
+        <div className="min-w-0">
           <CardTitle>{copy.artifacts}</CardTitle>
           <span className="text-xs text-charcoal">
             {artifacts.length}/{totalCount ?? artifacts.length}
@@ -850,7 +850,7 @@ function ArtifactPanel({
             key={String(artifact.id ?? `${artifact.kind}-${index}`)}
           >
             <header className="grid gap-2 border-b border-hairline-gray bg-linen px-4 py-3 text-[12px] leading-4 md:grid-cols-[160px_minmax(0,1fr)_150px]">
-              <strong className="font-medium text-forest-ink">{artifact.kind ?? "artifact"}</strong>
+              <strong className="break-all font-medium text-forest-ink">{artifact.kind ?? "artifact"}</strong>
               <span className="min-w-0 break-all font-mono text-graphite" title={artifact.path ?? copy.inlineContent}>
                 {artifact.path ?? copy.inlineContent}
               </span>
@@ -1116,7 +1116,7 @@ function Fact({ label, value, tone }: { label: string; value: string; tone?: "da
   return (
     <div className="min-w-0 rounded-xl border border-hairline-gray bg-linen-white p-3">
       <dt className="mb-2 text-[12px] leading-4 text-charcoal">{label}</dt>
-      <dd className="m-0 break-words text-[13px] leading-5 text-true-black">
+      <dd className="m-0 break-words text-[13px] leading-5 text-true-black [overflow-wrap:anywhere]">
         {tone === "danger" && value !== "-" ? <Badge variant="danger">{value}</Badge> : value}
       </dd>
     </div>
