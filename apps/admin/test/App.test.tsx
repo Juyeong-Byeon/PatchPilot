@@ -162,6 +162,33 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: adminCopy.ko.collapseSidebar })).toBeInTheDocument();
   });
 
+  it("uses compact mobile masthead and horizontally scrollable filter controls", async () => {
+    window.localStorage.setItem("ADMIN_TOKEN", "access-key");
+    window.history.pushState(null, "", "/jobs");
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => jsonResponse([]));
+
+    render(<App />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const sidebar = document.querySelector(".admin-sidebar");
+    expect(sidebar).toHaveClass("sticky", "top-0", "lg:h-screen");
+    expect(sidebar?.firstElementChild).toHaveClass("gap-3", "lg:gap-5");
+
+    const collapse = screen.getByRole("button", { name: adminCopy.ko.collapseSidebar });
+    expect(collapse).toHaveClass("hidden", "lg:inline-flex");
+
+    const nav = screen.getByRole("navigation", { name: adminCopy.ko.appTitle });
+    expect(nav).toHaveClass("flex", "overflow-x-auto", "lg:grid", "lg:overflow-visible");
+    expect(within(nav).getByRole("button", { name: adminCopy.ko.jobs })).toHaveClass("shrink-0", "lg:w-auto");
+
+    const filterGroup = screen.getByRole("group", { name: adminCopy.ko.filterJobsLabel });
+    expect(filterGroup).toHaveClass("overflow-x-auto", "sm:flex-wrap", "sm:overflow-visible");
+    expect(within(filterGroup).getByRole("button", { name: /전체/ })).toHaveClass("shrink-0");
+  });
+
   it("polls running job detail including logs every second", async () => {
     vi.useFakeTimers();
     window.localStorage.setItem("ADMIN_TOKEN", "access-key");
