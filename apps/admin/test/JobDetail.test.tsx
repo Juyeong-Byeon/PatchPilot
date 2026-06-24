@@ -367,6 +367,77 @@ describe("JobDetail", () => {
     ).toBeTruthy();
   });
 
+  it("keeps execution diagnostics panels shrinkable after selecting the Implementing span", () => {
+    render(
+      <JobDetail
+        {...baseProps}
+        job={{ id: "job_1", phase: "Completed", outcome: "NeedsReview", repository: "acme/web" }}
+        events={[
+          {
+            id: "event_1",
+            phase: "Queued",
+            event_type: "job.enqueued",
+            source: "api",
+            created_at: "2026-06-20T00:00:00.000Z",
+          },
+          {
+            id: "event_2",
+            phase: "Implementing",
+            event_type: "worker.started",
+            source: "worker",
+            created_at: "2026-06-20T00:01:00.000Z",
+          },
+          {
+            id: "event_3",
+            phase: "PolicyChecking",
+            event_type: "policy.started",
+            source: "worker",
+            created_at: "2026-06-20T00:02:00.000Z",
+          },
+        ]}
+        logs={[
+          {
+            id: "log_1",
+            source: "worker",
+            stream: "stdout",
+            sequence: 1,
+            text: `runner-output-${"x".repeat(240)}`,
+            created_at: "2026-06-20T00:01:20.000Z",
+          },
+        ]}
+        artifacts={[
+          {
+            id: "artifact_1",
+            kind: "runner-summary",
+            content: { output: `artifact-${"y".repeat(240)}` },
+            created_at: "2026-06-20T00:01:30.000Z",
+          },
+        ]}
+      />,
+    );
+
+    const graph = screen.getByRole("list", { name: adminCopy.ko.stepGraph });
+    fireEvent.click(within(graph).getByRole("button", { name: /구현/ }));
+
+    const diagnostics = screen.getByText(adminCopy.ko.runDiagnostics).closest("section");
+    expect(diagnostics).toBeInTheDocument();
+
+    expect(within(diagnostics as HTMLElement).getByRole("region", { name: adminCopy.ko.traceFlow })).toHaveClass(
+      "min-w-0",
+    );
+    expect(within(diagnostics as HTMLElement).getByRole("region", { name: adminCopy.ko.logs })).toHaveClass(
+      "min-w-0",
+      "overflow-hidden",
+    );
+    expect(within(diagnostics as HTMLElement).getByRole("region", { name: adminCopy.ko.artifacts })).toHaveClass(
+      "min-w-0",
+      "overflow-hidden",
+    );
+    expect(within(diagnostics as HTMLElement).getByRole("group", { name: adminCopy.ko.logs })).toHaveClass(
+      "break-words",
+    );
+  });
+
   it("hides the agent sub-stage track for non-staged runs that emit no stage events", () => {
     render(
       <JobDetail

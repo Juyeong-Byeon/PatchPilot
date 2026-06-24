@@ -63,21 +63,23 @@ export function LogViewer({
   }
 
   const shellClassName =
-    variant === "embedded" ? "surface-card-soft rounded-xl border border-hairline-gray bg-linen-white" : "";
+    variant === "embedded"
+      ? "surface-card-soft min-w-0 overflow-hidden rounded-xl border border-hairline-gray bg-linen-white"
+      : "";
 
   const content = (
     <>
       <span className="sr-only" role="status" aria-live="polite">
         {copied ? copy.copied : ""}
       </span>
-      <div className="flex flex-col items-stretch justify-between gap-3 border-b border-hairline-gray p-4 xl:flex-row xl:items-center">
-        <div>
+      <div className="flex min-w-0 flex-col items-stretch justify-between gap-3 border-b border-hairline-gray p-4 xl:flex-row xl:items-center">
+        <div className="min-w-0">
           <CardTitle>{copy.logs}</CardTitle>
           <span className="text-[12px] leading-4 text-charcoal">
             {filteredLogs.length}/{totalCount ?? logs.length}
           </span>
         </div>
-        <div className="grid gap-2 md:grid-cols-[150px_minmax(180px,1fr)_auto_auto]">
+        <div className="grid min-w-0 gap-2 md:grid-cols-[150px_minmax(180px,1fr)_auto_auto]">
           <Select aria-label={copy.filterLogsLabel} value={source} onChange={(event) => setSource(event.target.value)}>
             <option value="all">{copy.allSources}</option>
             {sources.map((entry) => (
@@ -139,7 +141,7 @@ export function LogViewer({
           tabIndex={0}
           role="group"
           aria-label={copy.logs}
-          className="terminal-surface m-0 max-h-[320px] min-h-[180px] overflow-auto p-4 text-[12px] leading-5 whitespace-pre-wrap text-true-black"
+          className="terminal-surface m-0 max-h-[320px] min-h-[180px] min-w-0 overflow-auto p-4 text-[12px] leading-5 whitespace-pre-wrap break-words text-true-black"
         >
           {filteredLogs.length === 0 ? (
             <p className="m-0" role="status">
@@ -149,7 +151,10 @@ export function LogViewer({
             filteredLogs.map((line, index) => (
               <span
                 key={String(line.id ?? index)}
-                className={cn("block", isStageBannerText(line.text) && "mt-1 font-semibold text-cobalt-surface")}
+                className={cn(
+                  "block min-w-0 break-words",
+                  isStageBannerText(line.text) && "mt-1 font-semibold text-cobalt-surface",
+                )}
               >
                 {formatLine(line, copy)}
               </span>

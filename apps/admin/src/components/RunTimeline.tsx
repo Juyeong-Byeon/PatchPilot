@@ -60,7 +60,7 @@ export function RunTimeline({
   const reserveDetailsToggleSpace = Boolean(implementingDetails);
 
   const content = (
-    <section aria-label={copy.traceFlow} className={variant === "embedded" ? "" : "px-4 py-3"}>
+    <section aria-label={copy.traceFlow} className={variant === "embedded" ? "min-w-0" : "min-w-0 px-4 py-3"}>
       <div className="mb-4 flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
         <div>
           <h3 className="text-[13px] font-semibold leading-5 text-forest-ink">{copy.traceFlow}</h3>
@@ -71,7 +71,7 @@ export function RunTimeline({
         <span className="text-[12px] leading-4 text-charcoal">{formatDuration(totalDuration(spans))}</span>
       </div>
 
-      <div className="surface-card-soft overflow-x-auto rounded-lg border border-hairline-gray">
+      <div className="surface-card-soft min-w-0 max-w-full overflow-x-auto rounded-lg border border-hairline-gray">
         <table
           className="w-full min-w-[720px] table-fixed border-collapse text-left text-[13px]"
           aria-label={copy.traceFlow}
@@ -183,7 +183,9 @@ export function RunTimeline({
                   {detailsOpen ? (
                     <tr className="border-b border-hairline-gray bg-mist-blue/35">
                       <td className="px-3 py-3" colSpan={5}>
-                        <div id={detailsId}>{implementingDetails}</div>
+                        <div id={detailsId} className="min-w-0">
+                          {implementingDetails}
+                        </div>
                       </td>
                     </tr>
                   ) : null}

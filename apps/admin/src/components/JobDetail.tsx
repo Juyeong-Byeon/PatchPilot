@@ -358,7 +358,7 @@ export function JobDetail({
         stageStates={stageStates}
         onSelectStep={setSelectedSpan}
       />
-      <Card>
+      <Card className="overflow-hidden">
         <CardHeader>
           <CardTitle>{copy.runDiagnostics}</CardTitle>
           {selectedContext ? (
@@ -374,7 +374,7 @@ export function JobDetail({
             </Button>
           ) : null}
         </CardHeader>
-        <CardContent className="grid gap-4">
+        <CardContent className="grid min-w-0 gap-4">
           <RunTimeline
             events={currentEvents}
             currentPhase={job.phase}
@@ -846,10 +846,10 @@ function ArtifactPanel({
       <div className="grid gap-3 p-4">
         {artifacts.map((artifact, index) => (
           <article
-            className="overflow-hidden rounded-xl border border-hairline-gray bg-linen-white"
+            className="min-w-0 overflow-hidden rounded-xl border border-hairline-gray bg-linen-white"
             key={String(artifact.id ?? `${artifact.kind}-${index}`)}
           >
-            <header className="grid gap-2 border-b border-hairline-gray bg-linen px-4 py-3 text-[12px] leading-4 md:grid-cols-[160px_minmax(0,1fr)_150px]">
+            <header className="grid min-w-0 gap-2 border-b border-hairline-gray bg-linen px-4 py-3 text-[12px] leading-4 md:grid-cols-[160px_minmax(0,1fr)_150px]">
               <strong className="break-all font-medium text-forest-ink">{artifact.kind ?? "artifact"}</strong>
               <span className="min-w-0 break-all font-mono text-graphite" title={artifact.path ?? copy.inlineContent}>
                 {artifact.path ?? copy.inlineContent}
@@ -861,7 +861,7 @@ function ArtifactPanel({
                 tabIndex={0}
                 role="group"
                 aria-label={copy.artifacts}
-                className="terminal-surface m-0 max-h-[280px] overflow-auto p-4 text-[12px] leading-5 whitespace-pre-wrap break-all text-true-black"
+                className="terminal-surface m-0 max-h-[280px] max-w-full min-w-0 overflow-auto p-4 text-[12px] leading-5 whitespace-pre-wrap break-all text-true-black"
               >
                 {formatJson(artifact.content)}
               </pre>
@@ -876,7 +876,7 @@ function ArtifactPanel({
   if (variant === "embedded") {
     return (
       <section
-        className="surface-card-soft rounded-xl border border-hairline-gray bg-linen-white"
+        className="surface-card-soft min-w-0 overflow-hidden rounded-xl border border-hairline-gray bg-linen-white"
         aria-label={copy.artifacts}
       >
         {content}

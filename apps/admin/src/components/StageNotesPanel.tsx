@@ -36,8 +36,8 @@ export function StageNotesPanel({
     <section
       className={
         variant === "inline"
-          ? "rounded-lg border border-electric-blue/20 bg-linen-white"
-          : "surface-card-soft rounded-xl border border-hairline-gray bg-linen-white"
+          ? "min-w-0 overflow-hidden rounded-lg border border-electric-blue/20 bg-linen-white"
+          : "surface-card-soft min-w-0 overflow-hidden rounded-xl border border-hairline-gray bg-linen-white"
       }
       aria-label={copy.stageNotes}
     >
@@ -67,7 +67,7 @@ function StageNote({ note, copy }: { note: Artifact; copy: AdminCopy }) {
   const text = typeof note.content === "string" ? note.content : safeStringify(note.content);
 
   return (
-    <article className="overflow-hidden rounded-lg border border-hairline-gray bg-linen">
+    <article className="min-w-0 overflow-hidden rounded-lg border border-hairline-gray bg-linen">
       <button
         type="button"
         aria-expanded={open}
@@ -80,10 +80,10 @@ function StageNote({ note, copy }: { note: Artifact; copy: AdminCopy }) {
           <ChevronRight aria-hidden="true" size={15} className="shrink-0 text-graphite" strokeWidth={2.2} />
         )}
         <Icon aria-hidden="true" size={16} className="shrink-0 text-cobalt-surface" strokeWidth={2.2} />
-        <strong className="text-[13px] font-semibold text-forest-ink">{meta.label(copy)}</strong>
+        <strong className="min-w-0 break-words text-[13px] font-semibold text-forest-ink">{meta.label(copy)}</strong>
       </button>
       {open ? (
-        <div className="markdown-note border-t border-hairline-gray bg-linen-white px-4 py-3 text-[13px] leading-5 text-true-black">
+        <div className="markdown-note min-w-0 border-t border-hairline-gray bg-linen-white px-4 py-3 text-[13px] leading-5 text-true-black">
           {renderMarkdown(text)}
         </div>
       ) : null}
@@ -101,9 +101,11 @@ function renderMarkdown(source: string): ReactNode {
   const flushList = () => {
     if (list.length === 0) return;
     blocks.push(
-      <ul key={`ul-${blocks.length}`} className="my-1 ml-4 list-disc space-y-0.5">
+      <ul key={`ul-${blocks.length}`} className="my-1 ml-4 min-w-0 list-disc space-y-0.5">
         {list.map((item, index) => (
-          <li key={index}>{item}</li>
+          <li key={index} className="break-words">
+            {item}
+          </li>
         ))}
       </ul>,
     );
@@ -117,7 +119,10 @@ function renderMarkdown(source: string): ReactNode {
     if (heading) {
       flushList();
       blocks.push(
-        <p key={`h-${blocks.length}`} className="mt-2 mb-0.5 text-[13px] font-semibold text-forest-ink first:mt-0">
+        <p
+          key={`h-${blocks.length}`}
+          className="mt-2 mb-0.5 break-words text-[13px] font-semibold text-forest-ink first:mt-0"
+        >
           {heading[2]}
         </p>,
       );
